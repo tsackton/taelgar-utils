@@ -5,7 +5,8 @@ import json
 import re
 import os
 import sys
-import lib.dateFunctions as dates
+import lib.dateManager as dm
+import lib.nameManager as nm
 import lib.metadataUtils as meta
 import lib.generalUtils as util
 import shutil
@@ -81,10 +82,10 @@ if args.obs_output and not args.output:
 VAULT = None
 CONFIG = args.config
 configfile = args.json_config_file
-with open(configfile), 'r', 2048, "utf-8") as f:
+with open((configfile), 'r', 2048, "utf-8") as f:
     data = json.load(f)
     VAULT = Path(data["obsidian_path"])
-    CONFIG = obs_path / obs_config
+    CONFIG = VAULT / Path(args.config)
 if not VAULT or not CONFIG:
     raise ValueError("Must have a valid obsidian path and obsidian config.")
 
@@ -119,7 +120,7 @@ else:
     output_base = Path(args.output)
     if args.obs_output:
         # prepend obsidian vault path to output
-        output_dir = obs_path / output_base
+        output_dir = VAULT / output_base
     else:
         # don't prepend
         output_dir = output_base
@@ -139,13 +140,17 @@ except FileNotFoundError:
 # inputs = Path object pointing to a file or directory
 # output_dir = Path object pointing to an output directory, might be same as input
 
+
+DateManager = dm.DateManager(CONFIG)
+NameManager = nm.NameManager(CONFIG)
+
 ### EDIT BELOW HERE ###
 
 # Get the date, campaign, and directory name from the command line arguments
 dir_name = args.dir
 output_dir = args.output if args.output else None
 input_campaign = args.campaign
-override_year = dates.clean_date(args.date) if args.date else None
+override_year = DateManager.normalizeDate(args.date) if args.date else None
 filter_text = args.filter
 clean_yaml = args.yaml
 replace_dview = args.dview
@@ -203,7 +208,7 @@ for file_name in md_file_list:
     metadata["directory"] = args.config
     metadata["links"] = links
     metadata["file"] = file_name
-    current_date = dates.get_current_date(metadata)
+    current_date = DateManager.get_current_date(metadata)
 
     if clean_yaml:
         if debug:
@@ -246,7 +251,7 @@ for file_name in md_file_list:
             if match:
                 if match.group(2) == "Date":
                     # we have a date filter
-                    filter_date = dates.clean_date(match.group(3))
+                    filter_date = DateManager.normalizeDate(match.group(3))
                     filter_block = True if current_date < filter_date else filter_block
                 elif match.group(2) == "Campaign":
                     # we have a campaign filter
