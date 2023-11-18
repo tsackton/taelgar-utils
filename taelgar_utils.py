@@ -5,18 +5,107 @@ import json
 import re
 import os
 import sys
-import lib.dateManager as dm
-import lib.nameManager as nm
-import lib.metadataUtils as meta
-import lib.generalUtils as util
-import shutil
+from obs_convert.date_manager import DateManager as dm
+from obs_convert.name_manager import NameManager as nm
+from obs_convert.whereabouts_manager import WhereaboutsManager as wm
+from obs_convert.location_manager import LocationManager as lm
+import importlib.util
 
 """
 TODO:
 - Add --filter2 option
-- Fix functions so that rather than overloading metadata dict, create a new "globs" object to pass around
-- Parse obisidan information from config file
+- Fix <endDate> bug in last known
+- convert old functions
+- figure out if I need to change linking for website building
+- get Mike to fix type stuff, regnal bugs
 """
+
+## import dview_functions.py as module
+dview_file_name = "obs_convert.dview_functions"
+dview_functions = importlib.import_module(dview_file_name)
+
+################################
+##### FUNCTIONS - MAY MOVE #####
+################################
+
+
+def find_end_of_frontmatter(lines):
+    for i, line in enumerate(lines):
+        # Check for '---' at the end of a line (with or without a newline character)
+        if line.strip() == '---' and i != 0:
+            return i
+    return 0  # Indicates that the closing '---' was not found
+
+def is_function(module, attribute):
+    attr = getattr(module, attribute)
+    return callable(attr)
+
+def process_string(s, metadata, dm, nm, lm, wm):
+    def callback(match):
+        function_name = match.group(1).split(",", maxsplit=1)[0].strip('\"').split("/")[-1]
+
+        # Check if the function exists in the module and is a callable
+        if function_name in dir(dview_functions) and is_function(dview_functions, function_name):
+            dview_call = getattr(dview_functions, function_name)
+            # Now you can call the function
+            result = dview_call(metadata, dm, nm, lm, wm)
+        else:
+            result = print(f"Function {function_name} not implemented in conversion code.", file=sys.stderr)
+            result = ""
+        return result
+
+    pattern = "\`\$\=dv\.view\((.*)\)\`"
+    return re.sub(pattern, callback, s)
+
+
+def get_md_dict(path):
+    """
+    Returns a dictionary of Markdown files in a given directory and its subdirectories, 
+    or the file itself if it's a Markdown file. The dictionary keys are the basenames of the files.
+
+    :param path: A pathlib.Path object representing a file or directory.
+    :return: A dictionary with basenames as keys and pathlib.Path objects as values.
+    :raises ValueError: If there are duplicate file basenames.
+    """
+    md_files = {}
+
+    if path.is_file() and path.suffix == '.md':
+        md_files[path.stem] = path
+    elif path.is_dir():
+        for file in path.rglob('*.md'):
+            if not any(part.startswith('.') for part in file.parts) and not any(part.startswith('_') for part in file.parts):
+                basename = file.stem
+                fullname = file
+                if basename in md_files:
+                  raise ValueError(f"Duplicate file basename found: {fullname}")
+                md_files[basename] = file
+    else:
+        raise ValueError("Path is neither a Markdown file nor a directory")
+
+    return md_files
+
+def get_yaml_frontmatter_from_md(file_path):
+    """
+    Extracts and parses the YAML frontmatter from a Markdown file.
+
+    :param file_path: Path to the Markdown file.
+    :return: A dictionary containing the parsed YAML frontmatter.
+    """
+    with open(file_path, 'r') as file:
+        content = file.read()
+
+    # Regex pattern to extract YAML frontmatter
+    pattern = r'^---\s+(.*?)\s+---'
+    match = re.search(pattern, content, re.DOTALL)
+
+    if match:
+        frontmatter = match.group(1)
+        # Parse the YAML frontmatter
+        try:
+            return yaml.safe_load(frontmatter)
+        except:
+            print(f"Error parsing YAML frontmatter in {file_path}", file=sys.stderr)
+            return {}
 
 # Custom dumper for handling empty values
 class CustomDumper(yaml.SafeDumper):
@@ -44,12 +133,12 @@ output_mutex_group.add_argument('--overwrite', action='store_true', help="Update
 output_mutex_group.add_argument('--output', help="Output to directory (one of --overwrite or --output be specified). By default, obsidian base dir is not prepended.")
 output_group.add_argument('--bare-input', action='store_true', help="Do not preprend Obsidian Vault path to dir.")
 output_group.add_argument('--obs-output', action='store_true', help="Preprend Obsidian Vault path to output directory.")
-output_group.add_argument('--backup', help="Create copy of files in specified directory before processing. If specified, obsidian path is never prepended.")
+output_group.add_argument('--backup', help="**NOT IMPLEMENTED** Create copy of files in specified directory before processing. If specified, obsidian path is never prepended.")
 
 # File processing options
 file_processing_group = parser.add_argument_group('File Processing Options')
 file_processing_group.add_argument('--dview', action='store_true', help="Replace dv.view() calls with dview_functions.py calls (optional)")
-file_processing_group.add_argument('--yaml', action='store_true', help="Check yaml against metadata spec and clean up (optional)")
+file_processing_group.add_argument('--yaml', action='store_true', help="**DISABLED** Check yaml against metadata spec and clean up (optional)")
 file_processing_group.add_argument('--filter-text', action='store_true', help="Filter out text based on campaign and date information (optional)")
 file_processing_group.add_argument('--filter-page', action='store_true', help="*NOT IMPLEMENTED* Remove pages that don't exist yet (optional)")
 
@@ -112,7 +201,7 @@ if (inputs is None) or (inputs and not inputs.exists()):
 ### TO DO ###
 # clean up overwrite / not overwrite for input/output
 
-if args.inplace:
+if args.overwrite:
     # process in place
     output_dir = inputs
 else:
@@ -126,11 +215,10 @@ else:
         output_dir = output_base
 
 # if output dir is a file, get parent
-if not output_dir.is_dir():
+if output_dir.is_file():
     output_dir = output_dir.parent
 
 # resolve
-
 try:
     output_dir = output_dir.resolve(strict=True)
 except FileNotFoundError:
@@ -140,47 +228,36 @@ except FileNotFoundError:
 # inputs = Path object pointing to a file or directory
 # output_dir = Path object pointing to an output directory, might be same as input
 
+VAULT_FILES = get_md_dict(VAULT)
+PROCESS_FILES = get_md_dict(inputs)
+CACHED_METADATA = dict()
+for file_name in VAULT_FILES:
+    CACHED_METADATA[file_name] = get_yaml_frontmatter_from_md(VAULT_FILES[file_name])
 
-DateManager = dm.DateManager(CONFIG)
-NameManager = nm.NameManager(CONFIG)
+CAMPAIGN = args.campaign
+OVERRIDE_DATE = args.date if args.date else None
 
-### EDIT BELOW HERE ###
+### LOAD CORE METADATA ###
+CORE_META = json.load(open(CONFIG / Path("metadata.json"), 'r', 2048, "utf-8"))
 
-# Get the date, campaign, and directory name from the command line arguments
-dir_name = args.dir
-output_dir = args.output if args.output else None
-input_campaign = args.campaign
-override_year = DateManager.normalizeDate(args.date) if args.date else None
-filter_text = args.filter
+## OPTIONAL FILTERS ##
+
+filter_text = args.filter_text
 clean_yaml = args.yaml
 replace_dview = args.dview
 create_backup = args.backup if args.backup else None
 debug = args.verbose
 
-if create_backup:
-    # Create backup directory if it doesn't exist
-    if not os.path.exists(create_backup):
-        os.makedirs(create_backup)
+## CLASSES ##
+date_manager = dm(CONFIG, OVERRIDE_DATE)
+name_manager = nm(CORE_META, VAULT_FILES, CACHED_METADATA)
+location_manager = lm(date_manager, name_manager)
+whereabouts_manager = wm(date_manager, name_manager, location_manager)
 
-    # Copy all files to backup directory
-    shutil.copytree(dir_name, create_backup, dirs_exist_ok=True)
-
-if output_dir:
-    # Create backup directory if it doesn't exist
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # Copy all files to backup directory
-    shutil.copytree(dir_name, output_dir, dirs_exist_ok=True)
-    md_file_list = util.get_md_files(output_dir)
-else:
-    md_file_list = util.get_md_files(dir_name)
-
-links = util.get_links_dict(md_file_list)
-
-for file_name in md_file_list:
+for file_name in PROCESS_FILES:
     # Open the input file
-    with open(file_name, 'r', 2048, "utf-8") as input_file:
+    print("Processing " + str(PROCESS_FILES[file_name]), file=sys.stderr)
+    with open(PROCESS_FILES[file_name], 'r', 2048, "utf-8") as input_file:
         lines = input_file.readlines()
 
     # if file is blank, move on
@@ -201,26 +278,18 @@ for file_name in md_file_list:
                 break
         if metadata_block:
             metadata = yaml.safe_load(''.join(metadata_block))
-    
-    metadata_orig = metadata.copy()
-    metadata["campaign"] = input_campaign
-    metadata["override_year"] = override_year
-    metadata["directory"] = args.config
-    metadata["links"] = links
-    metadata["file"] = file_name
-    current_date = DateManager.get_current_date(metadata)
 
     if clean_yaml:
         if debug:
             print("Cleaning up yaml frontmatter in " + file_name, file=sys.stderr)
         
-        metadata_clean = meta.update_metadata(metadata, metadata_orig)
+        metadata_clean = metadata.copy()
 
         if metadata_clean is None:
             updated_content = lines
         else:
             new_frontmatter = yaml.dump(metadata_clean, sort_keys=False, default_flow_style=None, allow_unicode=True, Dumper=CustomDumper, width=2000)
-            end_of_frontmatter = util.find_end_of_frontmatter(lines)
+            end_of_frontmatter = find_end_of_frontmatter(lines)
             if end_of_frontmatter != -1:
                 end_of_frontmatter += 1  # Adjust to get the line after '---'
                 updated_content = ['---\n', new_frontmatter, '---\n'] + lines[end_of_frontmatter:]
@@ -251,11 +320,11 @@ for file_name in md_file_list:
             if match:
                 if match.group(2) == "Date":
                     # we have a date filter
-                    filter_date = DateManager.normalizeDate(match.group(3))
-                    filter_block = True if current_date < filter_date else filter_block
+                    filter_date = date_manager.normalize_date(match.group(3))
+                    filter_block = True if date_manager.default_date < filter_date else filter_block
                 elif match.group(2) == "Campaign":
                     # we have a campaign filter
-                    filter_block = True if metadata["campaign"] != match.group(3) else filter_block
+                    filter_block = True if CAMPAIGN != match.group(3) else filter_block
                 else:    
                     # filter we don't know
                     print("Found unknown filter in file " + file_name + ": " + match.group(2), file=sys.stderr)
@@ -267,7 +336,7 @@ for file_name in md_file_list:
             # if filter text is true, print line only if filter block is false
             # if filter text is false, print line
             if replace_dview:
-                newline = util.process_string(line,metadata)
+                newline = process_string(line,metadata, date_manager, name_manager, location_manager, whereabouts_manager)
             else:
                 newline=line
             newlines.append(newline)
@@ -277,8 +346,15 @@ for file_name in md_file_list:
         if filter_end:
             filter_block = False
 
+    # Construct new path
+    relative_path = PROCESS_FILES[file_name].relative_to(inputs)
+    new_file_path = output_dir / relative_path
+
+    # Create directories if they don't exist
+    new_file_path.parent.mkdir(parents=True, exist_ok=True)
+
     # Write the updated lines to a new file
-    with open(file_name, 'w', 2048, "utf-8") as output_file:
+    with open(new_file_path, 'w', 2048, "utf-8") as output_file:
         '''
         Would replace text with this if we wanted to add a note that the thing doesn't exist yet
         if not thing_exist:
