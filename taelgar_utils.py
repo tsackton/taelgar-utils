@@ -3,7 +3,6 @@ from pathlib import Path
 import yaml
 import json
 import re
-import os
 import sys
 from obs_convert.date_manager import DateManager as dm
 from obs_convert.name_manager import NameManager as nm
@@ -14,10 +13,11 @@ import importlib.util
 """
 TODO:
 - Add --filter2 option
-- Fix <endDate> bug in last known
 - convert old functions
 - figure out if I need to change linking for website building
-- get Mike to fix type stuff, regnal bugs
+- regnal bugs
+- fix display dates, just year if year -> rebuild date structure to have an object that has date, display date, calendar era, display_as
+- general cleanup and organization
 """
 
 ## import dview_functions.py as module
@@ -106,6 +106,8 @@ def get_yaml_frontmatter_from_md(file_path):
         except:
             print(f"Error parsing YAML frontmatter in {file_path}", file=sys.stderr)
             return {}
+
+    return {}
 
 # Custom dumper for handling empty values
 class CustomDumper(yaml.SafeDumper):
@@ -253,6 +255,7 @@ date_manager = dm(CONFIG, OVERRIDE_DATE)
 name_manager = nm(CORE_META, VAULT_FILES, CACHED_METADATA)
 location_manager = lm(date_manager, name_manager)
 whereabouts_manager = wm(date_manager, name_manager, location_manager)
+location_manager.set_whereabouts_manager(whereabouts_manager)
 
 for file_name in PROCESS_FILES:
     # Open the input file

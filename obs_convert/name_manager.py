@@ -43,7 +43,7 @@ class NameManager:
         :return: A formatted name based on the given conditions.
         """
         if not target or target == "Untitled":
-            return None
+            return ""
 
         if linkType is None:
             linkType = self.LinkIfValid
@@ -63,7 +63,7 @@ class NameManager:
 
         if not fileData:
             if filter_func:
-                return None
+                return ""
             return self.process_descriptive_name(target, None, "", linkType, casing)
 
         frontmatter = fileData['frontmatter']
@@ -71,12 +71,13 @@ class NameManager:
         article = ""
 
         if not fileData['isAlias']:
-            if 'title' in frontmatter and 'name' in frontmatter:
+            if frontmatter.get('title') and frontmatter.get('name'):
                 selectedDescriptiveName = frontmatter['title'] + " " + frontmatter['name']
-            elif 'name' in frontmatter:
+            elif frontmatter.get('name'):
                 selectedDescriptiveName = frontmatter['name']
-            elif 'campaign' in frontmatter and 'sessionNumber' in frontmatter:
+            elif frontmatter.get('campaign') and frontmatter.get('sessionNumber') is not None:
                 selectedDescriptiveName = frontmatter['campaign'] + " " + str(frontmatter['sessionNumber'])
+
 
             displayData = self.get_display_data(frontmatter)
 
@@ -110,7 +111,14 @@ class NameManager:
         if not article:
             article = ""
         if not descriptiveName:
-            return None
+            return ""
+
+        # if path, get filename
+        if isinstance(descriptiveName, Path):
+            descriptiveName = descriptiveName.stem
+
+        if isinstance(targetLink, Path):
+            targetLink = targetLink.stem    
 
         descriptiveName = descriptiveName.strip()
 
@@ -178,7 +186,7 @@ class NameManager:
 
         if isinstance(target, str):
             file = self.get_file_for_target(target)  ##CHECK THIS
-            metadata = file.frontmatter if file else {} ##CHECK THIS
+            metadata = file["frontmatter"] if file else {} ##CHECK THIS
 
         display_default_data = self.core_meta.get("displayDefaults")
         default_for_this_item = display_default_data.get(self._get_page_type(metadata)) if display_default_data else None
@@ -271,14 +279,12 @@ class NameManager:
         :param filter_func: An optional filter function to apply to the file's frontmatter.
         :return: Information about the found file or None if not found.
         """
-
-        tfile = self.vault_files.get(target, None)
-        if tfile:
+        if target in self.vault_files:
             # Assuming the existence of a method equivalent to window.app.metadataCache.getFileCache(tfile)?.frontmatter
-            fm = self.cached_metadata.get(tfile, {})
+            fm = self.cached_metadata.get(target, {})
             if filter_func and not filter_func(fm):
                 return None
-            return {'filename': tfile.stem, 'isAlias': False, 'frontmatter': fm}
+            return {'filename': target, 'isAlias': False, 'frontmatter': fm}
 
         # Assuming the existence of a method to get all markdown files equivalent to window.app.vault.getMarkdownFiles()
         for file in self.vault_files:
@@ -292,11 +298,11 @@ class NameManager:
             if aliases:
                 if isinstance(aliases, str):
                     if aliases.lower() == target.lower():
-                        possible_return = {'filename': file.stem, 'isAlias': True, 'frontmatter': cached_fm}
+                        possible_return = {'filename': file, 'isAlias': True, 'frontmatter': cached_fm}
                 else:
                     for alias in aliases:
                         if alias.lower() == target.lower():
-                            possible_return =  {'filename': file.stem, 'isAlias': True, 'frontmatter': cached_fm}
+                            possible_return =  {'filename': file, 'isAlias': True, 'frontmatter': cached_fm}
 
             if possible_return:
                 if not filter_func or filter_func(possible_return['frontmatter']):
@@ -312,7 +318,7 @@ class NameManager:
                 fm = self.cached_metadata.get(mapped_tfile) or {}
                 if filter_func and not filter_func(fm):
                     return None
-                return {'filename': mapped_tfile.stem, 'isAlias': map_entry.get('isAlias', False), 'frontmatter': fm}
+                return {'filename': mapped_tfile, 'isAlias': map_entry.get('isAlias', False), 'frontmatter': fm}
 
         return None
 

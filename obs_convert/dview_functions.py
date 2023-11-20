@@ -100,6 +100,7 @@ def get_Whereabouts(metadata, dm, nm, lm, wm):
     page_data = dm.get_page_dates(metadata)
     page_year = dm.get_target_date_for_page(metadata)
     end_status = display_defaults['endStatus']
+    start_status = display_defaults['startStatus']
     unknown_str = display_defaults['whereaboutsUnknown']
 
     if not page_data['isCreated']:
@@ -115,14 +116,14 @@ def get_Whereabouts(metadata, dm, nm, lm, wm):
     display_string = ""
 
     if show_origin:
-        display_string = lm.build_formatted_location_string(display_defaults['whereaboutsOrigin'], whereabouts['origin'], page_year, end_status, None, None)
+        display_string = lm.build_formatted_location_string(display_defaults['whereaboutsOrigin'], whereabouts['origin'], page_data["startDate"] or page_year, end_status, None, None, start_status)
 
     if whereabouts['home'] and whereabouts['home']['location']:
         format_str = display_defaults['whereaboutsHome'] if is_page_alive else display_defaults['whereaboutsPastHome']
 
         if display_string:
             display_string += "\n"
-        display_string += lm.build_formatted_location_string(format_str, whereabouts['home'], page_year, end_status, "", "")
+        display_string += lm.build_formatted_location_string(format_str, whereabouts['home'], page_year, end_status, "", "", start_status)
 
         if whereabouts['current'] and whereabouts['home']['location'] == whereabouts['current']['location']:
             return display_string
@@ -131,7 +132,7 @@ def get_Whereabouts(metadata, dm, nm, lm, wm):
         if is_page_alive:
             if display_string:
                 display_string += "\n"
-            display_string += lm.build_formatted_location_string(unknown_str, None, page_year, end_status, "", "")
+            display_string += lm.build_formatted_location_string(unknown_str, None, page_year, end_status, "", "", start_status)
 
         return display_string
 
@@ -140,7 +141,7 @@ def get_Whereabouts(metadata, dm, nm, lm, wm):
             display_string += "\n"
 
         format_str = display_defaults['whereaboutsCurrent'] if is_page_alive else display_defaults['whereaboutsPast']
-        display_string += lm.build_formatted_location_string(format_str, whereabouts['current'], page_year, end_status, "", "")
+        display_string += lm.build_formatted_location_string(format_str, whereabouts['current'], page_year, end_status, "", "", start_status)
 
         return display_string
 
@@ -148,9 +149,9 @@ def get_Whereabouts(metadata, dm, nm, lm, wm):
         if display_string:
             display_string += "\n"
 
-        display_string += lm.build_formatted_location_string(display_defaults['whereaboutsLastKnown'], whereabouts["lastKnown"], page_year, end_status, "", "")
+        display_string += lm.build_formatted_location_string(display_defaults['whereaboutsLastKnown'], whereabouts["lastKnown"], page_year, end_status, "", "", start_status)
         if is_page_alive:
-            display_string += "\n" + lm.build_formatted_location_string(unknown_str, None, page_year, end_status, "", "")
+            display_string += "\n" + lm.build_formatted_location_string(unknown_str, None, page_year, end_status, "", "", start_status)
 
         return display_string
 

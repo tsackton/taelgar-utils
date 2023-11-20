@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 class LocationManager:
 
@@ -11,8 +12,31 @@ class LocationManager:
         """
         self.date_manager = date_manager
         self.name_manager = name_manager
+        self.location_chain = self._get_location_chain(self.name_manager.cached_metadata)
 
-    def build_formatted_location_string(self, format_str, whereabout, target_date, end_status, met_status, person):
+    def set_whereabouts_manager(self, whereabouts_manager):
+        """
+        Sets the whereabouts manager.
+
+        :param whereabouts_manager: The whereabouts manager.
+        """
+        self.whereabouts_manager = whereabouts_manager
+    
+    def _get_location_chain(self,cm):
+        """
+        Creates a dictionary of location chains from the cached metadata.
+
+        :param cm: The cached metadata.
+        :return: A dictionary of location chains.
+        """
+        location_chain = {}
+        for key in cm:
+            if 'partOf' in cm[key]:
+                if isinstance(cm[key]['partOf'], str):
+                    location_chain[key] = cm[key]['partOf']
+        return location_chain
+
+    def build_formatted_location_string(self, format_str, whereabout, target_date, end_status = "", met_status = "", person = "", start_status =""):
         """
         Builds a formatted location string based on the provided parameters.
 
@@ -21,6 +45,7 @@ class LocationManager:
         :param target_date: The target date.
         :param end_status: The end status.
         :param met_status: The met status.
+        :param start_status: The start status.
         :param person: The person involved.
         :return: A formatted location string.
         """
@@ -51,8 +76,9 @@ class LocationManager:
         met_status = "" if met_status is None else met_status
 
         formatted = format_str.replace("<loc>", location) \
-                              .replace("<end>", end_replace) \
-                              .replace("<start>", start_replace) \
+                              .replace("<start>", start_status) \
+                              .replace("<startDate>", start_replace) \
+                              .replace("<endDate>", end_replace) \
                               .replace("<end>", end_status) \
                               .replace("<person>", person) \
                               .replace("<met>", met_status) \
@@ -80,6 +106,7 @@ class LocationManager:
 
         if not location:
             return "Unknown"
+        
 
         if "," not in location:
             # Placeholder for #getLocationFromPartOfs method
@@ -145,14 +172,13 @@ class LocationManager:
         """
         if this_depth == max_depth or not location_piece or location_piece == "Taelgar":
             return ""
-
         name_section = self.name_manager.get_name(location_piece, link_type, casing)
         file = self.name_manager.get_file_for_target(location_piece)
 
         if not file:
             return name_section
         else:
-            next_level = file['frontmatter'].get('partOf')
+            next_level = self.location_chain.get(file["filename"])
             if not next_level and file['frontmatter'].get('whereabouts'):
                 current = self.whereabouts_manager.get_whereabouts(file['frontmatter'], target_date).get('current')
                 if current:
