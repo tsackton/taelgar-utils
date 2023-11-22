@@ -91,7 +91,7 @@ def get_yaml_frontmatter_from_md(file_path):
     :param file_path: Path to the Markdown file.
     :return: A dictionary containing the parsed YAML frontmatter.
     """
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', 2048, "utf8") as file:
         content = file.read()
 
     # Regex pattern to extract YAML frontmatter
