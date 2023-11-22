@@ -36,6 +36,13 @@ def find_end_of_frontmatter(lines):
             return i
     return 0  # Indicates that the closing '---' was not found
 
+def find_tag_line(lines):
+    for i, line in enumerate(lines):
+        # Check for '---' at the end of a line (with or without a newline character)
+        if line.startswith("tags:"):
+            return i
+    return None # Indicates that the closing '---' was not found
+
 def is_function(module, attribute):
     attr = getattr(module, attribute)
     return callable(attr)
@@ -143,6 +150,7 @@ file_processing_group.add_argument('--dview', action='store_true', help="Replace
 file_processing_group.add_argument('--yaml', action='store_true', help="**DISABLED** Check yaml against metadata spec and clean up (optional)")
 file_processing_group.add_argument('--filter-text', action='store_true', help="Filter out text based on campaign and date information (optional)")
 file_processing_group.add_argument('--filter-page', action='store_true', help="*NOT IMPLEMENTED* Remove pages that don't exist yet (optional)")
+file_processing_group.add_argument('--add-tag', default=None, help="Adds the specified tag to all pages (optional)")
 
 # Info options
 info_group = parser.add_argument_group('Info Options')
@@ -249,6 +257,7 @@ clean_yaml = args.yaml
 replace_dview = args.dview
 create_backup = args.backup if args.backup else None
 debug = args.verbose
+add_tag = args.add_tag
 
 ## CLASSES ##
 date_manager = dm(CONFIG, OVERRIDE_DATE)
@@ -300,6 +309,31 @@ for file_name in PROCESS_FILES:
                 # Handle the case where the frontmatter is not properly closed
                 print(f"Error: Frontmatter not properly closed in {file_name}", file=sys.stderr)
                 updated_content = lines
+    elif add_tag:
+        ## first check if there is metadata:
+        if metadata is None:
+            updated_content = ['---\n', "tags: [" + add_tag + "]\n", '---\n'].append(lines)
+        else:
+            ## check if there is a tag line
+            tags = metadata.get("tags", None)
+            if tags:
+                # have tags
+                tags.append(add_tag)
+                metadata["tags"] = tags
+            else:
+                # no tags
+                metadata["tags"] = [add_tag]
+            ## now update lines with new frontmatter
+            new_frontmatter = yaml.dump(metadata, sort_keys=False, default_flow_style=None, allow_unicode=True, Dumper=CustomDumper, width=2000)
+            end_of_frontmatter = find_end_of_frontmatter(lines)
+            if end_of_frontmatter != -1:
+                end_of_frontmatter += 1  # Adjust to get the line after '---'
+                updated_content = ['---\n', new_frontmatter, '---\n'] + lines[end_of_frontmatter:]
+            else:
+                # Handle the case where the frontmatter is not properly closed
+                print(f"Error: Frontmatter not properly closed in {file_name}", file=sys.stderr)
+                updated_content = lines
+
     else:
         updated_content = lines
 
