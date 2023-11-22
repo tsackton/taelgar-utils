@@ -258,7 +258,7 @@ class NameManager:
 
         if date_info.get('isAlive'):
             format_str = page_display_data.get('pageCurrent', "")
-        elif date_info.get('age'):
+        elif date_info.get('age') is not None:
             format_str = page_display_data.get('pagePastWithStart', "")
         elif date_info.get('endDate'):
             format_str = page_display_data.get('pagePast', "")

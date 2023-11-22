@@ -78,7 +78,7 @@ class DateManager:
         elif 'DR' in metadata:
             status['endDate'] = self.normalize_date(metadata['DR'], True)
 
-        self.set_page_date_properties(status, target_date)
+        status = self.set_page_date_properties(status, target_date)
 
         return status
     
@@ -104,6 +104,8 @@ class DateManager:
                 page_dates['age'] = self._get_age(target_date, page_dates['startDate'])
             elif 'endDate' in page_dates and page_dates['endDate']:
                 page_dates['age'] = self._get_age(page_dates['endDate'], page_dates['startDate'])
+        
+        return page_dates
 
     # Private method
     def _get_age(self, age1, age2):
@@ -129,7 +131,7 @@ class DateManager:
             older = age1
         else:
             return 0
-        
+
         return younger.year - older.year - ((younger.month, younger.day) < (older.month, older.day))
 
 
