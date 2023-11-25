@@ -244,7 +244,7 @@ CACHED_METADATA = dict()
 for file_name in VAULT_FILES:
     CACHED_METADATA[file_name] = get_yaml_frontmatter_from_md(VAULT_FILES[file_name])
 
-CAMPAIGN = args.campaign
+CAMPAIGN = args.campaign.lower()
 OVERRIDE_DATE = args.date if args.date else None
 
 ### LOAD CORE METADATA ###
@@ -361,7 +361,7 @@ for file_name in PROCESS_FILES:
                     filter_block = True if date_manager.default_date < filter_date else filter_block
                 elif match.group(2) == "Campaign":
                     # we have a campaign filter
-                    filter_block = True if CAMPAIGN != match.group(3) else filter_block
+                    filter_block = True if CAMPAIGN != match.group(3).lower() else filter_block
                 else:    
                     # filter we don't know
                     print("Found unknown filter in file " + file_name + ": " + match.group(2), file=sys.stderr)

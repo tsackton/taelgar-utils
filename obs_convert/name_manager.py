@@ -213,8 +213,13 @@ class NameManager:
             'affiliationTypeOf': []
         }
 
+        if isinstance(metadata.get('displayDefaults'), dict):
+            page_display_defaults = metadata['displayDefaults']
+        else:
+            page_display_defaults = {}
+
         base = merge_options(required, default_for_this_item)
-        return merge_options(base, metadata.get('displayDefaults', {}))
+        return merge_options(base, page_display_defaults)
 
     def _get_page_type(self, metadata):
         """
