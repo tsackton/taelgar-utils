@@ -4,30 +4,33 @@ import yaml
 import json
 import re
 import sys
-from obs_convert.date_manager import DateManager as dm
-from obs_convert.name_manager import NameManager as nm
-from obs_convert.whereabouts_manager import WhereaboutsManager as wm
-from obs_convert.location_manager import LocationManager as lm
-import importlib.util
-
-"""
-TODO:
-- Add --filter2 option
-- convert old functions
-- figure out if I need to change linking for website building
-- regnal bugs
-- fix display dates, just year if year -> rebuild date structure to have an object that has date, display date, calendar era, display_as
-- general cleanup and organization
-"""
-
-## import dview_functions.py as module
-dview_file_name = "obs_convert.dview_functions"
-dview_functions = importlib.import_module(dview_file_name)
+from datetime import datetime
 
 ################################
 ##### FUNCTIONS - MAY MOVE #####
 ################################
 
+def parse_markdown_file(file_path):
+    """
+    Reads a markdown file and returns its frontmatter as a dictionary and the rest of the text as a string.
+
+    :param file_path: Path to the markdown file.
+    :return: A tuple containing a dictionary of the frontmatter and a string of the markdown text.
+    """
+    with open(file_path, 'r', encoding='utf-8') as file:
+        content = file.read()
+
+    # Split the content at the triple dashes
+    parts = content.split('---')
+
+    # Check if there is frontmatter
+    if len(parts) < 3:
+        return {}, content
+
+    frontmatter = yaml.safe_load(parts[1])  # Parse the frontmatter
+    markdown_text = '---'.join(parts[2:])   # Join back the remaining parts
+
+    return frontmatter, markdown_text
 
 def find_end_of_frontmatter(lines):
     for i, line in enumerate(lines):
@@ -43,27 +46,73 @@ def find_tag_line(lines):
             return i
     return None # Indicates that the closing '---' was not found
 
-def is_function(module, attribute):
-    attr = getattr(module, attribute)
-    return callable(attr)
+def strip_comments(s):
+    """
+    Takes a string as input, and strips all text between %% markers, or between a %% and EOF if there is an unmatched %%.
+    Properly handles nested comments - strips only from %% to the next %%.
+    Additionally, it handles cases where there is an unmatched %% by removing everything from that %% to the end of the file.
+    """
+    return re.sub(r'%%.*?%%|%%.*', '', s, flags=re.DOTALL)
 
-def process_string(s, metadata, dm, nm, lm, wm):
-    def callback(match):
-        function_name = match.group(1).split(",", maxsplit=1)[0].strip('\"').split("/")[-1]
+def strip_campaign_content(s, text):
+    """
+    Given a string s, it finds strings of the format:
+    %%^Campaign:text%%
+    some text here
+    %%^End%%
+    It keeps all text between %%^Campaign:text%% and %%^End%% if the argument text matches the text in the %% line, 
+    and removes it otherwise.
+    """
+    # This function will be used to determine whether to keep or remove the matched text
+    def keep_or_remove(match):
+        campaign_text = match.group(1)
+        content = match.group(2)
+        return content if text.lower() == campaign_text.lower() else ""
 
-        # Check if the function exists in the module and is a callable
-        if function_name in dir(dview_functions) and is_function(dview_functions, function_name):
-            dview_call = getattr(dview_functions, function_name)
-            # Now you can call the function
-            result = dview_call(metadata, dm, nm, lm, wm)
+    pattern = r'%%\^Campaign:(.*?)%%(.*?)%%\^End%%'
+    return re.sub(pattern, keep_or_remove, s, flags=re.DOTALL | re.IGNORECASE)
+
+def parse_date(date_str):
+    """
+    Tries to parse the date string in various formats and returns a datetime object.
+    """
+    for fmt in ['%Y', '%Y-%m', '%Y-%m-%d']:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"Date '{date_str}' is not in a recognized format")
+
+def strip_date_content(s, input_date_str):
+    """
+    Removes text between %%^Date:YYYY-MM-DD%% and %%^End%% if the input_date is before the date in the %% comment.
+    The date in the comment and the input date can be in the formats YYYY, YYYY-MM, or YYYY-MM-DD.
+    """
+    # Convert input_date_str to datetime
+    input_date = parse_date(input_date_str)
+
+    def replace_func(match):
+        # Extract the date from the comment
+        comment_date_str = match.group(1)
+        # Parse the comment date
+        comment_date = parse_date(comment_date_str)
+
+        # Compare the dates
+        if input_date < comment_date:
+            return ""  # Remove the text if input_date is before comment_date
         else:
-            result = print(f"Function {function_name} not implemented in conversion code.", file=sys.stderr)
-            result = ""
-        return result
+            return match.group(0)  # Keep the text otherwise
 
-    pattern = "\`\$\=dv\.view\((.*)\)\`"
-    return re.sub(pattern, callback, s)
+    # Define the regular expression pattern
+    pattern = r'%%\^Date:(.*?)%%(.*?)%%\^End%%'
+    # Replace matching sections
+    return re.sub(pattern, replace_func, s, flags=re.DOTALL)
 
+def clean_for_export(s, input_date = None, campaign = None):
+    text = strip_date_content(s, input_date) if input_date else s
+    text = strip_campaign_content(text, campaign) if campaign else text
+    text = strip_comments(text)
+    return text
 
 def get_md_dict(path):
     """
@@ -146,7 +195,7 @@ output_group.add_argument('--backup', help="**NOT IMPLEMENTED** Create copy of f
 
 # File processing options
 file_processing_group = parser.add_argument_group('File Processing Options')
-file_processing_group.add_argument('--dview', action='store_true', help="Replace dv.view() calls with dview_functions.py calls (optional)")
+file_processing_group.add_argument('--dview', action='store_true', help="**DISABLED** Replace dv.view() calls with dview_functions.py calls (optional)")
 file_processing_group.add_argument('--yaml', action='store_true', help="**DISABLED** Check yaml against metadata spec and clean up (optional)")
 file_processing_group.add_argument('--filter-text', action='store_true', help="Filter out text based on campaign and date information (optional)")
 file_processing_group.add_argument('--filter-page', action='store_true', help="*NOT IMPLEMENTED* Remove pages that don't exist yet (optional)")
@@ -240,11 +289,7 @@ except FileNotFoundError:
 
 VAULT_FILES = get_md_dict(VAULT)
 PROCESS_FILES = get_md_dict(inputs)
-CACHED_METADATA = dict()
-for file_name in VAULT_FILES:
-    CACHED_METADATA[file_name] = get_yaml_frontmatter_from_md(VAULT_FILES[file_name])
-
-CAMPAIGN = args.campaign.lower()
+CAMPAIGN = args.campaign.lower() if args.campaign else None
 OVERRIDE_DATE = args.date if args.date else None
 
 ### LOAD CORE METADATA ###
@@ -254,134 +299,18 @@ CORE_META = json.load(open(CONFIG / Path("metadata.json"), 'r', 2048, "utf-8"))
 
 filter_text = args.filter_text
 clean_yaml = args.yaml
-replace_dview = args.dview
 create_backup = args.backup if args.backup else None
 debug = args.verbose
 add_tag = args.add_tag
 
-## CLASSES ##
-date_manager = dm(CONFIG, OVERRIDE_DATE)
-name_manager = nm(CORE_META, VAULT_FILES, CACHED_METADATA)
-location_manager = lm(date_manager, name_manager)
-whereabouts_manager = wm(date_manager, name_manager, location_manager)
-location_manager.set_whereabouts_manager(whereabouts_manager)
-
 for file_name in PROCESS_FILES:
     # Open the input file
-    print("Processing " + str(PROCESS_FILES[file_name]), file=sys.stderr)
-    with open(PROCESS_FILES[file_name], 'r', 2048, "utf-8") as input_file:
-        lines = input_file.readlines()
-
-    # if file is blank, move on
-    if len(lines) == 0:
-        continue
-
-    # Check if the file starts with a metadata block
-    metadata = dict()
-    if lines[0].strip() == '---':
-        metadata_block = []
-        start_metadata = True
-        for line in lines[1:]:
-            if start_metadata and line.strip() == '---':
-                start_metadata = False
-            elif start_metadata:
-                metadata_block.append(line)
-            else:
-                break
-        if metadata_block:
-            metadata = yaml.safe_load(''.join(metadata_block))
-
-    if clean_yaml:
-        if debug:
-            print("Cleaning up yaml frontmatter in " + file_name, file=sys.stderr)
-        
-        metadata_clean = metadata.copy()
-
-        if metadata_clean is None:
-            updated_content = lines
-        else:
-            new_frontmatter = yaml.dump(metadata_clean, sort_keys=False, default_flow_style=None, allow_unicode=True, Dumper=CustomDumper, width=2000)
-            end_of_frontmatter = find_end_of_frontmatter(lines)
-            if end_of_frontmatter != -1:
-                end_of_frontmatter += 1  # Adjust to get the line after '---'
-                updated_content = ['---\n', new_frontmatter, '---\n'] + lines[end_of_frontmatter:]
-            else:
-                # Handle the case where the frontmatter is not properly closed
-                print(f"Error: Frontmatter not properly closed in {file_name}", file=sys.stderr)
-                updated_content = lines
-    elif add_tag:
-        ## first check if there is metadata:
-        if metadata is None:
-            updated_content = ['---\n', "tags: [" + add_tag + "]\n", '---\n'].append(lines)
-        else:
-            ## check if there is a tag line
-            tags = metadata.get("tags", None)
-            if tags:
-                # have tags
-                tags.append(add_tag)
-                metadata["tags"] = tags
-            else:
-                # no tags
-                metadata["tags"] = [add_tag]
-            ## now update lines with new frontmatter
-            new_frontmatter = yaml.dump(metadata, sort_keys=False, default_flow_style=None, allow_unicode=True, Dumper=CustomDumper, width=2000)
-            end_of_frontmatter = find_end_of_frontmatter(lines)
-            if end_of_frontmatter != -1:
-                end_of_frontmatter += 1  # Adjust to get the line after '---'
-                updated_content = ['---\n', new_frontmatter, '---\n'] + lines[end_of_frontmatter:]
-            else:
-                # Handle the case where the frontmatter is not properly closed
-                print(f"Error: Frontmatter not properly closed in {file_name}", file=sys.stderr)
-                updated_content = lines
-
-    else:
-        updated_content = lines
-
-    #Process the rest of the file with access to the metadata information
-    filter_start = False
-    filter_end = False
-    filter_block = False
-    newlines = []
-    for line in updated_content:
-        filter_start = line.startswith(("%%^", ">%%^", ">>%%^", ">>>%%^"))
-        line_start = ""
-        filter_end = line.endswith(("%%^End%%\n","%%^End%%"))
-
-        # check if line is just %%^End%%
-        if line.startswith("%%^End"):
-            filter_start = False
-
-        # get filter type if filter start
-        if filter_start:
-            match = re.search(r'^(.*?)%%\^([A-Za-z]+):\s*(\w+).*?\s*%%', line)
-            if match:
-                if match.group(2) == "Date":
-                    # we have a date filter
-                    filter_date = date_manager.normalize_date(match.group(3))
-                    filter_block = True if date_manager.default_date < filter_date else filter_block
-                elif match.group(2) == "Campaign":
-                    # we have a campaign filter
-                    filter_block = True if CAMPAIGN != match.group(3).lower() else filter_block
-                else:    
-                    # filter we don't know
-                    print("Found unknown filter in file " + file_name + ": " + match.group(2), file=sys.stderr)
-                line_start = match.group(1)
-            else:
-                print("In file " + file_name + ", couldn't parse filter at line: " + line, end="", file=sys.stderr)
-        
-        if (filter_text and not filter_block) or (not filter_text):
-            # if filter text is true, print line only if filter block is false
-            # if filter text is false, print line
-            if replace_dview:
-                newline = process_string(line,metadata, date_manager, name_manager, location_manager, whereabouts_manager)
-            else:
-                newline=line
-            newlines.append(newline)
-        
-        # now need to check filter_end and reset filter_block if we are at the end
-
-        if filter_end:
-            filter_block = False
+    if debug:
+        print("Processing " + str(PROCESS_FILES[file_name]), file=sys.stderr)
+    fm, text = parse_markdown_file(PROCESS_FILES[file_name])
+    new_frontmatter = yaml.dump(fm, sort_keys=False, default_flow_style=None, allow_unicode=True, Dumper=CustomDumper, width=2000)
+    new_text = clean_for_export(text, OVERRIDE_DATE, CAMPAIGN)
+    output = new_frontmatter + new_text
 
     # Construct new path
     relative_path = PROCESS_FILES[file_name].relative_to(inputs)
@@ -399,5 +328,5 @@ for file_name in PROCESS_FILES:
             newlines.append("# " + metadata.get("name", "unnamed entity") + "\n")
             newlines.append("**This does not exist yet!**\n")
         '''
-        output_file.writelines(newlines)
+        output_file.writelines(output)
  
