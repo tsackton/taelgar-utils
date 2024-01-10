@@ -5,22 +5,22 @@
 # Input and output path of markdown files
 # This can be an absolute or a relative path (relative to the working directory when calling obsidianhtml)
 # Use full path or relative path, but don't use ~/
-md_folder_path_str:  '/Users/tim/Documents/RPGs/website/taelgarverse-build-md/'
+md_folder_path_str:  '/Users/tim/RPGs/website/taelgarverse-build-md/'
 
 # Markdown entrypoint path
 # This has to be md_folder_path_str + '/index.md' when toggles/compile_md == True
 # This can be an absolute or a relative path (relative to the working directory when calling obsidianhtml)
 # Use full path or relative path, but don't use ~/
-md_entrypoint_path_str: '/Users/tim/Documents/RPGs/website/taelgarverse-build-md/index.md'
+md_entrypoint_path_str: '/Users/tim/RPGs/website/taelgarverse-build-md/index.md'
 
 # Output path of HTML files
 # This can be an absolute or a relative path (relative to the working directory when calling obsidianhtml)
 # Use full path or relative path, but don't use ~/
-html_output_folder_path_str: '/Users/tim/Documents/RPGs/website/taelgarverse-build-html/'
+html_output_folder_path_str: '/Users/tim/RPGs/website/taelgarverse-build-html/'
 
 # If extended logging is enabled under toggles/extended_logging
 # Extra information is written to this folder
-log_output_folder_path_str: '/Users/tim/Documents/RPGs/website/taelgarverse-output/log'
+log_output_folder_path_str: '/Users/tim/RPGs/website/taelgarverse-build/_log'
 
 ##########################################################################
 #                              OPERATIONS                                #
