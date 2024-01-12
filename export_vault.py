@@ -28,10 +28,11 @@ class WikiLinkReplacer:
     """
     Adapted from  https://github.com/Jackiexiao/mkdocs-roamlinks-plugin
     """
-    def __init__(self, base_docs_url, page_url, path_dict):
+    def __init__(self, base_docs_url, page_url, path_dict, slug):
         self.base_docs_url = base_docs_url
         self.page_url = page_url
         self.path_dict = path_dict
+        self.slug = slug
 
     def simplify(self, filename):
         """ ignore - _ and space different, replace .md to '' so it will match .md file,
@@ -70,14 +71,20 @@ class WikiLinkReplacer:
         if filename:
             if filename in self.path_dict:
                 alias = str(filename) if alias == "" else alias
-                filename = str(self.path_dict[filename]['file'])
+                if SLUG:
+                    filename = str(self.path_dict[filename]['file'])
+                else:
+                    filename = str(self.path_dict[filename]['orig'])
             else:
                 ## check to see if we have a broken obsidian path
                 # this is not the best way to do this
                 parts = filename.split('/')
                 if parts[-1] in self.path_dict:
                     alias = str(parts[-1]) if alias == "" else alias
-                    filename = str(self.path_dict[parts[-1]]['file'])
+                    if SLUG:
+                        filename = str(self.path_dict[parts[-1]]['file'])
+                    else:
+                        filename = str(self.path_dict[parts[-1]]['orig'])
             if '/' in filename:
                 if 'http' in filename: # http or https
                     rel_link_url = filename
@@ -220,13 +227,6 @@ def strip_date_content(s, input_date_str):
     # Replace matching sections
     return re.sub(pattern, replace_func, s, flags=re.DOTALL)
 
-def clean_for_export(s, input_date = None, campaign = None, source_files = None, input_file = None, base_docs_url = None):
-    text = strip_date_content(s, input_date) if input_date else s
-    text = strip_campaign_content(text, campaign) if campaign else text
-    text = strip_comments(text)
-    text = re.sub(WIKILINK_RE, WikiLinkReplacer(base_docs_url, input_file, source_files), text)
-    return text
-
 def build_md_list(path):
     """
     Given a path, makes a dictionary of all the markdown files in the path.
@@ -260,13 +260,11 @@ def build_md_list(path):
             # get the relative path to the file, relative to source
             relative_path_parents = str(file.relative_to(path).parent).split('/')
 
-            # slugify the directories in the relative path
-            relative_path = Path(*[slugify(part) for part in relative_path_parents])
-
             # slugified full path
-            slug = relative_path / slug_file_name
+            slug = Path(*[slugify(part) for part in relative_path_parents]) / slug_file_name
+            orig = file.relative_to(path).parent / file.name
             
-            md_files[orig_file_name] = { 'file': slug, 'orig': file, 'process': process }
+            md_files[orig_file_name] = { 'file': slug, 'orig': orig, 'process': process }
     return md_files
 
 # Custom dumper for handling empty values
@@ -289,6 +287,7 @@ with open((configfile), 'r', 2048, "utf-8") as f:
     OUTPUT = Path(data["build"])
     DATE = data.get("export_date", None)
     CAMPAIGN = data.get("campaign", None)
+    SLUG = data.get("slugify", True)
 
 ## SOURCE is input files
 ## OUTPUT is output directory
@@ -300,23 +299,36 @@ SOURCE_FILES = build_md_list(SOURCE)
 
 for file_name in SOURCE_FILES:
     # Construct new path
-    new_file_path = OUTPUT / SOURCE_FILES[file_name]["file"]
-
+    if SLUG:
+        new_file_path = OUTPUT / SOURCE_FILES[file_name]["file"]
+    else:
+        new_file_path = OUTPUT / SOURCE_FILES[file_name]["orig"]
+    
     # Create directories if they don't exist
     new_file_path.parent.mkdir(parents=True, exist_ok=True)
     
+    # Copy files that won't be processed
     if not SOURCE_FILES[file_name]['process']:
         # just straight copy
-        shutil.copy(SOURCE_FILES[file_name]["orig"], new_file_path)
+        shutil.copy(SOURCE / SOURCE_FILES[file_name]["orig"], new_file_path)
         continue
 
     # Open the input file
-    fm, text = parse_markdown_file(SOURCE_FILES[file_name]['orig'])
+    fm, text = parse_markdown_file(SOURCE / SOURCE_FILES[file_name]['orig'])
+
+    # Get the mkdocs page path
+    if SLUG:
+        page_path = SOURCE_FILES[file_name]['file']
+    else:
+        page_path = SOURCE_FILES[file_name]['orig']
     new_frontmatter = yaml.dump(fm, sort_keys=False, default_flow_style=None, allow_unicode=True, Dumper=CustomDumper, width=2000)
-    new_text = clean_for_export(text, DATE, CAMPAIGN, SOURCE_FILES, SOURCE_FILES[file_name]['file'], OUTPUT)
+
+    # clean up markdown text
+    new_text = strip_date_content(text, DATE) if DATE else text
+    new_text = strip_campaign_content(text, CAMPAIGN) if CAMPAIGN else new_text
+    new_text = strip_comments(text)
+    new_text = re.sub(WIKILINK_RE, WikiLinkReplacer(OUTPUT, page_path, SOURCE_FILES, SLUG), new_text)
     output = "---\n" + new_frontmatter + "---\n" + new_text
-
-
 
     # Write the updated lines to a new file
     with open(new_file_path, 'w', 2048, "utf-8") as output_file:
