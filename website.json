@@ -1,0 +1,9 @@
+{
+    "source": "source",
+    "build": "docs",
+    "campaign": "dufr",
+    "export_date": "1749-03-09",
+    "fix_links": true,
+    "strip_comments": true,
+    "slugify": false
+}
