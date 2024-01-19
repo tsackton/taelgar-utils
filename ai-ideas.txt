@@ -1,0 +1,35 @@
+Resources:
+https://github.com/mit-submit/A2rchi
+https://github.com/langroid/langroid
+https://platform.openai.com/docs/guides/prompt-engineering
+
+Prompt for Generating Custom Responses from Markdown Text:
+
+Given a narrative in Markdown format about an adventuring party's journey and interactions, please generate the following:
+
+Timeline:
+
+Create a concise timeline of key events.
+Summarize each event in one or two sentences.
+Include specific dates and brief descriptions of the events.
+Party Whereabouts Line:
+
+Format in YAML.
+Structure: - {type: away, start: YYYY-MM-DD, end: YYYY-MM-DD, location: [Location]}
+For traveling periods, use location: Traveling (from [Location] to [Location]).
+Individual Whereabouts Line for Each Person Mentioned:
+
+Format in YAML.
+Structure: - person: [Name], whereabouts: {type: away, start: YYYY-MM-DD, end: YYYY-MM-DD, location: [Location]}
+Include each person's name, the dates they were at the location, and the location. Mention if the individual is traveling or stationary.
+Interaction Line for Each Person Mentioned:
+
+Format in YAML.
+Structure: - person: [Name], campaignInfo: {campaign: [Campaign Name], date: YYYY-MM-DD, type: [Interaction Type]}
+"Interaction Type" should be a short phrase fitting the format: "[Type] the Dunmar Fellowship on [Date]". Ensure the phrase forms a coherent sentence with this structure.
+Example Markdown Text Input:
+[Include the Markdown text narrative about the adventuring party.]
+
+Expected Output:
+
+Generate timelines, whereabouts lines, and interaction lines as specified, formatted in YAML, based on the provided Markdown narrative. Ensure that the output adheres to the specified structure and formatting requirements for clarity and consistency.
