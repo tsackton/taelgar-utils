@@ -3,6 +3,9 @@ import yaml
 import json
 import re
 import tiktoken
+import argparse
+from pathlib import Path
+import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -12,14 +15,15 @@ from openai import OpenAI
 summary_sys_prompt = "You are a creative and careful assistant who is skilled in extracting summaries and meaningful content from text. "\
     "You will receive a query that consists of some context, followed by text. "\
     "This text will describe a narrative of one or more days, describing the events that happened in a fictional world. Your job is to summarize these narratives. "\
-    "You will return a JSON object that contains four things: "\
-    "1. tagline: this is a tagline of 3-8 words that could be used as a subtitle for the text; "\
+    "You will return a JSON object that contains five things: "\
+    "1. title: this is a 1-3 word title that captures the main event of the narrative; "\
+    "2. tagline: this is a tagline of 3-8 words that could be used as a subtitle for the text; "\
     "it should capture the main event of the narrative succinctly and clearly, and ALWAYS start with the words *in which* "\
-    "2. summary: this is no more than 100 words, in the form of a markdown list. each element of the list should succinctly, clearly, and accurately summarize a "\
+    "3. summary: this is no more than 100 words, in the form of a markdown list. each element of the list should succinctly, clearly, and accurately summarize a "\
     "main event from the narrative. Choose carefully to ONLY summarize the PRIMARY OR MOST IMPORTANT parts of the narrative. "\
     "Use the fewest possible items in the list to capture the main events of the narrative. "\
-    "3. short_summary: this EXACTLY ONE SENTENCE and captures the primary gist of the narrative. "\
-    "4. location: this is the location of the narrative, which can be either one or possibly two major places the events happen at or a phrase like on the road "\
+    "4. short_summary: this EXACTLY ONE SENTENCE and captures the primary gist of the narrative. "\
+    "5. location: this is the location of the narrative, which can be either one or possibly two major places the events happen at or a phrase like on the road "\
     "between place1 and place2, although you will prefer to choose a single location if possible. "\
     "Your primary concern is summarization. Your goal is to extract the most important and relevant information from the text. "\
     "You will remember that this text describes events in a fictional world. The text you receive will be formatted in markdown format, "\
@@ -27,6 +31,47 @@ summary_sys_prompt = "You are a creative and careful assistant who is skilled in
 
 
 ### NEED TO REFACTOR TO PULL COMMON FUNCTIONS INTO A SEPARATE FILE ###
+
+# Custom dumper for handling empty values
+class CustomDumper(yaml.SafeDumper):
+    def represent_none(self, _):
+        return self.represent_scalar('tag:yaml.org,2002:null', '')
+
+# Add custom representation for None (null) values
+CustomDumper.add_representer(type(None), CustomDumper.represent_none)
+
+def get_dr_date_string(date_string, dr=True):
+    # months - defined here so that it can be extended / changed if desired
+    DR_MONTHS = {
+        1: 'Jan',
+        2: 'Feb',
+        3: 'Mar',
+        4: 'Apr',
+        5: 'May',
+        6: 'Jun',
+        7: 'Jul',
+        8: 'Aug',
+        9: 'Sep',
+        10: 'Oct',
+        11: 'Nov',
+        12: 'Dec'
+    }
+    if isinstance(date_string, datetime.date):
+        date_string = date_string.strftime("%Y-%m-%d")
+    
+    if dr:
+        end_string = " DR"
+    else:
+        end_string = ""
+    parts = date_string.split("-")
+    if len(parts) > 1:
+        parts[1] = DR_MONTHS[int(parts[1])]
+    if len(parts) == 3:
+        return(f'{parts[1]} {parts[2]}, {parts[0]}{end_string}')
+    if len(parts) == 2:
+        return(f'{parts[1]} {parts[0]}{end_string}')
+    if len(parts) == 1:
+        return(f'{parts[0]}{end_string}')
 
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
     """From OpenAI cookbook: https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb"""
@@ -115,14 +160,20 @@ def split_markdown_by_sections(markdown_lines):
         header = markdown_lines[start - 1].lstrip('#').strip()
         end = section_indices[i + 1] if i + 1 < len(section_indices) else len(markdown_lines)
         section_content = [line for line in markdown_lines[start:end] if line.strip() != '']  # Exclude blank lines
-        sections_dict[header] = '\n'.join(section_content)
-
+        if header == "Narrative":
+            sections_dict[header] = '\n\n'.join(section_content)
+        else:
+            sections_dict[header] = '\n'.join(section_content)
+            
     return sections_dict
 
 def get_session_summary(prompt, model="gpt-4-1106-preview", max_tokens=4000, system_prompt=summary_sys_prompt):
     input_messages = []
     input_messages.append({"role": "system", "content": system_prompt})
     input_messages.append({"role": "user", "content": prompt})
+    num_tokens = num_tokens_from_messages(input_messages, model=model)
+    if num_tokens > max_tokens:
+        raise ValueError(f"Input messages are too long. {num_tokens} tokens > {max_tokens} tokens.")
     response = client.chat.completions.create(
         model=model,
         max_tokens=max_tokens,
@@ -134,7 +185,25 @@ def get_session_summary(prompt, model="gpt-4-1106-preview", max_tokens=4000, sys
     )
     return response
 
+### MAIN ###
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--file', '-f', required=True)
+parser.add_argument('--gens', '-g', required=False)
+parser.add_argument('--verbose', '-v', required=False, action="store_true")
+parser.add_argument('--context', '-c', required=False)
+parser.add_argument('--reload', '-r', required=False)
+args = parser.parse_args()
+session_note_file = Path(args.file)
+num_generations = 1 if not args.gens else int(args.gens)
+
+## If context is provided as an argument, open the file and read it into context
+if args.context:
+    with open(args.context, 'r', encoding='utf-8') as file:
+        context = file.read()
+else:
+    context = "the following narrative describes events happening to a group of adventurers called the Dunmar Fellowship, occurring in the D&D world of Taelgar."
+context = "Context: " + context.strip() + "\n===\n"
 
 load_dotenv()
 client = OpenAI(
@@ -142,8 +211,14 @@ client = OpenAI(
     api_key=os.environ.get("OPEN_API_TAELGAR"),
 )
 
-session_note_path = "/Users/tim/Library/Mobile Documents/iCloud~md~obsidian/Documents/Taelgar/Campaigns/Dunmari Frontier/Session Notes/Session 2 (DuFr).md"
-metadata, text = parse_markdown_file(session_note_path)
+## make backup ##
+session_note_path = session_note_file.parent
+session_note_name = session_note_file.stem
+session_note_backup = session_note_path / (session_note_name + ".bak")
+session_note_backup.write_text(session_note_file.read_text())
+
+
+metadata, text = parse_markdown_file(session_note_file)
 markdown_text = split_markdown_by_sections(text.splitlines())
 narrative = ""
 timeline = ""
@@ -162,21 +237,72 @@ elif timeline:
 else:
     session_prompt = f"## Narrative\n{text}\n"
 
-print(session_prompt)
+if args.verbose:
+    print(f"Processing session note: {session_note_path}")
+    print(f"Using context: {context}")
+    print(f"Using session prompt: {session_prompt}")
 
-context = "Context: this describes events happening to a group of adventurers called the Dunmar Fellowship, occurring in the D&D world of Taelgar."
-prompt = context + "\n===\n" + session_prompt
-summary = get_session_summary(prompt)
-print(summary)
+prompt = context + session_prompt
+if args.reload:
+    resp_data = json.loads(Path(args.reload).read_text())
+else:
+    for i in range(num_generations):
+        if args.verbose:
+            print(f"Generation {i+1} of {num_generations}")
 
-clean_resp = summary.choices[0].message.content.replace("```", "").replace("json", "").strip()
-resp_data = json.loads(clean_resp)
-print(resp_data)
-tagline = resp_data["tagline"]
-print("*" + tagline[0].lower() + tagline[1:] + "*")
-print("\n## Summary\n    - ", end="")
-print("\n    - ".join(resp_data["summary"]))
-print("\n## Short Summary\n", end="")
-print(resp_data["short_summary"])
-print("\n## Location", end="")
-print("\n    - " + resp_data["location"])
+        summary = get_session_summary(prompt)
+
+        if args.verbose:
+            print(f"Response: {summary.choices[0].message.content}")
+
+        ## Parse the response
+        clean_resp = summary.choices[0].message.content.replace("```", "").replace("json", "").strip()
+        resp_data = json.loads(clean_resp)
+
+        ## Save the response
+        resp_id = None if args.reload else summary.id
+        session_note_json = session_note_path / (session_note_name + "." + resp_id + ".json")
+        session_note_json.write_text(json.dumps(resp_data, indent=4))
+
+# Parse response
+tagline = (resp_data["tagline"][0].lower() + resp_data["tagline"][1:]).strip()
+info_box_title = resp_data["title"].strip()
+summary = resp_data["summary"]
+short_summary = resp_data["short_summary"].strip()
+location = resp_data["location"].strip()
+
+# Add to metadata
+metadata["tagline"] = tagline
+metadata["descTitle"] = info_box_title
+if "title" not in metadata:
+    metadata["title"] = metadata["campaign"] + " - Session " + str(metadata["sessionNumber"])
+title = metadata["title"]
+# Write to file
+
+start_date = str(metadata["DR"])
+end_date = str(metadata["DR_end"])
+if start_date == end_date:
+    taelgar_date_string = get_dr_date_string(start_date, dr=True)
+else:
+    taelgar_date_string = get_dr_date_string(start_date, dr=True) + " to " + get_dr_date_string(end_date, dr=True)
+
+real_world_date_string = metadata["realWorldDate"].strftime("%A %b %d, %Y")
+output_metadata = yaml.dump(metadata, sort_keys=False, default_flow_style=None, allow_unicode=True, width=2000, Dumper=CustomDumper)
+
+with open(session_note_file, 'w', encoding='utf-8') as file:
+    file.write(f"---\n{output_metadata}---\n")
+    file.write(f"# {title}\n\n")
+    file.write(f">[!info] {info_box_title}: {tagline}\n")
+    file.write(f"> *In Taelgar: {taelgar_date_string}*\n")
+    file.write(f"> *On Earth: {real_world_date_string}*\n")
+    file.write(f"> *{location}*\n\n")
+    file.write(short_summary + "\n\n")
+    if (timeline):
+        file.write(f"## Timeline\n{timeline}\n")
+    file.write(f"## Session Info\n")
+    file.write(f"### Summary\n- ")
+    file.write("\n- ".join(summary))
+    for section in markdown_text:
+        if section not in ["Narrative", "Timeline"]:
+            file.write(f"\n### {section}\n{markdown_text[section]}\n\n")
+    file.write(f"\n## Narrative\n{narrative}\n")
