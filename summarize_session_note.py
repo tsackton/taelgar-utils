@@ -297,11 +297,11 @@ with open(session_note_file, 'w', encoding='utf-8') as file:
     file.write(f"> *On Earth: {real_world_date_string}*\n")
     file.write(f"> *{location}*\n\n")
     file.write(short_summary + "\n\n")
-    if (timeline):
-        file.write(f"## Timeline\n{timeline}\n")
     file.write(f"## Session Info\n")
     file.write(f"### Summary\n- ")
     file.write("\n- ".join(summary))
+    if (timeline):
+        file.write(f"### Timeline\n{timeline}\n")
     for section in markdown_text:
         if section not in ["Narrative", "Timeline"]:
             file.write(f"\n### {section}\n{markdown_text[section]}\n\n")
