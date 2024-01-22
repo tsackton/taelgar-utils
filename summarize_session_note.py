@@ -17,7 +17,7 @@ summary_sys_prompt = "You are a creative and careful assistant who is skilled in
     "This text will describe a narrative of one or more days, describing the events that happened in a fictional world. Your job is to summarize these narratives. "\
     "You will return a JSON object that contains five things: "\
     "1. title: this is a 1-3 word title that captures the main event of the narrative; "\
-    "2. tagline: this is a tagline of 3-8 words that could be used as a subtitle for the text; "\
+    "2. tagline: this is a tagline of 5-10 words that could be used as a subtitle for the text; "\
     "it should capture the main event of the narrative succinctly and clearly, and ALWAYS start with the words *in which* "\
     "3. summary: this is no more than 100 words, in the form of a markdown list. each element of the list should succinctly, clearly, and accurately summarize a "\
     "main event from the narrative. Choose carefully to ONLY summarize the PRIMARY OR MOST IMPORTANT parts of the narrative. "\
@@ -270,6 +270,7 @@ info_box_title = resp_data["title"].strip()
 summary = resp_data["summary"]
 short_summary = resp_data["short_summary"].strip()
 location = resp_data["location"].strip()
+characters = ", ".join(["[[" + character + "]]" for character in metadata["players"]])
 
 # Add to metadata
 metadata["tagline"] = tagline
@@ -293,6 +294,7 @@ with open(session_note_file, 'w', encoding='utf-8') as file:
     file.write(f"---\n{output_metadata}---\n")
     file.write(f"# {title}\n\n")
     file.write(f">[!info] {info_box_title}: {tagline}\n")
+    file.write(f"> *Featuring: {characters}*\n")
     file.write(f"> *In Taelgar: {taelgar_date_string}*\n")
     file.write(f"> *On Earth: {real_world_date_string}*\n")
     file.write(f"> *{location}*\n\n")
@@ -301,8 +303,8 @@ with open(session_note_file, 'w', encoding='utf-8') as file:
     file.write(f"### Summary\n- ")
     file.write("\n- ".join(summary))
     if (timeline):
-        file.write(f"### Timeline\n{timeline}\n")
+        file.write(f"\n\n### Timeline\n{timeline}\n")
     for section in markdown_text:
         if section not in ["Narrative", "Timeline"]:
             file.write(f"\n### {section}\n{markdown_text[section]}\n\n")
-    file.write(f"\n## Narrative\n{narrative}\n")
+    file.write(f"\n\n## Narrative\n{narrative}\n")
