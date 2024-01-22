@@ -1,0 +1,28 @@
+{
+    "command_timeout": 5,
+    "templates_folder": "_templates",
+    "templates_pairs": [
+      [
+        "shutdownAppRemoved",
+        "taskkill /im obsidian.exe"
+      ]
+    ],
+    "trigger_on_file_creation": false,
+    "auto_jump_to_cursor": false,
+    "enable_system_commands": true,
+    "shell_path": "",
+    "user_scripts_folder": "_scripts/templater",
+    "enable_folder_templates": true,
+    "folder_templates": [
+      {
+        "folder": "",
+        "template": ""
+      }
+    ],
+    "syntax_highlighting": true,
+    "syntax_highlighting_mobile": false,
+    "startup_templates": [
+        "_templates/prepare-for-export.md"
+    ],
+    "enable_ribbon_icon": true
+  }

@@ -1,0 +1,70 @@
+/* color schemes */
+
+/* summary background color - light mode */
+.md-typeset .ext-one-column {
+    background: lightgray;
+  }
+
+/* summary background color - dark mode */
+/* uses attribute selectors where slate is the dark mode defined in mkdocs.yml */
+/* see https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#custom-color-schemes */
+[data-md-color-scheme="slate"] .md-typeset .ext-one-column {
+    background: rgb(67, 66, 67);
+}
+
+/************ HOME PAGE ************/
+
+/* background color overlaid on the image */
+/* there is probably a neat way to automatically use the md-primary color but I just did it manually by gettting the color for the tab row using Inspect Element in Chrome */
+/* can change to a solid color (with transparency) to remove gradient effect */
+.banner-row {
+    background: linear-gradient(to bottom, rgba(0, 148, 133, 1), rgba(0, 148, 133, 0.20), rgba(0, 148, 133, 0.10), rgba(0, 148, 133, 0));
+}
+  
+[data-md-color-scheme="slate"] .banner-row {
+    background: linear-gradient(to bottom, rgb(84, 109, 120, 1), rgb(84, 109, 120, 0.20), rgb(84, 109, 120, 0.10), rgb(84, 109, 120, 0));
+
+}
+
+/* defines the text color and the background color for the title element */
+/* delete background-color for transparent background */
+.banner-title.md-typeset {
+    color: #009485;
+    background-color:  #dadada;
+}
+
+/* defines the text color and the background color for the title element in dark mode*/
+[data-md-color-scheme="slate"] .banner-title.md-typeset {
+    color: rgb(84, 109, 120);
+    background-color: #ffffff;
+}
+
+/* home page button colors */
+.banner-buttons .md-button {
+    color: #009485;
+    border-color: #dadada;
+    background-color: #dadada;
+  }
+  
+/* home page button colors in dark mode */
+[data-md-color-scheme="slate"] .banner-buttons .md-button {
+    color:  rgb(84, 109, 120);
+    border-color: #ffffff;
+    background-color: #ffffff;     
+}
+
+/* hover/focus color for home page buttons */
+.banner-buttons .md-button:focus,
+.banner-buttons .md-button:hover {
+  background-color: #009485;
+  color: #dadada;
+  border-color: #009485;
+}
+
+[data-md-color-scheme="slate"] .banner-buttons .md-button:focus,
+[data-md-color-scheme="slate"] .banner-buttons .md-button:hover {
+  background-color:  rgb(84, 109, 120);
+  color: #ffffff;
+  border-color:  rgb(84, 109, 120);
+}
+

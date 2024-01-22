@@ -1,0 +1,97 @@
+site_name: TaelgarVerse
+## Base path for backlinks ##
+base_path: /taelgarverse/
+theme:
+  name: material
+  custom_dir: overrides
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default 
+      primary: teal
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features: 
+    - navigation.instant
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+  favicon: assets/images/logo.png
+  logo: assets/images/logo.png
+extra_css:
+  - assets/stylesheets/leaflet.css
+  - assets/stylesheets/homepage.css
+  - assets/stylesheets/taelgarverse.css
+  - assets/stylesheets/styling.css
+markdown_extensions:
+  - md_in_html
+  - footnotes
+  - nl2br
+  - attr_list
+  - sane_lists
+  - meta
+  - smarty
+  - tables
+  - def_list
+  - admonition
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+plugins:
+  - search  
+  - glightbox
+  - callouts
+  - mkdocs-backlinks:
+      ignored_pages: [ 'Toc', 'Gazetteer', 'Home' ]
+  - literate-nav:
+      nav_file: toc.md
+  - section-index
+
+### The following configures the buttons and image on the home page ###
+### Modified from https://github.com/tylerdotrar/mkdocs-coverpage ###
+### The icon and blurb parameters were used for the bottom buttons on the home page which we omit ###
+
+# Custom Homepage Elements
+home_tagline: TaelgarVerse
+home_description: The home of the world of Taelgar on the internet # not currently used
+
+# Custom Homepage Button(s)
+home_button1_name: Campaign&nbsp;Info                 # Comment this parameter out to remove the button.
+home_button1_url: campaigns/dunmari-frontier/dunmari-frontier-campaign/    # This path starts at your root mkdocs directory.
+home_button1_theme: md-button # Options: "md-button", "md-button md-button--primary"
+home_button1_title: Information about the Dunmari Frontier campaign
+
+home_button2_name: Gazetteer   # Comment this parameter out to remove the button.
+home_button2_url: campaigns/player-s-guide/    # This path starts at your root mkdocs directory.
+home_button2_theme: md-button # Options: "md-button", "md-button md-button--primary"
+home_button2_title: Learn about the world of Taelgar
+
+home_button3_name: World&nbsp;Map   # Comment this parameter out to remove the button.
+home_button3_url: gazetteer/gazetteer/    # This path starts at your root mkdocs directory.
+home_button3_theme: md-button # Options: "md-button", "md-button md-button--primary"
+home_button3_title: World Map

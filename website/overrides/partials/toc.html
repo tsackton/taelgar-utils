@@ -1,0 +1,43 @@
+{% set title = lang.t("toc") %}
+{% if config.mdx_configs.toc and config.mdx_configs.toc.title %}
+{% set title = config.mdx_configs.toc.title %}
+{% endif %}
+{% set toc = page.toc %}
+{% if toc and not page.meta.hide_toc %}
+<nav class="md-nav md-nav--secondary" aria-label="{{ title }}">
+  {% set first = toc | first %}
+  {% if first and first.level == 1 %}
+  {% set toc = first.children %}
+  {% endif %}
+  {% if toc %}
+  <label class="md-nav__title" for="__toc">
+    <span class="md-nav__icon md-icon"></span>
+    {{ title }}
+  </label>
+  <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+    {% for toc_item in toc %}
+    {% include "partials/toc-item.html" %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+</nav>
+{% endif %}
+{% if backlinks and not page.meta.hide_backlinks %}
+<nav class="md-nav md-nav--secondary" aria-label="Backlinks" style="{% if toc %}margin-top: 1em;{% endif %}">
+  <label class="md-nav__title" for="__backlinks">
+    <span class="md-nav__icon md-icon"></span>
+    Backlinks
+  </label>
+  <ul class="md-nav__list" data-md-component="backlinks" data-md-scrollfix>
+    {% set base_path = config.base_path if config.base_path is not none else "/" %}
+    {% for backlink in backlinks %}
+    <li class="md-nav__item">
+      <a href="{{ base_path }}{{ backlink.url }}" class="md-nav__link">
+        <span class="md-ellipsis">
+          {{ backlink.title }}
+        </span>
+      </a>
+    {% endfor %}
+  </ul>
+</nav>
+{% endif %}

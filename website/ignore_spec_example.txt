@@ -1,0 +1,7 @@
+Campaigns/*
+!Campaigns/Dunmar*
+!Campaigns/Mechanics
+!Campaigns/Player*
+!Campaigns/Labyrinths*
+!Campaigns/Mawar*
+Worldbuilding/*

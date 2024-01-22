@@ -1,0 +1,77 @@
+<!-- Homepage styles/formats heavily modified from https://github.com/tylerdotrar/mkdocs-coverpage -->
+<!-- Elements added to "home.html" will only be displayed on the home page -->
+
+{% extends "base.html" %}
+
+
+
+{% block hero %}
+
+<!-- Stole this styling from the "up42-py" project (link: https://sdk.up42.com/) -->
+<!-- .tx-container Original Green Gradient: hsla(160deg,47%,55%,1) -->
+<style>
+    /* overwrite for home page only */
+
+    .md-main {
+        flex-grow: 0;
+    }
+
+    .md-main__inner {
+        display: flex;
+        height: 100%;
+    }
+
+    /*color of tab bar at top of page*/
+
+    /* .md-tabs {
+        background-color: hsla(1deg,82%,20%,1);
+    } */
+
+</style>
+
+<!-- Main site entry button descriptions -->
+<div class="banner-row-container">
+    <div class="row banner-row">
+        <div class="col-24-24 banner-content-col">
+            <div class="row banner-content-row">
+                <div class="col-1-24 margin"></div>
+                <div class="col-9-24 banner-content">
+                    <div class="banner-title md-typeset">
+                        <div class="banner-logo"></div>
+                        <span class="home-tagline">{{ config.home_tagline }}</span>
+                    </div>
+                    <div class="row banner-buttons md-typeset">
+                        <div class="col-7-24 banner-button">
+                            {%- if config.home_button1_name -%}
+                            <a href="{{ config.home_button1_url }}" title="{{ config.home_button2_title }}" class="{{ config.home_button1_theme }}">
+                                {{ config.home_button1_name }}
+                            </a>
+                            {%- endif -%}
+                        </div>
+                        <div class="col-1dot5-24 margin btn-margin"></div>
+                        <div class="col-7-24 banner-button">
+                            {%- if config.home_button2_name -%}
+                            <a href="{{ config.home_button2_url }}" title="{{ config.home_button2_title }}" class="{{ config.home_button2_theme }}">
+                                {{ config.home_button2_name }}
+                            </a>
+                            {%- endif -%}
+                        </div>                    
+                        <div class="col-1dot5-24 margin btn-margin"></div>
+                        <div class="col-7-24 banner-button">
+                            {%- if config.home_button3_name -%}
+                            <a href="{{ config.home_button3_url }}" title="{{ config.home_button2_title }}" class="{{ config.home_button3_theme }}">
+                                {{ config.home_button3_name }}
+                            </a>
+                            {%- endif -%}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-14-24 margin"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}
+

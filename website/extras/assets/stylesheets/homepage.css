@@ -1,0 +1,190 @@
+
+/*------------------------------------------------------*/
+/* Home banner styles */
+
+/* logo image selection for light vs dark mode */
+/* change images for dark mode */
+/* paths are relative to this file */
+:root {
+  --banner-logo: url("../images/logo.png");
+  --home-cover-image: url("../images/banner-map.png");
+}
+
+[data-md-color-scheme="slate"] {
+  --banner-logo: url("../images/logo.png");
+  --home-cover-image: url("../images/banner-map.png");
+}
+
+/** CONTAINERS AND GRID **/
+/* sets up the container for the banner row and adds an image */
+
+.banner-row-container {
+  max-width: unset !important;
+  margin: 0 !important;
+  padding-top: .0rem !important;
+  height: 70vh !important;
+  min-height: 300px !important;
+  /* background: linear-gradient(to bottom, var(--md-primary-fg-color), {{ config.home_gradient_hsla }} 99%, {{ config.home_gradient_hsla }} 99%); */
+  /* This is used for the background gradient */
+
+  /* background-image: url(img/bg08.jpg); */
+  background-image: var(--home-cover-image);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-position: center center;
+  background-clip: border-box;
+  background-origin: padding-box;
+  -moz-background-size: cover;
+  background-size: cover;
+  /* This stuff is used for the background image */
+}
+
+@media (max-width: 1025px) {
+  .banner-row-container { background-attachment: scroll; }
+}
+
+/* Fill the container entirely */
+.banner-row {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* Aligns .banner-content to the bottom */
+}
+
+.banner-content-col {
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.banner-content-row {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Take up the bottom 70% of .banner-row */
+.banner-content {
+  height: 70%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* Centers content vertically */
+}
+
+/* button configuration */
+.banner-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: row;
+}
+
+/***** MAIN TAGLINE ****/
+
+/* makes the title area into a button-like box, comment out for plain text */
+.banner-title.md-typeset {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%; /* Ensure full width */
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+
+}
+
+/* logo display parameters */
+/* set display: none to remove logo display */
+.banner-logo {
+  /* Ensure the logo maintains aspect ratio */
+  background-image: var(--banner-logo); /* Use the variable here */
+  background-size: cover; /* Adjust this as needed */
+  background-repeat: no-repeat;
+  background-position: left;
+  width: 100px;
+  height: 100px;
+}
+/* font size of main text */
+/* Ensure that the home tagline does not push the logo off-center */
+.home-tagline {
+  flex-grow: 1;
+  padding: 10px 10px; /* Add padding to the tagline if needed */
+  font-size: clamp(1.75em, 3.5vw, calc(3em + 3.5vw));
+}
+
+@media (max-width: 700px) {
+  .banner-logo {
+    display: none;
+  }
+}
+
+/* Media query for very small screens to adjust padding */
+@media (max-width: 400px) {
+  .home-tagline {
+    padding: 5px 5px;
+  }
+  .banner-title {
+    padding-right: 5px;
+  }
+}
+
+/**** BUTTONS ****/
+
+.banner-buttons .md-button {
+  margin-top: .5rem;
+  margin-right: .5rem;
+  border-radius: 5px;
+  transition: .2s ease-in-out;
+  /* width: 100%; */
+  
+}
+
+.banner-buttons .md-button:focus,
+.banner-buttons .md-button:hover {
+  border-radius: 10px;
+}
+
+.banner-buttons .btn-margin {
+  max-width: 20px;
+}
+
+.banner-button {
+  width: 100%;
+}
+
+.banner-button .md-button {
+  width: 100%;
+  text-align: center;
+  padding: 0.25rem 0 !important;
+}
+
+@media (max-width: 1025px) {
+
+  .banner-content-col .margin {
+    display: none;
+    width: 0;
+  }
+  .banner-content {
+    flex-direction: column;
+    width: unset;
+  }
+  .banner-buttons {
+    flex-direction: column;
+    max-width: 100%;
+  }
+  .banner-button {
+    width: 100%;
+  }
+  .banner-button .md-button {
+    width: 100%;
+    text-align: center;
+  }
+  .banner-img-container {
+    display: none;
+  }
+}
+/* Responsive styles */
+
+/*------------------------------------------------------*/
