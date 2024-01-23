@@ -272,6 +272,9 @@ short_summary = resp_data["short_summary"].strip()
 location = resp_data["location"].strip()
 characters = ", ".join(["[[" + character + "]]" for character in metadata["players"]])
 
+#replace Dunmar Fellowship or Fellowship with party
+tagline = tagline.replace("Dunmar Fellowship", "party").replace("Fellowship", "party")
+
 # Add to metadata
 metadata["tagline"] = tagline
 metadata["descTitle"] = info_box_title
