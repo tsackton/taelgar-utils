@@ -205,7 +205,7 @@ else:
 
         ## Save the response
         resp_id = None if args.reload else summary.id
-        session_note_json = session_note_path / (session_note_name + "." + resp_id + ".json")
+        session_note_json = session_note_file.parent / (session_note_name + "." + resp_id + ".json")
         session_note_json.write_text(json.dumps(resp_data, indent=4))
 
 # Parse response
