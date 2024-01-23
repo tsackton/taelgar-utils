@@ -2,6 +2,11 @@ from datetime import datetime
 
 class TaelgarDate:
 
+    """
+    Eventually will refactor this to a proper date class, allowing conversion between different Taelgar date formats.
+    Currently relies on datetime for parsing and formatting dates, but this will be replaced with a custom parser.
+    """
+
     DR_MONTHS = {
         1: 'Jan',
         2: 'Feb',
