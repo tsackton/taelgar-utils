@@ -222,9 +222,10 @@ tagline = tagline.replace("Dunmar Fellowship", "party").replace("Fellowship", "p
 # Add to metadata
 note.metadata["tagline"] = tagline
 note.metadata["descTitle"] = info_box_title
-if "title" not in note.metadata:
-    note.metadata["title"] = note.metadata["campaign"] + " - Session " + str(note.metadata["sessionNumber"])
-title = note.metadata["title"]
+if not note.metadta.get("name", None):
+    note.metadata["name"] = note.metadata["campaign"] + " - Session " + str(note.metadata["sessionNumber"])
+title = note.metadata["name"]
+
 # Write to file
 
 start_date = str(note.metadata["DR"])
