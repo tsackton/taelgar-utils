@@ -45,6 +45,8 @@ def generate_index_page(target_path, link_style='relative', sort_order = 'title'
             sort_value = (sort_value, md_file.name)
         elif tie_breaker == 'title':
             sort_value = (sort_value, obs_note.title)
+        elif tie_breaker == "sessionNumber":
+            sort_value = (sort_value, int(obs_note.metadata.get("sessionNumber", 0)))
         else:
             sort_value = (sort_value, obs_note.metadata.get(tie_breaker, ""))
 
