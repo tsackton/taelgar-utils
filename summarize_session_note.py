@@ -155,10 +155,11 @@ client = OpenAI(
     api_key=os.environ.get("OPEN_API_TAELGAR"),
 )
 
+session_note_path = session_note_file.parent
+session_note_name = session_note_file.stem
+
 ## make backup ##
 if args.backup:
-    session_note_path = session_note_file.parent
-    session_note_name = session_note_file.stem
     session_note_backup = session_note_path / (session_note_name + ".bak")
     session_note_backup.write_text(session_note_file.read_text())
 
@@ -205,7 +206,7 @@ else:
 
         ## Save the response
         resp_id = None if args.reload else summary.id
-        session_note_json = session_note_file.parent / (session_note_name + "." + resp_id + ".json")
+        session_note_json = session_note_path / (session_note_name + "." + resp_id + ".json")
         session_note_json.write_text(json.dumps(resp_data, indent=4))
 
 # Parse response
@@ -222,7 +223,7 @@ tagline = tagline.replace("Dunmar Fellowship", "party").replace("Fellowship", "p
 # Add to metadata
 note.metadata["tagline"] = tagline
 note.metadata["descTitle"] = info_box_title
-if not note.metadta.get("name", None):
+if not note.metadata.get("name", None):
     note.metadata["name"] = note.metadata["campaign"] + " - Session " + str(note.metadata["sessionNumber"])
 title = note.metadata["name"]
 
