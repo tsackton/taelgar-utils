@@ -21,24 +21,33 @@ class ObsNote:
         12: 'Dec'
     }
 
-    # words always lowercase in titles
-    EXCLUSIONS = ['A', 'An', 'The', 'And', 'But', 'Or', 'For', 'Nor', 'As', 'At', 'By', 'For', 'From', 'In', 'Into', 'Near', 'Of', 'On', 'Onto', 'To', 'With', 'De', 'About']
-    # words always uppercase
-    ALWAYS_UPPPER = ['DR']
-
-    def __init__(self, path, config):
+    def __init__(self, path, config, is_markdown=True):
         # Variables
         self.config = config
         self.original_path = Path(path)
+        self.target_path = self.original_path
         self.filename = self.original_path.stem
         self.campaign = self._parse_campaign(config.get('campaign', ''))
         self.target_date = self.parse_date_string(config.get('target_date', None))
-        self.raw_text, self.metadata = self._parse_markdown_file()
-        self._clean_text() #sets self.clean_text
-        self._page_title() #set self.page_title
-        self.is_stub = self.count_relevant_lines(self.clean_text) < 1
-        self.is_unnamed = self.page_title.startswith("~") or self.filename.startswith("~")
-        self.is_future_dated = self.metadata.get("activeYear", None) and self.target_date and self.parse_date_string(self.metadata.get("activeYear", None)) > self.target_date
+        self.is_markdown = is_markdown
+
+        if is_markdown:
+            self.raw_text, self.metadata = self._parse_markdown_file()
+            self._clean_text() #sets self.clean_text
+            self._page_title() #set self.page_title
+            self.is_stub = self.count_relevant_lines(self.clean_text) < 1
+            self.is_unnamed = self.page_title.startswith("~") or self.filename.startswith("~")
+            self.is_future_dated = self.metadata.get("activeYear", None) and self.target_date and self.parse_date_string(self.metadata.get("activeYear", None)) > self.target_date
+            self.outlinks = re.findall(r'\[\[(.*?)\]\]', self.clean_text)
+        else:
+            self.raw_text = None
+            self.clean_text = None
+            self.metadata = {}
+            self.page_title = self.filename
+            self.is_stub = False
+            self.is_unnamed = False
+            self.is_future_dated = False
+            self.outlinks = []
 
     def _parse_campaign(self, value):
         if isinstance(value, str):
@@ -74,10 +83,10 @@ class ObsNote:
     @staticmethod
     def title_case(text, exclusions=None, always_upper=None):
         if exclusions is None:
-            exclusions = []
+            exclusions = ['A', 'An', 'The', 'And', 'But', 'Or', 'For', 'Nor', 'As', 'At', 'By', 'For', 'From', 'In', 'Into', 'Near', 'Of', 'On', 'Onto', 'To', 'With', 'De', 'About']
 
         if always_upper is None:
-            always_upper = []
+            always_upper = ['DR']
 
         # Convert exclusions to lowercase for case-insensitive comparison
         exclusions = [word.lower() for word in exclusions]
@@ -269,12 +278,12 @@ class ObsNote:
         Otherwise, use the filename, changed to title case, with title prepended if it exists.
         """      
         if self.metadata.get("name"):
-            page_name = self.title_case(self.metadata.get("name"), exclusions=self.EXCLUSIONS, always_upper=self.ALWAYS_UPPPER)
+            page_name = self.title_case(self.metadata.get("name"))
         else:
-            page_name = self.title_case(self.filename.replace("-", " "), exclusions=self.EXCLUSIONS, always_upper=self.ALWAYS_UPPPER)
+            page_name = self.title_case(self.filename.replace("-", " "))
         
         if self.metadata.get("title"):
-            page_title = self.title_case(self.metadata.get("title"), exclusions=self.EXCLUSIONS, always_upper=self.ALWAYS_UPPPER)
+            page_title = self.title_case(self.metadata.get("title"))
         else:
             page_title = ""
         

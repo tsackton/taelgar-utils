@@ -26,5 +26,6 @@
     "resize_images": true,
     "max_height": 1600,
     "max_width": 1600,
-    "delete_unlinked_images": true
+    "delete_unlinked_images": true,
+    "image_path": "assets"
 }
