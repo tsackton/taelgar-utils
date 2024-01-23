@@ -1,6 +1,7 @@
 import yaml
 import re
 from pathlib import Path
+import datetime
 from .TaelgarDate import TaelgarDate
 
 class ObsNote:
@@ -16,7 +17,7 @@ class ObsNote:
         self.is_markdown = is_markdown
 
         if is_markdown:
-            self.raw_text, self.metadata = self._parse_markdown_file()
+            self.metadata, self.raw_text = self._parse_markdown_file()
             self._clean_text() #sets self.clean_text
             self._page_title() #set self.page_title
             self.is_stub = self.count_relevant_lines(self.clean_text) < 1
@@ -36,8 +37,10 @@ class ObsNote:
     def _parse_campaign(self, value):
         if isinstance(value, str):
             return value.split(',')
-        else:
+        elif isinstance(value, list):
             return value
+        else:
+            return []
         
     @staticmethod
     def title_case(text, exclusions=None, always_upper=None):

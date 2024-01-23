@@ -44,8 +44,10 @@ class TaelgarDate:
 
     @staticmethod
     def get_dr_date_string(date_string, dr=True):
-        if isinstance(date_string, datetime.date):
+        try:
             date_string = date_string.strftime("%Y-%m-%d")
+        except:
+            date_string = TaelgarDate.parse_date_string(date_string).strftime("%Y-%m-%d")
         
         if dr:
             end_string = " DR"

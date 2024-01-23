@@ -182,7 +182,7 @@ else:
     session_prompt = f"## Narrative\n{note.raw_text}\n"
 
 if args.verbose:
-    print(f"Processing session note: {session_note_path}")
+    print(f"Processing session note: {session_note_file}")
     print(f"Using context: {context}")
     print(f"Using session prompt: {session_prompt}")
 
