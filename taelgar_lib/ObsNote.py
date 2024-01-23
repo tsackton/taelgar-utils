@@ -1,7 +1,6 @@
 import yaml
 import re
 from pathlib import Path
-import datetime
 from .TaelgarDate import TaelgarDate
 
 class ObsNote:
