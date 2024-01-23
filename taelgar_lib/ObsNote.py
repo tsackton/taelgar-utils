@@ -1,25 +1,9 @@
 import yaml
 import re
 from pathlib import Path
-from datetime import datetime
+from .TaelgarDate import TaelgarDate
 
 class ObsNote:
-
-    # months - defined here so that it can be extended / changed if desired
-    DR_MONTHS = {
-        1: 'Jan',
-        2: 'Feb',
-        3: 'Mar',
-        4: 'Apr',
-        5: 'May',
-        6: 'Jun',
-        7: 'Jul',
-        8: 'Aug',
-        9: 'Sep',
-        10: 'Oct',
-        11: 'Nov',
-        12: 'Dec'
-    }
 
     def __init__(self, path, config, is_markdown=True):
         # Variables
@@ -28,7 +12,7 @@ class ObsNote:
         self.target_path = self.original_path
         self.filename = self.original_path.stem
         self.campaign = self._parse_campaign(config.get('campaign', ''))
-        self.target_date = self.parse_date_string(config.get('target_date', None))
+        self.target_date = TaelgarDate.parse_date_string(config.get('target_date', None))
         self.is_markdown = is_markdown
 
         if is_markdown:
@@ -37,7 +21,7 @@ class ObsNote:
             self._page_title() #set self.page_title
             self.is_stub = self.count_relevant_lines(self.clean_text) < 1
             self.is_unnamed = self.page_title.startswith("~") or self.filename.startswith("~")
-            self.is_future_dated = self.metadata.get("activeYear", None) and self.target_date and self.parse_date_string(self.metadata.get("activeYear", None)) > self.target_date
+            self.is_future_dated = self.metadata.get("activeYear", None) and self.target_date and TaelgarDate.parse_date_string(self.metadata.get("activeYear", None)) > self.target_date
             self.outlinks = re.findall(r'\[\[(.*?)\]\]', self.clean_text)
         else:
             self.raw_text = None
@@ -55,31 +39,6 @@ class ObsNote:
         else:
             return value
         
-    @staticmethod    
-    def parse_date_string(date_str):
-        """
-        Tries to parse the date string in various formats and returns a datetime object.
-        """
-
-        if date_str is None:
-            return None
-        
-        # Split the date string into parts
-        parts = date_str.split('-')
-        
-        # Pad the year part with zeros if necessary
-        parts[0] = parts[0].zfill(4)
-        
-        # Rejoin the parts into a date string
-        padded_date_str = '-'.join(parts)
-
-        for fmt in ['%Y', '%Y-%m', '%Y-%m-%d']:
-            try:
-                return datetime.strptime(padded_date_str, fmt)
-            except ValueError:
-                continue
-        raise ValueError(f"Date '{date_str}' is not in a recognized format")
-
     @staticmethod
     def title_case(text, exclusions=None, always_upper=None):
         if exclusions is None:
@@ -232,7 +191,7 @@ class ObsNote:
                 # Remove the letter
                 comment_date_str = comment_date_str[:-1]
             # Parse the comment date
-            comment_date = self.parse_date_string(comment_date_str)
+            comment_date = TaelgarDate.parse_date_string(comment_date_str)
 
             # Compare the dates
             if parse_code == "a":
@@ -260,7 +219,7 @@ class ObsNote:
             if inline_tag == "DR" or inline_tag == "DR_end":
                 parts = tag_value.split("-")
                 if len(parts) > 1:
-                    parts[1] = self.DR_MONTHS[int(parts[1])]
+                    parts[1] = TaelgarDate.DR_MONTHS[int(parts[1])]
                 if len(parts) == 3:
                     return(f'{parts[1]} {parts[2]}, {parts[0]} DR')
                 if len(parts) == 2:

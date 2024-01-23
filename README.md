@@ -1,8 +1,8 @@
 # taelgar-utils
+
 A collection of Python scripts to work with Taelgar Obsidian notes
 
-Most tools are not totally functional yet. 
+Currently includes two major scripts:
 
-Includes scripts to convert dview functions to plain markdown for website export, as well as other utility functions for note cleanup
-
-MAJOR WORK IN PROGRESS
+- export_vault.py, which autogenerates clean markdown for Material for Mkdocs
+- summarize_session_note.py, which uses OpenAI API to summarize session notes

@@ -4,10 +4,12 @@ import json
 import re
 import tiktoken
 import argparse
-from pathlib import Path
 import datetime
+from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
+from taelgar_lib.ObsNote import ObsNote
+from taelgar_lib.TaelgarDate import TaelgarDate
 
 ### SYSTEM PROMPT ###
 ### FOR SUMMARIZING SESSION NOTES ###
@@ -40,38 +42,6 @@ class CustomDumper(yaml.SafeDumper):
 # Add custom representation for None (null) values
 CustomDumper.add_representer(type(None), CustomDumper.represent_none)
 
-def get_dr_date_string(date_string, dr=True):
-    # months - defined here so that it can be extended / changed if desired
-    DR_MONTHS = {
-        1: 'Jan',
-        2: 'Feb',
-        3: 'Mar',
-        4: 'Apr',
-        5: 'May',
-        6: 'Jun',
-        7: 'Jul',
-        8: 'Aug',
-        9: 'Sep',
-        10: 'Oct',
-        11: 'Nov',
-        12: 'Dec'
-    }
-    if isinstance(date_string, datetime.date):
-        date_string = date_string.strftime("%Y-%m-%d")
-    
-    if dr:
-        end_string = " DR"
-    else:
-        end_string = ""
-    parts = date_string.split("-")
-    if len(parts) > 1:
-        parts[1] = DR_MONTHS[int(parts[1])]
-    if len(parts) == 3:
-        return(f'{parts[1]} {parts[2]}, {parts[0]}{end_string}')
-    if len(parts) == 2:
-        return(f'{parts[1]} {parts[0]}{end_string}')
-    if len(parts) == 1:
-        return(f'{parts[0]}{end_string}')
 
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
     """From OpenAI cookbook: https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb"""
@@ -113,33 +83,6 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
                 num_tokens += tokens_per_name
     num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
     return num_tokens
-
-def parse_markdown_file(file_path):
-    """
-    Reads a markdown file and returns its frontmatter as a dictionary and the rest of the text as a string.
-
-    :param file_path: Path to the markdown file.
-    :return: A tuple containing a dictionary of the frontmatter and a string of the markdown text.
-    """
-    with open(file_path, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
-
-    # Check if the file starts with frontmatter (triple dashes)
-    if lines and lines[0].strip() == '---':
-        # Try to find the second set of triple dashes
-        try:
-            end_frontmatter_idx = lines[1:].index('---\n') + 1
-        except ValueError:
-            # Handle the case where the closing triple dashes are not found
-            frontmatter = {}
-            markdown_text = ''.join(lines)
-        else:
-            frontmatter = yaml.safe_load(''.join(lines[1:end_frontmatter_idx]))
-            markdown_text = ''.join(lines[end_frontmatter_idx + 1:])
-    else:
-        frontmatter = {}
-        markdown_text = ''.join(lines)
-    return frontmatter, markdown_text
 
 def split_markdown_by_sections(markdown_lines):
     """
@@ -193,6 +136,7 @@ parser.add_argument('--gens', '-g', required=False)
 parser.add_argument('--verbose', '-v', required=False, action="store_true")
 parser.add_argument('--context', '-c', required=False)
 parser.add_argument('--reload', '-r', required=False)
+parser.add_argument('--backup', '-b', required=False, action="store_true")
 args = parser.parse_args()
 session_note_file = Path(args.file)
 num_generations = 1 if not args.gens else int(args.gens)
@@ -212,14 +156,14 @@ client = OpenAI(
 )
 
 ## make backup ##
-session_note_path = session_note_file.parent
-session_note_name = session_note_file.stem
-session_note_backup = session_note_path / (session_note_name + ".bak")
-session_note_backup.write_text(session_note_file.read_text())
+if args.backup:
+    session_note_path = session_note_file.parent
+    session_note_name = session_note_file.stem
+    session_note_backup = session_note_path / (session_note_name + ".bak")
+    session_note_backup.write_text(session_note_file.read_text())
 
-
-metadata, text = parse_markdown_file(session_note_file)
-markdown_text = split_markdown_by_sections(text.splitlines())
+note = ObsNote(session_note_file, {})
+markdown_text = split_markdown_by_sections(note.raw_text.splitlines())
 narrative = ""
 timeline = ""
 if "Narrative" in markdown_text:
@@ -235,7 +179,7 @@ elif timeline:
     narrative = "\n".join([markdown_text[section] for section in markdown_text if section != "Timeline"])
     session_prompt = f"## Narrative\n{narrative}\n## Timeline\n{timeline}"
 else:
-    session_prompt = f"## Narrative\n{text}\n"
+    session_prompt = f"## Narrative\n{note.raw_text}\n"
 
 if args.verbose:
     print(f"Processing session note: {session_note_path}")
@@ -270,28 +214,28 @@ info_box_title = resp_data["title"].strip()
 summary = resp_data["summary"]
 short_summary = resp_data["short_summary"].strip()
 location = resp_data["location"].strip()
-characters = ", ".join(["[[" + character + "]]" for character in metadata["players"]])
+characters = ", ".join(["[[" + character + "]]" for character in note.metadata["players"]])
 
 #replace Dunmar Fellowship or Fellowship with party
 tagline = tagline.replace("Dunmar Fellowship", "party").replace("Fellowship", "party")
 
 # Add to metadata
-metadata["tagline"] = tagline
-metadata["descTitle"] = info_box_title
-if "title" not in metadata:
-    metadata["title"] = metadata["campaign"] + " - Session " + str(metadata["sessionNumber"])
-title = metadata["title"]
+note.metadata["tagline"] = tagline
+note.metadata["descTitle"] = info_box_title
+if "title" not in note.metadata:
+    note.metadata["title"] = note.metadata["campaign"] + " - Session " + str(note.metadata["sessionNumber"])
+title = note.metadata["title"]
 # Write to file
 
-start_date = str(metadata["DR"])
-end_date = str(metadata["DR_end"])
+start_date = str(note.metadata["DR"])
+end_date = str(note.metadata["DR_end"])
 if start_date == end_date:
-    taelgar_date_string = get_dr_date_string(start_date, dr=True)
+    taelgar_date_string = TaelgarDate.get_dr_date_string(start_date, dr=True)
 else:
-    taelgar_date_string = get_dr_date_string(start_date, dr=True) + " to " + get_dr_date_string(end_date, dr=True)
+    taelgar_date_string = TaelgarDate.get_dr_date_string(start_date, dr=True) + " to " + TaelgarDate.get_dr_date_string(end_date, dr=True)
 
-real_world_date_string = metadata["realWorldDate"].strftime("%A %b %d, %Y")
-output_metadata = yaml.dump(metadata, sort_keys=False, default_flow_style=None, allow_unicode=True, width=2000, Dumper=CustomDumper)
+real_world_date_string = note.metadata["realWorldDate"].strftime("%A %b %d, %Y")
+output_metadata = yaml.dump(note.metadata, sort_keys=False, default_flow_style=None, allow_unicode=True, width=2000, Dumper=CustomDumper)
 
 with open(session_note_file, 'w', encoding='utf-8') as file:
     file.write(f"---\n{output_metadata}---\n")

@@ -88,7 +88,8 @@ Note that skip/exclude operations happen prior to link generation, so links that
 - `resize_images`, logical, if true images are resized to max_height / max_width (longest dimension is used and aspect ratio is fixed)
 - `max_height`, max image height in pixels for resize operations, defaults to 1600. Specify as integer.
 - `max_width`, max image width in pixels for resize operations, defaults to 1600. Specify as integer.
-- `delete_unlinked_images`, logical, if True, attempts to delete images that are not linked to any pages in docs. Currently does not work on Windows. 
+- `delete_unlinked_images`, logical, if True, attempts to delete images that are not linked to any pages in docs. Requires `image_path`
+- `image_path`, path, relative to `build`, to check for image files and compare against linked files.
 
 ### autobuild.json
 
