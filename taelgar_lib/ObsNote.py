@@ -8,7 +8,7 @@ class ObsNote:
 
     WIKILINK_RE = r"""\[\[(.*?)(\#.*?)?(?:\|([\D][^\|\]]+[\d]*))?(?:\|(\d+)(?:x(\d+))?)?\]\]"""
 
-    def __init__(self, path, config, is_markdown=True):
+    def __init__(self, path, config={}, is_markdown=True):
         # Variables
         self.config = config
         self.original_path = Path(path)
