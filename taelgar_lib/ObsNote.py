@@ -6,6 +6,8 @@ from .TaelgarDate import TaelgarDate
 
 class ObsNote:
 
+    WIKILINK_RE = r"""\[\[(.*?)(\#.*?)?(?:\|([\D][^\|\]]+[\d]*))?(?:\|(\d+)(?:x(\d+))?)?\]\]"""
+
     def __init__(self, path, config, is_markdown=True):
         # Variables
         self.config = config
@@ -23,7 +25,7 @@ class ObsNote:
             self.is_stub = self.count_relevant_lines(self.clean_text) < 1
             self.is_unnamed = self.page_title.startswith("~") or self.filename.startswith("~")
             self.is_future_dated = self.metadata.get("activeYear", None) and self.target_date and TaelgarDate.parse_date_string(self.metadata.get("activeYear", None)) > self.target_date
-            self.outlinks = re.findall(r'\[\[(.*?)\]\]', self.clean_text)
+            self.outlinks = [match[0] for match in re.findall(self.WIKILINK_RE, self.raw_text) if match[0] is not None]
         else:
             self.raw_text = None
             self.clean_text = None

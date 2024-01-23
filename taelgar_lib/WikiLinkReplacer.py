@@ -51,14 +51,14 @@ class WikiLinkReplacer:
                 if filename.lower() in self.path_dict:
                     filename = filename.lower()
                 alias = str(filename) if alias == "" else alias
-                filename = self.path_dict[filename].target_path
+                filename = str(self.path_dict[filename].target_path)
             else:
                 ## check to see if we have a broken obsidian path
                 # this is not the best way to do this
                 parts = filename.split('/')
                 if parts[-1] in self.path_dict:
                     alias = str(parts[-1]) if alias == "" else alias
-                    filename = self.path_dict[parts[-1]].target_path
+                    filename = str(self.path_dict[parts[-1]].target_path)
             if "http://" in filename or "https://" in filename:
                 rel_link_url = filename
             else:

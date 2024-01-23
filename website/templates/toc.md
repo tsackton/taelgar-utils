@@ -7,8 +7,10 @@
             - {glob: campaigns/dunmari-frontier/session-notes/}
         - Kenzo's Collected Stories
             - {glob: campaigns/dunmari-frontier/collected-stories/}
-        - Letters, Notes, and Tales
-            - {glob: campaigns/dunmari-frontier/letters-notes-and-tales/}
+        - Letters and Notes
+            - {glob: campaigns/dunmari-frontier/letters-and-notes/}
+        - Tales and Stories
+            - {glob: campaigns/dunmari-frontier/tales-and-stories}
         - Dreams and Visions
             - {glob: campaigns/dunmari-frontier/dreams-and-visions/}
         - Scrying

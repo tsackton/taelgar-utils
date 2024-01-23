@@ -11,7 +11,7 @@ from taelgar_lib.ObsNote import ObsNote
 from taelgar_lib.WikiLinkReplacer import WikiLinkReplacer
 
 ## GLOBALS ##
-WIKILINK_RE = r"""\[\[(.*?)(\#.*?)?(?:\|([\D][^\|\]]+[\d]*))?(?:\|(\d+)(?:x(\d+))?)?\]\]"""
+WIKILINK_RE = ObsNote.WIKILINK_RE
 
 # Custom dumper for handling empty values
 class CustomDumper(yaml.SafeDumper):
@@ -113,7 +113,6 @@ class MkDocsNavigationGenerator:
         return processed_lines
 
 def clean_code_blocks(note, template_dir, source_files, abs_path_root):
-    s = note.clean_text
     def codeblock_cleaner(match):
         if match.group(2):
             # code block
@@ -122,20 +121,21 @@ def clean_code_blocks(note, template_dir, source_files, abs_path_root):
             if codeblock_type.strip() == "mermaid":
                 return match.group(0)
             if codeblock_template.is_file():
-                template_text = open(codeblock_template, 'r').read()
+                with open(codeblock_template, 'r') as file:
+                    template_text = file.read()
                 template_content = yaml.safe_load(codeblock_content)
                 if codeblock_type.strip() == "leaflet":
                     ## fix image path
                     image_file_name = str(template_content["image"][0]).replace("[", "").replace("]", "").replace('\'', "")
                     page_path = source_files[image_file_name].target_path
-                    note.outlinks = note.outlinks + [source_files[image_file_name].target_path.filename]
+                    note.outlinks = note.outlinks + [source_files[image_file_name].target_path.name]
                     template_content["image"] = abs_path_root + str(page_path.as_posix())
                 return(template_text.format(**template_content))
             else:
                 return ""
 
     pattern = r'(```([^`]+)```|~~~([^~]+)~~~|`([^`]*)`)'
-    return re.sub(pattern, codeblock_cleaner, s, flags=re.DOTALL)
+    note.clean_text = re.sub(pattern, codeblock_cleaner, note.clean_text, flags=re.DOTALL)
 
 def parse_ignore_file(file_path):
     """ Parse the .gitignore file with pathspec """
@@ -297,8 +297,11 @@ if config.get("resize_images", False):
     max_width = config.get("max_width", 1200)
     max_height = config.get("max_height", 1200)
     print("Resizing images with max width " + str(max_width) + " and max height " + str(max_height))
+else:
+    resize_images = False
 
-for note in source_files:
+for file_to_process in source_files:
+    note = source_files[file_to_process]
 
     # Construct new path and add to image
     new_file_path = output_dir / note.target_path    
@@ -322,12 +325,12 @@ for note in source_files:
                 img = img.resize((new_width, new_height))
             img.save(new_file_path)
         else:
-            shutil.copy(note.original, new_file_path)
+            shutil.copy(note.original_path, new_file_path)
         continue
 
     page_path = note.target_path
     if config.get("clean_code_blocks", False) and config.get("codeblock_template_dir", None):
-        note.clean_text = clean_code_blocks(note, config.get("codeblock_template_dir"), source_files, config.get("abs_path_root", ""))
+        clean_code_blocks(note, config.get("codeblock_template_dir"), source_files, config.get("abs_path_root", ""))
     if config.get("fix_links", True):
         note.clean_text = re.sub(WIKILINK_RE, WikiLinkReplacer(output_dir, page_path, source_files), note.clean_text)
 
@@ -360,15 +363,21 @@ for note in source_files:
         note.metadata["hide"] = ["navigation"]
 
     basename = Path(new_file_path).stem
-    metadata[basename] = note.metadata
 
     for outlink in note.outlinks:
         if Path(outlink).suffix in ['.png', '.jpg', '.jpeg', '.gif']:
+            if config.get("slugify", True):
+                outlink = slugify(Path(outlink).stem) + "".join(Path(outlink).suffixes)
             linked_images.append(outlink)
+    
+    # need to update metadata to replace obsidian title with mkdocs title
+    new_metadata = note.metadata
+    new_metadata["title"] = note.page_title
+    metadata[basename] = new_metadata
 
     # write out new file
     new_file_path.parent.mkdir(parents=True, exist_ok=True)
-    new_frontmatter = yaml.dump(note.metadata, sort_keys=False, default_flow_style=None, allow_unicode=True, Dumper=CustomDumper, width=2000)
+    new_frontmatter = yaml.dump(new_metadata, sort_keys=False, default_flow_style=None, allow_unicode=True, Dumper=CustomDumper, width=2000)
     output = "---\n" + new_frontmatter + "---\n" + note.clean_text
 
     with open(new_file_path, 'w', 2048, "utf-8") as output_file:
@@ -389,8 +398,11 @@ if config.get("literate_nav_source", False):
 # remove unused images
         
 if config.get("delete_unlinked_images", False) and config.get("image_path", None):
+    print("Found images: " + str(len(linked_images)))
     image_path = output_dir / Path(config.get("image_path"))
     print("Removing unused images from " + str(image_path))
     for file in image_path.rglob('*'):
-        if file.is_file() and file.suffix in ['.png', '.jpg', '.jpeg', '.gif'] and file.name not in linked_images:
-            file.unlink()
+        if file.is_file() and file.suffix in ['.png', '.jpg', '.jpeg', '.gif']:
+            if file.name not in linked_images:
+                print("Removing unused image: " + file.name)
+                file.unlink()

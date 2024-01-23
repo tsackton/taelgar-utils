@@ -5,6 +5,7 @@
     "overrides_dest": "overrides",
     "slugify": true,
     "clean_build": true,
+    "clean_code_blocks": true,
     "codeblock_template_dir": "taelgar-utils/website/templates/",
     "home_source": "taelgar-utils/website/templates/home.md",
     "home_dest": "index.md",

@@ -58,6 +58,7 @@ Both the `export_vault.py` and the `build_mkdocs_site.py` scripts have a number 
 - `clean_build`, logical, if true, will delete all files in `build` directory before starting processing. Defaults to False.
 
 #### Templates
+- `clean_code_blocks`, logical, if true will attempt to clean up code blocks using templates
 - `codeblock_template_dir`, the directory where html templates to replace codeblocks are stored (currently only leaflet is implemented; mermaid is passed unaltered, everythign else is removed). Defaults to `taelgar-utils/website/templates`
 - `home_source`, the template for the home page. No default, will not create if missing.
 - `home_dest`, the file to be created for the home page, in `"build"`, usually `index.md`
