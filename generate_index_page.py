@@ -24,7 +24,7 @@ def generate_index_page(target_path, link_style='relative', sort_order = 'title'
             raise ValueError(f'link_style must be "relative" or "wiki"')
         
         if sort_order == 'title':
-            sort_value = obs_note.title
+            sort_value = obs_note.page_title
         else:
             sort_value = obs_note.metadata.get(sort_order, None)
             if sort_value is None or not sort_value or isinstance(sort_value, list) or isinstance(sort_value, dict):
@@ -44,7 +44,7 @@ def generate_index_page(target_path, link_style='relative', sort_order = 'title'
         if tie_breaker == 'file_name':
             sort_value = (sort_value, md_file.name)
         elif tie_breaker == 'title':
-            sort_value = (sort_value, obs_note.title)
+            sort_value = (sort_value, obs_note.page_title)
         elif tie_breaker == "sessionNumber":
             sort_value = (sort_value, int(obs_note.metadata.get("sessionNumber", 0)))
         else:
