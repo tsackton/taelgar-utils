@@ -53,6 +53,8 @@ def generate_index_page(target_path, link_style='relative', sort_order = 'title'
         if template_string:
             obs_note.metadata["link"] = link
             obs_note.metadata["link_text"] = link_text
+            obs_note.metadata["companions_str"] = "|".join(obs_note.metadata.get("companions", []))
+            obs_note.metadata["players_str"] = "|".join(obs_note.metadata.get("players", []))
             try:
                 line_text = template_string.format(**obs_note.metadata)
             except KeyError:
