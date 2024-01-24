@@ -18,7 +18,7 @@ summary_sys_prompt = "You are a creative and careful assistant who is skilled in
     "You will receive a query that consists of some context, followed by text. "\
     "This text will describe a narrative of one or more days, describing the events that happened in a fictional world. Your job is to summarize these narratives. "\
     "You will return a JSON object that contains five things: "\
-    "1. title: this is a 1-3 word title that captures the main event of the narrative; "\
+    "1. title: this is a 1-5 word title that captures the main event of the narrative and would be suitable to use as a chapter title in a book; "\
     "2. tagline: this is a tagline of 5-10 words that could be used as a subtitle for the text; "\
     "it should capture the main event of the narrative succinctly and clearly, and ALWAYS start with the words *in which* "\
     "3. summary: this is no more than 100 words, in the form of a markdown list. each element of the list should succinctly, clearly, and accurately summarize a "\
@@ -134,6 +134,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--file', '-f', required=True)
 parser.add_argument('--gens', '-g', required=False)
 parser.add_argument('--verbose', '-v', required=False, action="store_true")
+parser.add_argument('--debug', '-vv', required=False, action="store_true")
 parser.add_argument('--context', '-c', required=False)
 parser.add_argument('--reload', '-r', required=False)
 parser.add_argument('--backup', '-b', required=False, action="store_true")
@@ -182,10 +183,14 @@ elif timeline:
 else:
     session_prompt = f"## Narrative\n{note.raw_text}\n"
 
-if args.verbose:
+if args.verbose or args.debug:
     print(f"Processing session note: {session_note_file}")
+
+if args.debug:
     print(f"Using context: {context}")
     print(f"Using session prompt: {session_prompt}")
+
+outputs = []
 
 prompt = context + session_prompt
 if args.reload:
@@ -199,6 +204,9 @@ else:
 
         if args.verbose:
             print(f"Response: {summary.choices[0].message.content}")
+
+        
+        outputs.append(summary.choices[0].message.content)
 
         ## Parse the response
         clean_resp = summary.choices[0].message.content.replace("```", "").replace("json", "").strip()
@@ -248,6 +256,13 @@ with open(session_note_file, 'w', encoding='utf-8') as file:
     file.write(f"> *On Earth: {real_world_date_string}*\n")
     file.write(f"> *{location}*\n\n")
     file.write(short_summary + "\n\n")
+    if num_generations > 1:
+        file.write("%% Other Generations\n")
+        for i, output in enumerate(outputs):
+            if i != num_generations - 1:
+                file.write(f"Generation {i+1}\n")
+                file.write(output + "\n")
+        file.write("%%\n")
     file.write(f"## Session Info\n")
     file.write(f"### Summary\n- ")
     file.write("\n- ".join(summary))
@@ -257,3 +272,6 @@ with open(session_note_file, 'w', encoding='utf-8') as file:
         if section not in ["Narrative", "Timeline"]:
             file.write(f"\n### {section}\n{markdown_text[section]}\n\n")
     file.write(f"\n\n## Narrative\n{narrative}\n")
+
+if args.verbose:
+    print(f"Successfully wrote to {session_note_file}")
