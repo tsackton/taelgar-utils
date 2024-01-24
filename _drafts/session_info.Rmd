@@ -1,0 +1,68 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Load session notes data
+
+```{r}
+library(tidyverse)
+library()
+dufr<-read_csv("~/RPGs/taelgar-utils/_drafts/session_info.csv", col_names = c("sessionNum", "realWorldDate", "players", "companions", "DR", "DR_end"))
+```
+
+Cleanup some stuff
+
+```{r}
+dufr <- dufr %>% mutate(start = ymd(DR), end = ymd(DR_end), real = ymd(realWorldDate), tlen = end-start, game_day = wday(real, label=TRUE), campaign_year = year(real), era = ifelse(campaign_year < 2022, "COVID", "post-COVID"))
+
+```
+
+Basic statistics
+
+```{r}
+ggplot(dufr, aes(x=factor(game_day), fill=era)) + geom_bar(stat="count", position=position_dodge()) + xlab("Game Night")
+```
+
+
+
+In game length
+
+```{r}
+table(dufr$tlen)
+dufr %>% ggplot(aes(x=tlen)) + geom_bar(stat="count", fill="red") + xlab("In Game Session Length (Days)")
+```
+
+Which days show up the most?
+
+```{r}
+days = c(dufr$start, dufr$end)
+table(days) %>% as.data.frame() %>% mutate(sessions = Freq / 2) %>% filter(sessions > 1) %>% arrange(desc(sessions))
+
+```
+
+Time between sessions
+
+```{r}
+
+# Assuming your data frame is named df and the date column is named date_column
+
+# 1. Calculate Time Differences Between Consecutive Events
+dufr <- dufr %>%
+  arrange(real) %>%  # Ensure data is ordered by date
+  mutate(
+    session_break = real - lag(real)  # Calculate time difference with previous event
+  )
+```
+
+
+```{r}
+dufr %>% ggplot(aes(x=session_break, fill=era)) + geom_bar(position=position_dodge())
+table(dufr$session_break)
+mean(dufr$session_break[dufr$era == "COVID"], na.rm=TRUE)
+mean(dufr$session_break[dufr$era == "post-COVID"], na.rm=TRUE)
+mean(dufr$session_break, na.rm=TRUE)
+```
+
+
+
