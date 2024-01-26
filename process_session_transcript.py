@@ -127,8 +127,13 @@ def clean_raw_transcript(raw_transcript_file, globs):
 
     # write the cleaned text to a new file
     cleaned_transcript = raw_transcript_file.with_suffix('.cleaned.txt')
-    with open(cleaned_transcript, 'w') as f:
-        f.write(text)
+
+    if cleaned_transcript.is_file():
+        print("NOTICE: " + str(cleaned_transcript) + " already exists, not modifying.")
+        return cleaned_transcript
+    else:
+        with open(cleaned_transcript, 'w') as f:
+            f.write(text)
 
     return cleaned_transcript
 
@@ -154,8 +159,12 @@ def summarize_scenes(cleaned_transcript, globs):
     summary_text = "## Detailed Summary\n\n" + summary + "\n\n## Short Summary\n\n-" + "\n-".join(context.split("\n")) + "\n"
 
     detailed_summary = cleaned_transcript.with_suffix('.summary.txt')
-    with open(detailed_summary, 'w') as f:
-        f.write(summary_text)
+    if detailed_summary.is_file():
+        print("NOTICE: " + str(detailed_summary) + " already exists, not modifying.")
+        return detailed_summary
+    else:
+        with open(detailed_summary, 'w') as f:
+            f.write(summary_text)
 
     return detailed_summary
 
@@ -168,49 +177,113 @@ def summarize_scenes_helper(scenes, globs):
     summary = ""
     context = ""
     for scene in scenes:
-        summary_result = gpt_summarize_individual_scene(context, scenes[scene], globs)
+        summary_result = gpt_summarize_individual_scene(context, scene, scenes[scene], globs)
         summary += summary_result["summary"] + "\n"
         context += summary_result["context"] + "\n"
     return summary, context
 
-def gpt_summarize_individual_scene(context, scene, globs):
+def gpt_summarize_individual_scene(context, scene, scene_text, globs):
     """
     This function takes a scene and generates a summary of the scene.
     :param: context: the context for the scene
     :param: scene: the scene to summarize
     """
-    max_tokens_scene = globs.get('max_tokens_scene', 6000)
-    sys_prompt_scene = globs.get('sys_prompt_scene', "")
+    max_tokens = globs.get('max_tokens_scene', 6000)
+    sys_prompt = globs.get('sys_prompt_scene', "")
     model = globs.get('model', "gpt-4-1106-preview")
-    prompt = "Context: \n" + context + "\nTranscript: \n" + scene 
+    prompt = "Context: \n" + context + "\nTranscript of " + scene + ": \n" + scene_text
     client = globs.get('client')
-    response = get_gpt_summary(client, prompt, model=model, max_tokens=max_tokens_scene, system_prompt=sys_prompt_scene)
-    clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
-    return json.loads(clean_resp)
+    if globs.get('logging'):
+        logging_path = globs.get('logging_path')
+    else:
+        logging_path = None
 
 
-def get_gpt_summary(client, prompt, model="gpt-4-1106-preview", max_tokens=4000, system_prompt=""):
+    # generate prompt and check tokens
     input_messages = []
-    input_messages.append({"role": "system", "content": system_prompt})
+    input_messages.append({"role": "system", "content": sys_prompt})
     input_messages.append({"role": "user", "content": prompt})
     num_tokens = num_tokens_from_messages(input_messages, model=model)
     if num_tokens > max_tokens:
-        raise ValueError(f"Input messages are too long. {num_tokens} tokens > {max_tokens} tokens.")
+        # need to break up scene into multiple prompts
+        scene_tokens = num_tokens_from_messages([{"role": "user", "content": scene_text}], model=model)
+        num_scenes = int(num_tokens / max_tokens) + 2
+        tokens_per_chunk = int(scene_tokens / num_scenes) + 1
+        
+        # split the scene into lines
+        scene_lines = scene_text.split("\n")
+
+        # split the scene into num_scenes chunks of roughly equal length
+        scene_chunks = []
+        chunk = ""
+        for line in scene_lines:
+            if num_tokens_from_messages([{"role": "user", "content": chunk}], model=model) > tokens_per_chunk:
+                scene_chunks.append(chunk)
+                chunk = ""
+            chunk += line + "\n"
+        scene_chunks.append(chunk)
+
+        subscene_sys_prompt = globs.get('sys_prompt_subscene')
+        summary = ""
+
+        for i, chunk in enumerate(scene_chunks):
+            prompt = "Context: \n" + context + "\nTranscript of " + scene + " (part " + str(i+1) + " of " + str(num_scenes) + "): \n" + chunk
+            if summary:
+                prompt += "\n\nSummary so far: \n" + summary
+
+            input_messages = []
+            input_messages.append({"role": "system", "content": subscene_sys_prompt})
+            input_messages.append({"role": "user", "content": prompt})
+            num_tokens = num_tokens_from_messages(input_messages, model=model)
+            if num_tokens > max_tokens:
+                raise Exception("ERROR: scene chunk is too long.")
+            response = get_gpt_summary(client, prompt, model=model, max_tokens=max_tokens, logging_path=logging_path)
+            clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
+            response = json.loads(clean_resp)
+            summary += response["detailed_summary"] + "\n"
+        
+        # only get context from the last chunk
+        context += response["context"] + "\n"
+        return {"summary": summary, "context": context}
+    else:    
+        response = get_gpt_summary(client, prompt, model=model, max_tokens=max_tokens, logging_path=logging_path)
+        clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
+        return json.loads(clean_resp)
+
+def get_gpt_summary(client, prompt, model="gpt-4-1106-preview", max_tokens=4000, logging_path=None):
     response = client.chat.completions.create(
         model=model,
         max_tokens=max_tokens,
-        messages=input_messages,
+        messages=prompt,
         top_p=1.0,
         frequency_penalty=0.0,
         presence_penalty=0.0,
         temperature=0.85,
     )
+
+    if logging_path:
+        logfile = logging_path / response.id / ".log"
+        print("Logging response to " + logfile)
+        with open(logfile, 'a') as f:
+            f.write("Prompt: " + prompt + "\n")
+            f.write("Response: " + response.choices[0].text + "\n\n")
     return response
 
-def generate_session_narrative(file3_name):
-    # Placeholder for final processing on file3
-    # ... Your processing logic goes here ...
-    return
+def generate_session_narrative(detailed_summary, globs):
+
+    # Read the detailed summary file
+    with open(detailed_summary, 'r') as f:
+        text = f.read()
+
+    final_narrative = detailed_summary.with_suffix('.narrative.md')
+    if final_narrative.is_file():
+        print("NOTICE: " + str(final_narrative) + " already exists, not modifying.")
+        return final_narrative
+    else:
+        with open(final_narrative, 'w') as f:
+            f.write(text)
+
+    return final_narrative
 
 def main():
     # Set up argument parsing
@@ -218,6 +291,7 @@ def main():
     parser.add_argument('transcript_file', type=str, help='Path to the WebVTT transcription file.')
     parser.add_argument('-w', '--wrap', type=int, help='Wrap text to specified length.', default=None)
     parser.add_argument('-n', '--names', type=str, help='Path to the names file.', default=None)
+    parser.add_argument('-l', '--log', type=bool, help='Log all chatgpt responses.', default=False)
 
     # Parse arguments
     args = parser.parse_args()
@@ -241,22 +315,38 @@ def main():
     IMPORTANT: you provide detailed notes with specifics from the transcript; you avoid generalities like "the party uses combat tactics". 
     You focus on summarizing in-character outcomes rather than out-of-character mechanics, such as summarizing 'combat starts' instead of detailing initiative rolls. 
     You also correct transcript errors, highlight character names and the DM role, and distinguish between in-character and out-of-character dialogue. 
-    You will recieve a transcript of a scene from a D&D session, and optional context that summarizes what has happened leading up to this scene. 
-    You will return a JSON object with two entries: 'detailed__events' and 'short_summary'.
+    You will recieve a transcript of a scene or part of a scene from a D&D session, and optional context that summarizes what has happened leading up to this scene. 
+    You will return a JSON object with two entries: 'detailed_events' and 'short_summary'.
     The 'detailed_events' entry will be a list of detailed bullet points summarizing the scene.
     The 'short_summary' entry will be a short summary of the scene in no more than 2 sentences.
     """
+
+    SYS_PROMPT_SUBSCENE = """
+    You specialize in assisting Dungeon Masters (DMs) in Dungeons & Dragons (D&D) by transforming session transcripts into precise, detailed bullet points. 
+    Your summaries focus on events, decisions, and outcomes with an emphasis on in-character developments. 
+    IMPORTANT: you provide detailed notes with specifics from the transcript; you avoid generalities like "the party uses combat tactics". 
+    You focus on summarizing in-character outcomes rather than out-of-character mechanics, such as summarizing 'combat starts' instead of detailing initiative rolls. 
+    You also correct transcript errors, highlight character names and the DM role, and distinguish between in-character and out-of-character dialogue. 
+    You will recieve a transcript that represents part of a scene, and a summary in the form of a markdown list of the scene so far.  
+    You will return a JSON object with two entries: 'detailed_events' and 'short_summary'.
+    The 'detailed_events' entry will list the summary bullet points included in the prompt, followed by a list of new bullet points summarizing the subscene.
+    The 'short_summary' entry will be a short summary of the entire scene in no more than 2 sentences.
+    """
+
     MAX_TOKENS_SCENE = 4000
 
 
     ## put parameters in globs for passing around
     globs = {}
     globs['sys_prompt_scene'] = SYS_PROMPT_SCENE
+    globs['sys_prompt_subscene'] = SYS_PROMPT_SUBSCENE
     globs['max_tokens_scene'] = MAX_TOKENS_SCENE
     globs['wrap_length'] = args.wrap
     globs['names'] = names
     globs['model'] = "gpt-4-1106-preview"
     globs['client'] = client
+    globs['logging'] = args.log
+    globs['logging_path'] = Path(args.transcript_file).parent
 
     # Step (a) and (b)
     cleaned_transcript = clean_raw_transcript(Path(args.transcript_file), globs)
@@ -271,7 +361,7 @@ def main():
     input("Please edit the detailed bullet points in " + str(detailed_summary) + " and press Enter to continue...")
 
     # Step (f)
-    generate_session_narrative(detailed_summary)
+    generate_session_narrative(detailed_summary, globs)
 
     print("Processing complete.")
 
