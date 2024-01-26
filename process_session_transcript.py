@@ -33,7 +33,7 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
         print("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
         return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613")
     elif "gpt-4" in model:
-        print("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
+        #print("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
         return num_tokens_from_messages(messages, model="gpt-4-0613")
     else:
         raise NotImplementedError(
@@ -188,7 +188,8 @@ def gpt_summarize_individual_scene(context, scene, scene_text, globs):
     :param: context: the context for the scene
     :param: scene: the scene to summarize
     """
-    max_tokens = globs.get('max_tokens_scene', 6000)
+    max_tokens = min(globs.get('max_tokens_completion', 4000), 4000)
+    max_tokens_context = globs.get('max_tokens', 24000)
     sys_prompt = globs.get('sys_prompt_scene', "")
     model = globs.get('model', "gpt-4-1106-preview")
     prompt = "Context: \n" + context + "\nTranscript of " + scene + ": \n" + scene_text
@@ -204,10 +205,10 @@ def gpt_summarize_individual_scene(context, scene, scene_text, globs):
     input_messages.append({"role": "system", "content": sys_prompt})
     input_messages.append({"role": "user", "content": prompt})
     num_tokens = num_tokens_from_messages(input_messages, model=model)
-    if num_tokens > max_tokens:
+    if num_tokens > max_tokens_context:
         # need to break up scene into multiple prompts
         scene_tokens = num_tokens_from_messages([{"role": "user", "content": scene_text}], model=model)
-        num_scenes = int(num_tokens / max_tokens) + 2
+        num_scenes = int(num_tokens / max_tokens_context) + 2
         tokens_per_chunk = int(scene_tokens / num_scenes) + 1
         
         # split the scene into lines
@@ -237,7 +238,7 @@ def gpt_summarize_individual_scene(context, scene, scene_text, globs):
             num_tokens = num_tokens_from_messages(input_messages, model=model)
             if num_tokens > max_tokens:
                 raise Exception("ERROR: scene chunk is too long.")
-            response = get_gpt_summary(client, prompt, model=model, max_tokens=max_tokens, logging_path=logging_path)
+            response = get_gpt_summary(client, input_messages, model=model, max_tokens=max_tokens, logging_path=logging_path)
             clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
             response = json.loads(clean_resp)
             summary += response["detailed_summary"] + "\n"
@@ -246,11 +247,11 @@ def gpt_summarize_individual_scene(context, scene, scene_text, globs):
         context += response["context"] + "\n"
         return {"summary": summary, "context": context}
     else:    
-        response = get_gpt_summary(client, prompt, model=model, max_tokens=max_tokens, logging_path=logging_path)
+        response = get_gpt_summary(client, input_messages, model=model, max_tokens=max_tokens, logging_path=logging_path)
         clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
         return json.loads(clean_resp)
 
-def get_gpt_summary(client, prompt, model="gpt-4-1106-preview", max_tokens=4000, logging_path=None):
+def get_gpt_summary(client, prompt, model="gpt-4-1106-preview", max_tokens=2000, logging_path=None):
     response = client.chat.completions.create(
         model=model,
         max_tokens=max_tokens,
@@ -262,11 +263,12 @@ def get_gpt_summary(client, prompt, model="gpt-4-1106-preview", max_tokens=4000,
     )
 
     if logging_path:
-        logfile = logging_path / response.id / ".log"
-        print("Logging response to " + logfile)
-        with open(logfile, 'a') as f:
-            f.write("Prompt: " + prompt + "\n")
-            f.write("Response: " + response.choices[0].text + "\n\n")
+        logfile = logging_path / (response.id + ".log")
+        print(response.choices[0])
+        print("Logging response to " + str(logfile))
+        with open(logfile, 'w') as f:
+            f.write("Prompt: " + str(prompt) + "\n")
+            f.write("Response: " + str(response.choices[0].text) + "\n\n")
     return response
 
 def generate_session_narrative(detailed_summary, globs):
@@ -291,8 +293,9 @@ def main():
     parser.add_argument('transcript_file', type=str, help='Path to the WebVTT transcription file.')
     parser.add_argument('-w', '--wrap', type=int, help='Wrap text to specified length.', default=None)
     parser.add_argument('-n', '--names', type=str, help='Path to the names file.', default=None)
-    parser.add_argument('-l', '--log', type=bool, help='Log all chatgpt responses.', default=False)
-
+    # log all chatgpt responses
+    parser.add_argument('-l', '--log', action='store_true', help='Log all chatgpt responses.', default=False)
+    
     # Parse arguments
     args = parser.parse_args()
     names = {}
@@ -333,17 +336,17 @@ def main():
     The 'short_summary' entry will be a short summary of the entire scene in no more than 2 sentences.
     """
 
-    MAX_TOKENS_SCENE = 4000
+    MAX_TOKENS_CONTEXT = 48000
 
 
     ## put parameters in globs for passing around
     globs = {}
     globs['sys_prompt_scene'] = SYS_PROMPT_SCENE
     globs['sys_prompt_subscene'] = SYS_PROMPT_SUBSCENE
-    globs['max_tokens_scene'] = MAX_TOKENS_SCENE
+    globs['max_tokens_context'] = MAX_TOKENS_CONTEXT
     globs['wrap_length'] = args.wrap
     globs['names'] = names
-    globs['model'] = "gpt-4-1106-preview"
+    globs['model'] = "gpt-4-turbo-preview"
     globs['client'] = client
     globs['logging'] = args.log
     globs['logging_path'] = Path(args.transcript_file).parent
