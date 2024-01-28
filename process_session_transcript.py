@@ -145,26 +145,31 @@ def summarize_scenes(cleaned_transcript, globs):
 
     # Read the cleaned transcript file
     with open(cleaned_transcript, 'r') as f:
-        text = f.read()
-    
-    # Split the text into scenes, using markdown headers as scene markers and retaining scene titles
-    scenes = re.split(r'\n#+\s*(.*)\n', text)
-
-    # convert the list of scenes into a dict of scenes
-    scenes = dict(zip(scenes[1::2], scenes[2::2]))
-        
-    # Generate a rolling summary of the scenes
-    summary, context = summarize_scenes_helper(scenes, globs)
-
-    summary_text = "## Detailed Summary\n\n" + summary + "\n\n## Short Summary\n\n-" + "\n-".join(context.split("\n")) + "\n"
+        text = f.readlines()
 
     detailed_summary = cleaned_transcript.with_suffix('.summary.txt')
     if detailed_summary.is_file():
         print("NOTICE: " + str(detailed_summary) + " already exists, not modifying.")
         return detailed_summary
-    else:
-        with open(detailed_summary, 'w') as f:
-            f.write(summary_text)
+    
+    # Split the text into scenes, using markdown headers as scene markers and retaining scene titles
+    scene_indexes = [i for i, line in enumerate(text) if re.match(r'^#+\s+.*$', line)]
+    scenes = {}
+
+    for i in range(len(scene_indexes)):
+        start = scene_indexes[i] + 1  # Start from the line after the header
+        header = text[start - 1].lstrip('#').strip()
+        end = scene_indexes[i + 1] if i + 1 < len(scene_indexes) else len(text)
+        scene_content = [line for line in text[start:end] if line.strip() != '']  # Exclude blank lines
+        scenes[header] = '\n'.join(scene_content)
+        
+    # Generate a rolling summary of the scenes
+    summary, context = summarize_scenes_helper(scenes, globs)
+
+    summary_text = "# Detailed Summary\n\n" + summary + "\n\n# Short Summary\n\n" + context + "\n"
+
+    with open(detailed_summary, 'w') as f:
+        f.write(summary_text)
 
     return detailed_summary
 
@@ -177,9 +182,17 @@ def summarize_scenes_helper(scenes, globs):
     summary = ""
     context = ""
     for scene in scenes:
+        print("Summarizing scene: " + scene)
         summary_result = gpt_summarize_individual_scene(context, scene, scenes[scene], globs)
-        summary += summary_result["summary"] + "\n"
-        context += summary_result["context"] + "\n"
+        events = summary_result["detailed_events"]
+        if isinstance(events, list):
+            summary += "## " + scene + "\n" + "\n".join(events) + "\n"
+        else:
+            summary += "## " + scene + "\n" + str(events) + "\n"
+        if isinstance(summary_result["short_summary"], list):
+            context += "## " + scene + "\n" + "\n".join(summary_result["short_summary"]) + "\n"
+        else:
+            context += "## " + scene + "\n" + str(summary_result["short_summary"]) + "\n"
     return summary, context
 
 def gpt_summarize_individual_scene(context, scene, scene_text, globs):
@@ -189,11 +202,11 @@ def gpt_summarize_individual_scene(context, scene, scene_text, globs):
     :param: scene: the scene to summarize
     """
     max_tokens = min(globs.get('max_tokens_completion', 4000), 4000)
-    max_tokens_context = globs.get('max_tokens', 24000)
     sys_prompt = globs.get('sys_prompt_scene', "")
     model = globs.get('model', "gpt-4-1106-preview")
     prompt = "Context: \n" + context + "\nTranscript of " + scene + ": \n" + scene_text
     client = globs.get('client')
+
     if globs.get('logging'):
         logging_path = globs.get('logging_path')
     else:
@@ -204,52 +217,9 @@ def gpt_summarize_individual_scene(context, scene, scene_text, globs):
     input_messages = []
     input_messages.append({"role": "system", "content": sys_prompt})
     input_messages.append({"role": "user", "content": prompt})
-    num_tokens = num_tokens_from_messages(input_messages, model=model)
-    if num_tokens > max_tokens_context:
-        # need to break up scene into multiple prompts
-        scene_tokens = num_tokens_from_messages([{"role": "user", "content": scene_text}], model=model)
-        num_scenes = int(num_tokens / max_tokens_context) + 2
-        tokens_per_chunk = int(scene_tokens / num_scenes) + 1
-        
-        # split the scene into lines
-        scene_lines = scene_text.split("\n")
-
-        # split the scene into num_scenes chunks of roughly equal length
-        scene_chunks = []
-        chunk = ""
-        for line in scene_lines:
-            if num_tokens_from_messages([{"role": "user", "content": chunk}], model=model) > tokens_per_chunk:
-                scene_chunks.append(chunk)
-                chunk = ""
-            chunk += line + "\n"
-        scene_chunks.append(chunk)
-
-        subscene_sys_prompt = globs.get('sys_prompt_subscene')
-        summary = ""
-
-        for i, chunk in enumerate(scene_chunks):
-            prompt = "Context: \n" + context + "\nTranscript of " + scene + " (part " + str(i+1) + " of " + str(num_scenes) + "): \n" + chunk
-            if summary:
-                prompt += "\n\nSummary so far: \n" + summary
-
-            input_messages = []
-            input_messages.append({"role": "system", "content": subscene_sys_prompt})
-            input_messages.append({"role": "user", "content": prompt})
-            num_tokens = num_tokens_from_messages(input_messages, model=model)
-            if num_tokens > max_tokens:
-                raise Exception("ERROR: scene chunk is too long.")
-            response = get_gpt_summary(client, input_messages, model=model, max_tokens=max_tokens, logging_path=logging_path)
-            clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
-            response = json.loads(clean_resp)
-            summary += response["detailed_summary"] + "\n"
-        
-        # only get context from the last chunk
-        context += response["context"] + "\n"
-        return {"summary": summary, "context": context}
-    else:    
-        response = get_gpt_summary(client, input_messages, model=model, max_tokens=max_tokens, logging_path=logging_path)
-        clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
-        return json.loads(clean_resp)
+    response = get_gpt_summary(client, input_messages, model=model, max_tokens=max_tokens, logging_path=logging_path)
+    clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
+    return json.loads(clean_resp)
 
 def get_gpt_summary(client, prompt, model="gpt-4-1106-preview", max_tokens=2000, logging_path=None):
     response = client.chat.completions.create(
@@ -264,11 +234,10 @@ def get_gpt_summary(client, prompt, model="gpt-4-1106-preview", max_tokens=2000,
 
     if logging_path:
         logfile = logging_path / (response.id + ".log")
-        print(response.choices[0])
         print("Logging response to " + str(logfile))
         with open(logfile, 'w') as f:
             f.write("Prompt: " + str(prompt) + "\n")
-            f.write("Response: " + str(response.choices[0].text) + "\n\n")
+            f.write("Response: " + str(response.choices[0].message.content) + "\n\n")
     return response
 
 def generate_session_narrative(detailed_summary, globs):
@@ -281,9 +250,24 @@ def generate_session_narrative(detailed_summary, globs):
     if final_narrative.is_file():
         print("NOTICE: " + str(final_narrative) + " already exists, not modifying.")
         return final_narrative
+    
+    # Generate the narrative
+    sys_prompt = globs.get('sys_prompt_narrative', "")
+    max_tokens = min(globs.get('max_tokens_completion', 4000), 4000)
+    model = globs.get('model', "gpt-4-1106-preview")
+    client = globs.get('client')
+    if globs.get('logging'):
+        logging_path = globs.get('logging_path')
     else:
-        with open(final_narrative, 'w') as f:
-            f.write(text)
+        logging_path = None
+    prompt = text
+    input_messages = []
+    input_messages.append({"role": "system", "content": sys_prompt})
+    input_messages.append({"role": "user", "content": prompt})
+    response = get_gpt_summary(client, input_messages, model=model, max_tokens=max_tokens, logging_path=logging_path)
+    response_text = response.choices[0].message.content
+    with open(final_narrative, 'w') as f:
+        f.write(response_text)
 
     return final_narrative
 
@@ -320,7 +304,7 @@ def main():
     You also correct transcript errors, highlight character names and the DM role, and distinguish between in-character and out-of-character dialogue. 
     You will recieve a transcript of a scene or part of a scene from a D&D session, and optional context that summarizes what has happened leading up to this scene. 
     You will return a JSON object with two entries: 'detailed_events' and 'short_summary'.
-    The 'detailed_events' entry will be a list of detailed bullet points summarizing the scene.
+    The 'detailed_events' entry will be a list where each element in the list is a markdown bullet point summarizing an event in the scene.
     The 'short_summary' entry will be a short summary of the scene in no more than 2 sentences.
     """
 
@@ -336,6 +320,21 @@ def main():
     The 'short_summary' entry will be a short summary of the entire scene in no more than 2 sentences.
     """
 
+    SYS_PROMPT_NARRATIVE = """
+    You specialize in assisting Dungeon Masters (DMs) in Dungeons & Dragons (D&D) by transforming precise, detailed bullet points from session notes into a narrative.
+    You focus on a straightforward, factual storytelling style, prioritizing the accurate portrayal of events, characters, and dialogue. The narratives are crafted with less
+    descriptive language, ensuring clarity and factual detail. The narratives will primarily be used as reference for players or DMs to recall the events of the session and 
+    record the details of what happened. You will follow the following style guide:
+    1. Expository Narrative Style: The narrative extensively uses exposition to describe settings, events, and character actions, with a focus on providing comprehensive 
+    background information through descriptive narration.
+    2. Complex Sentence Structure: The writing frequently employs complex sentences with multiple clauses, providing detailed and nuanced descriptions and thoughts, 
+    enhancing the depth of the narrative.
+    3. Sequential and Detailed Progression: The text follows a clear, linear progression of events, with each scene and action described in a methodical and 
+    detailed manner, emphasizing a step-by-step narrative flow.
+    4. Balanced Descriptive and Dialogic Elements: There is a balance between descriptive narration and dialogue, with both elements used effectively to convey the story 
+    and develop characters, ensuring a dynamic and engaging narrative.
+    """
+
     MAX_TOKENS_CONTEXT = 48000
 
 
@@ -343,10 +342,11 @@ def main():
     globs = {}
     globs['sys_prompt_scene'] = SYS_PROMPT_SCENE
     globs['sys_prompt_subscene'] = SYS_PROMPT_SUBSCENE
+    globs['sys_prompt_narrative'] = SYS_PROMPT_NARRATIVE
     globs['max_tokens_context'] = MAX_TOKENS_CONTEXT
     globs['wrap_length'] = args.wrap
     globs['names'] = names
-    globs['model'] = "gpt-4-turbo-preview"
+    globs['model'] = "gpt-4-0125-preview"
     globs['client'] = client
     globs['logging'] = args.log
     globs['logging_path'] = Path(args.transcript_file).parent
