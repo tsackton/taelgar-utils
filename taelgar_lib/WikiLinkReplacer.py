@@ -56,8 +56,8 @@ class WikiLinkReplacer:
                 ## check to see if we have a broken obsidian path
                 # this is not the best way to do this
                 parts = filename.split('/')
-                clean_name = parts[-1].replace('.md', '').rstrip("\\/").lower()
-                if clean_name in self.path_dict:
+                clean_name = parts[-1].replace('.md', '').rstrip("\\/")
+                if clean_name in self.path_dict or clean_name.lower() in self.path_dict:
                     alias = str(clean_name) if alias == "" else alias
                     filename = str(self.path_dict[clean_name].target_path)
             if "http://" in filename or "https://" in filename:
