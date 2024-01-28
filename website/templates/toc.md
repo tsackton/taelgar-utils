@@ -3,8 +3,8 @@
     - [Characters](people/pcs/dunmar-fellowship/dunmar-fellowship.md)
         - {glob: people/pcs/dunmar-fellowship/, exclude: dunmar-fellowship.md}
     - Session Info
-        - [Session Notes](campaigns/dunmari-frontier/session-notes-index.md)
-            - {glob: campaigns/dunmari-frontier/session-notes/}
+        - [Session Notes](campaigns/dunmari-frontier/sessions.md)
+        - [Mirror Visions](campaigns/dunmari-frontier/mirror-visions.md)
         - Kenzo's Collected Stories
             - {glob: campaigns/dunmari-frontier/collected-stories/}
         - Letters and Notes
@@ -15,8 +15,6 @@
             - {glob: campaigns/dunmari-frontier/dreams-and-visions/}
         - Scrying
             - {glob: campaigns/dunmari-frontier/scrying-and-spying/}
-        - Mirror Visions
-            - {glob: campaigns/dunmari-frontier/mirror-visions/}
     - [Treasure](campaigns/dunmari-frontier/party-treasure.md)
         - [Vindristjarna](things/ships/vindristjarna.md)
             - [Bastion Facilities](campaigns/dunmari-frontier/vindristjarna-room-planning.md)
@@ -84,7 +82,7 @@
             - {glob: cosmology/multiverse/energy-realms/}
         - [Mirror Realm](cosmology/multiverse/echo-realms/mirror-realm.md)
     - Religion
-        - [Mos Numena](cosmology/religions/mos-numena.md)
+        - [Mos Numena](cosmology/religions/mos-numena/mos-numena.md)
             - Gods
                 - {glob: cosmology/gods/incorporeal-gods/mos-numena/}
             - [Festivals](time/holidays-and-festivals/mos-numena-feast-days.md)
@@ -100,7 +98,7 @@
                 - {glob: cosmology/gods/incorporeal-gods/dunmari/}
             - [Festivals](time/holidays-and-festivals/dunmari-festivals/dunmari-festivals.md)
                 - {glob: time/holidays-and-festivals/dunmari-festivals, exclude: dunmari-festivals.md}
-        - [Kestavo](cosmology/religions/kestavo.md)
+        - [Kestavo](cosmology/religions/kestavo/kestavo.md)
             - [Ako](cosmology/gods/high-gods/ako.md)
             - {glob: cosmology/gods/kestavo/}
         - [Northern Folk Religion](cosmology/religions/tanshi.md)
