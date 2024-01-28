@@ -4,6 +4,50 @@ from pathlib import Path
 from taelgar_lib.ObsNote import ObsNote
 from taelgar_lib.TaelgarDate import TaelgarDate
 
+def get_event_date_string(note):
+    start = note.metadata.get("DR", "unknown")
+    end = note.metadata.get("DR_end", "unknown")
+    if (start == end) and (start != "unknown"):
+        return f"(DR:: {start})"
+    elif (start != "unknown") and (end != "unknown"):
+        return f"(DR:: {start}) - (DR_end:: {end})"
+    else:
+        return "unknown"
+
+def custom_sort(item):
+    preferred_order = ["Delwath", "Kenzo", "Seeker", "Wellby", "Riswynn", "Drikod"]
+    try:
+        # If the item is in the preferred list, return its index
+        return (preferred_order.index(item), )
+    except ValueError:
+        # If the item is not in the preferred list, sort alphabetically and place after preferred items
+        return (len(preferred_order), item)
+
+def get_people_string(note):
+    players = note.metadata.get("players", [])
+    companions = note.metadata.get("companions", [])
+    player_str = ""
+    companion_str = ""
+
+    if players:
+        player_str = join_and(sorted(players,key=custom_sort))
+    if companions:
+        companion_str = join_and(sorted(companions))
+    
+    if player_str and companion_str:
+        return f"*Featuring {player_str}, joined by {companion_str}*"
+    elif player_str:
+        return f"*Featuring {player_str}*"
+    else:
+        return ""
+
+def join_and(items):
+    if len(items)==0:
+        return ''
+    if len(items)==1:
+        return items[0]
+    return ', '.join(items[:-1]) + ', and '+items[-1]
+
 def generate_index_page(target_path, link_style='relative', sort_order = 'title', tie_breaker = 'file_name', template_string=None):
     target_path = Path(target_path)
     if not target_path.is_dir():
@@ -55,6 +99,8 @@ def generate_index_page(target_path, link_style='relative', sort_order = 'title'
             obs_note.metadata["link_text"] = link_text
             obs_note.metadata["companions_str"] = "|".join(obs_note.metadata.get("companions", []))
             obs_note.metadata["players_str"] = "|".join(obs_note.metadata.get("players", []))
+            obs_note.metadata["people_str"] = get_people_string(obs_note)
+            obs_note.metadata["event_date_str"] = get_event_date_string(obs_note)
             try:
                 line_text = template_string.format(**obs_note.metadata)
             except KeyError:
