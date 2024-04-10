@@ -84,7 +84,7 @@
     - Religion
         - [Mos Numena](cosmology/religions/mos-numena/mos-numena.md)
             - Gods
-                - {glob: cosmology/gods/incorporeal-gods/mos-numena/}
+                - {glob: cosmology/gods/incorporeal-gods/mos-numena-pantheon/}
             - [Festivals](time/holidays-and-festivals/mos-numena-feast-days.md)
                 - [Festival of the Bridge](time/holidays-and-festivals/festival-of-the-bridge.md)
                 - [Miracle of the Mist](time/holidays-and-festivals/festival-of-the-miracle-of-the-mist.md)
@@ -93,26 +93,26 @@
         - [Dunmari Faith](cosmology/religions/five-siblings/five-siblings.md)
             - {glob: cosmology/religions/five-siblings/, exclude: five-siblings.md}
             - Gods
-                - [Sampa](cosmology/gods/high-gods/sampa.md)
-                - [Shurat](cosmology/gods/high-gods/shurat.md)
-                - {glob: cosmology/gods/incorporeal-gods/dunmari/}
+                - [Sampa](cosmology/gods/high-gods/divine-presence.md)
+                - [Shurat](cosmology/gods/high-gods/divine-presence.md)
+                - {glob: cosmology/gods/incorporeal-gods/dunmari-pantheon/}
             - [Festivals](time/holidays-and-festivals/dunmari-festivals/dunmari-festivals.md)
                 - {glob: time/holidays-and-festivals/dunmari-festivals, exclude: dunmari-festivals.md}
-        - [Kestavo](cosmology/religions/kestavo/kestavo.md)
-            - [Ako](cosmology/gods/high-gods/ako.md)
-            - {glob: cosmology/gods/kestavo/}
-        - [Northern Folk Religion](cosmology/religions/tanshi.md)
-            - [Anida](cosmology/gods/high-gods/anida.md)
-            - {glob: cosmology/gods/tanshi/}
+        - [Northern Folk Religions](cosmology/northern-folk-religions/northern-folk-religions.md)
+            - [Kestavo](cosmology/religions/northern-folk-religions/kestavo.md)
+                - {glob: cosmology/gods/kestavo/}
+            - [Tanshi Worship](cosmology/religions/northern-folk-religions/tanshi-worship.md)
+                - {glob: cosmology/gods/tanshi}
+            - [Zariya](cosomology/religions/northern-folk-religions/zariya.md)
         - Other Gods
             - [High Gods](cosmology/gods/high-gods/high-gods.md)
-                - {glob: cosmology/gods/high-gods/, exclude: sampa.md;shurat.md;ako.md;anida.md}
-            - Embodied Gods
-                - {glob: cosmology/gods/embodied-gods/}
-            - Incorporeal Gods
+                - {glob: cosmology/gods/high-gods/, exclude: high-gods.md}
+            - [Embodied Gods](cosmology/gods/embodied-gods/embodied-gods.md)
+                - {glob: cosmology/gods/embodied-gods/, exclude: embodied-gods.md}
+            - [Incorporeal Gods](cosmology/gods/incorporeal-gods/incorporeal-gods.md)
                 - [Kaikkea](cosmology/gods/incorporeal-gods/kaikkea.md)
                 - [Sarqon](cosmology/gods/incorporeal-gods/sarqon.md)
-            - [The Fox and Hunter](cosmology/gods/demigods/fox-and-hunter.md)
+                - [The Fox and Hunter](cosmology/gods/incorporeal-gods/fox-and-hunter.md)
 - [History](history/history.md)
     - [Calendar Eras](time/calendar-eras.md)
     - {glob: history/}
