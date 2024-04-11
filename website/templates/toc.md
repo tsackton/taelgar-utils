@@ -67,7 +67,6 @@
         - {glob: groups/}
 - [Gazetteer](campaigns/player-s-guide.md)
     - [World of Taelgar](gazetteer/geography-of-taelgar.md)
-        - [World Map](gazetteer/gazetteer.md)
         - {glob: gazetteer, exclude: endless-ocean.md;green-sea.md;geography-of-taelgar.md;gazetteer.md}
         - [Endless Ocean](gazetteer/endless-ocean.md)
         - [Green Sea](gazetteer/green-sea.md)
@@ -83,8 +82,9 @@
         - [Mirror Realm](cosmology/multiverse/echo-realms/mirror-realm.md)
     - Religion
         - [Mos Numena](cosmology/religions/mos-numena/mos-numena.md)
-            - Gods
-                - {glob: cosmology/gods/incorporeal-gods/mos-numena-pantheon/}
+            - {glob: cosmology/religions/mos-numena/, exclude: mos-numena.md}
+            - [Gods](cosmology/gods/incorporeal-gods/mos-numena-pantheon/mos-numena-pantheon.md)
+                - {glob: cosmology/gods/incorporeal-gods/mos-numena-pantheon/, exclude: mos-numena-pantheon.md}
             - [Festivals](time/holidays-and-festivals/mos-numena-feast-days.md)
                 - [Festival of the Bridge](time/holidays-and-festivals/festival-of-the-bridge.md)
                 - [Miracle of the Mist](time/holidays-and-festivals/festival-of-the-miracle-of-the-mist.md)
@@ -92,10 +92,10 @@
                 - [Viatela](time/holidays-and-festivals/viatela.md)
         - [Dunmari Faith](cosmology/religions/five-siblings/five-siblings.md)
             - {glob: cosmology/religions/five-siblings/, exclude: five-siblings.md}
-            - Gods
+            - [Gods](cosmology/gods/incorporeal-gods/dunmari-pantheon/dumari-pantheon.md)
                 - [Sampa](cosmology/gods/high-gods/divine-presence.md)
                 - [Shurat](cosmology/gods/high-gods/divine-presence.md)
-                - {glob: cosmology/gods/incorporeal-gods/dunmari-pantheon/}
+                - {glob: cosmology/gods/incorporeal-gods/dunmari-pantheon/, exclude: dunmari-pantheon.md}
             - [Festivals](time/holidays-and-festivals/dunmari-festivals/dunmari-festivals.md)
                 - {glob: time/holidays-and-festivals/dunmari-festivals, exclude: dunmari-festivals.md}
         - [Northern Folk Religions](cosmology/northern-folk-religions/northern-folk-religions.md)
@@ -113,6 +113,7 @@
                 - [Kaikkea](cosmology/gods/incorporeal-gods/kaikkea.md)
                 - [Sarqon](cosmology/gods/incorporeal-gods/sarqon.md)
                 - [The Fox and Hunter](cosmology/gods/incorporeal-gods/fox-and-hunter.md)
+- [World Map](gazetteer/gazetteer.md)
 - [History](history/history.md)
     - [Calendar Eras](time/calendar-eras.md)
     - {glob: history/}
