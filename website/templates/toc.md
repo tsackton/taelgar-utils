@@ -92,7 +92,7 @@
                 - [Viatela](time/holidays-and-festivals/viatela.md)
         - [Dunmari Faith](cosmology/religions/five-siblings/five-siblings.md)
             - {glob: cosmology/religions/five-siblings/, exclude: five-siblings.md}
-            - [Gods](cosmology/gods/incorporeal-gods/dunmari-pantheon/dumari-pantheon.md)
+            - [Gods](cosmology/gods/incorporeal-gods/dunmari-pantheon/dunmari-pantheon.md)
                 - [Sampa](cosmology/gods/high-gods/divine-presence.md)
                 - [Shurat](cosmology/gods/high-gods/divine-presence.md)
                 - {glob: cosmology/gods/incorporeal-gods/dunmari-pantheon/, exclude: dunmari-pantheon.md}
