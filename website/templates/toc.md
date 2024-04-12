@@ -98,12 +98,12 @@
                 - {glob: cosmology/gods/incorporeal-gods/dunmari-pantheon/, exclude: dunmari-pantheon.md}
             - [Festivals](time/holidays-and-festivals/dunmari-festivals/dunmari-festivals.md)
                 - {glob: time/holidays-and-festivals/dunmari-festivals, exclude: dunmari-festivals.md}
-        - [Northern Folk Religions](cosmology/northern-folk-religions/northern-folk-religions.md)
+        - [Northern Folk Religions](cosmology/religions/northern-folk-religions/northern-folk-religions.md)
             - [Kestavo](cosmology/religions/northern-folk-religions/kestavo.md)
                 - {glob: cosmology/gods/kestavo/}
             - [Tanshi Worship](cosmology/religions/northern-folk-religions/tanshi-worship.md)
                 - {glob: cosmology/gods/tanshi}
-            - [Zariya](cosomology/religions/northern-folk-religions/zariya.md)
+            - [Zariya](cosmology/religions/northern-folk-religions/zariya.md)
         - Other Gods
             - [High Gods](cosmology/gods/high-gods/high-gods.md)
                 - {glob: cosmology/gods/high-gods/, exclude: high-gods.md}
