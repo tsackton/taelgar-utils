@@ -137,6 +137,20 @@ def clean_code_blocks(note, template_dir, source_files, abs_path_root):
     pattern = r'(```([^`]+)```|~~~([^~]+)~~~|`([^`]*)`)'
     note.clean_text = re.sub(pattern, codeblock_cleaner, note.clean_text, flags=re.DOTALL)
 
+def replace_audio_tags(note, abs_path_root):
+    # Regular expression pattern to match the specific format
+    pattern = r'!\[\[(.*?\.mp3)\]\]'
+    
+    # Function to create replacement text based on the found mp3 file name
+    def replacement(match):
+        file_name = match.group(1)
+        return f'<audio controls>\n    <source src="{abs_path_root}assets/audio/{file_name}">\n</audio>'
+    
+    # Replace all matches in the text using the pattern and replacement function
+    replaced_text = re.sub(pattern, replacement, note.clean_text)
+    return replaced_text
+
+
 def parse_ignore_file(file_path):
     """ Parse the .gitignore file with pathspec """
     with open(file_path, 'r') as file:
@@ -331,6 +345,8 @@ for file_to_process in source_files:
     page_path = note.target_path
     if config.get("clean_code_blocks", False) and config.get("codeblock_template_dir", None):
         clean_code_blocks(note, config.get("codeblock_template_dir"), source_files, config.get("abs_path_root", ""))
+    if config.get("replace_audio_tags", True):
+        note.clean_text = replace_audio_tags(note, config.get("abs_path_root", ""))
     if config.get("fix_links", True):
         note.clean_text = re.sub(WIKILINK_RE, WikiLinkReplacer(output_dir, page_path, source_files), note.clean_text)
 
