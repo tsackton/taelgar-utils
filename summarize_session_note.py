@@ -110,7 +110,7 @@ def split_markdown_by_sections(markdown_lines):
             
     return sections_dict
 
-def get_session_summary(prompt, model="gpt-4-1106-preview", max_tokens=4000, system_prompt=summary_sys_prompt):
+def get_session_summary(prompt, model="gpt-4o", max_tokens=4000, system_prompt=summary_sys_prompt):
     input_messages = []
     input_messages.append({"role": "system", "content": system_prompt})
     input_messages.append({"role": "user", "content": prompt})

@@ -203,7 +203,7 @@ def gpt_summarize_individual_scene(context, scene, scene_text, globs):
     """
     max_tokens = min(globs.get('max_tokens_completion', 4000), 4000)
     sys_prompt = globs.get('sys_prompt_scene', "")
-    model = globs.get('model', "gpt-4-1106-preview")
+    model = globs.get('model', "gpt-4o")
     prompt = "Context: \n" + context + "\nTranscript of " + scene + ": \n" + scene_text
     client = globs.get('client')
 
@@ -221,7 +221,7 @@ def gpt_summarize_individual_scene(context, scene, scene_text, globs):
     clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
     return json.loads(clean_resp)
 
-def get_gpt_summary(client, prompt, model="gpt-4-1106-preview", max_tokens=2000, logging_path=None):
+def get_gpt_summary(client, prompt, model="gpt-4o", max_tokens=3000, logging_path=None):
     response = client.chat.completions.create(
         model=model,
         max_tokens=max_tokens,
@@ -254,7 +254,7 @@ def generate_session_narrative(detailed_summary, globs):
     # Generate the narrative
     sys_prompt = globs.get('sys_prompt_narrative', "")
     max_tokens = min(globs.get('max_tokens_completion', 4000), 4000)
-    model = globs.get('model', "gpt-4-1106-preview")
+    model = globs.get('model', "gpt-4o")
     client = globs.get('client')
     if globs.get('logging'):
         logging_path = globs.get('logging_path')
@@ -346,7 +346,7 @@ def main():
     globs['max_tokens_context'] = MAX_TOKENS_CONTEXT
     globs['wrap_length'] = args.wrap
     globs['names'] = names
-    globs['model'] = "gpt-4-0125-preview"
+    globs['model'] = "gpt-4o"
     globs['client'] = client
     globs['logging'] = args.log
     globs['logging_path'] = Path(args.transcript_file).parent
