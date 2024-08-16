@@ -6,7 +6,7 @@ from .TaelgarDate import TaelgarDate
 class ObsNote:
 
     WIKILINK_RE_OLD = r"""\[\[(.*?)(\#.*?)?(?:\|([\D][^\|\]]+[\d]*))?(?:\|(\d+)(?:x(\d+))?)?\]\]"""
-    WIKILINK_RE = r"""\[\[([^\|\]\#]+)(\#.*?)?(?:\|([^\|\]]*))?(?:\|([^\|\]]*))?(?:\|([^\|\]]*))?\]\]"""
+    WIKILINK_RE =  r"""\[\[([^\|\]\#\\]+)(\#.*?)?(?:\\?\|([^\|\]]*))?(?:\\?\|([^\|\]]*))?(?:\\?\|([^\|\]]*))?\]\]"""
 
     def __init__(self, path, config={}, is_markdown=True):
         # Variables
@@ -233,7 +233,7 @@ class ObsNote:
                     return(f'{parts[0]} DR')
             return inline_tag + " " + tag_value
         
-        pattern = r'\((\w+)::\s*([^\s\)]+)\s*\)\)?'
+        pattern = r'\((\w+)::\s*([^\s\)]+)\s*\)'
         return re.sub(pattern, date_to_string, text, flags=re.DOTALL)
 
     def _page_title(self):
