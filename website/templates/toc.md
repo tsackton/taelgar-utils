@@ -28,7 +28,7 @@
         - {glob: campaigns/mechanics/}
         - [Languages](species/languages.md)
 - [People](species/species.md)
-    - [Humans](species/humans/humans.md)
+    - [Humans](species/children-of-divine-creation/humans/humans.md)
         - Chardonians
             - {glob: people/chardonians/}
         - Deno'qai
@@ -57,7 +57,7 @@
         - [Umli](people/other-nonhumans/umli.md)
     - [Orcs](species/children-of-the-embodied-gods/orcs/orcs.md)
         - {glob: people/orcs/}
-    - [Fey](species/children-of-the-divine/fey/fey.md)
+    - [Fey](species/children-of-the-riving/fey/fey.md)
         - {glob: people/fey}
     - Other Nonhumans
         - {glob: people/other-nonhumans;people/giants;people/kenku, exclude: umli.md}
@@ -67,8 +67,7 @@
         - {glob: groups/}
 - [Gazetteer](campaigns/player-s-guide.md)
     - [World of Taelgar](gazetteer/geography-of-taelgar.md)
-        - {glob: gazetteer, exclude: endless-ocean.md;green-sea.md;geography-of-taelgar.md;gazetteer.md}
-        - [Endless Ocean](gazetteer/endless-ocean.md)
+        - {glob: gazetteer, exclude: green-sea.md;geography-of-taelgar.md;gazetteer.md}
         - [Green Sea](gazetteer/green-sea.md)
     - Other Planes
         - [Feywild](cosmology/multiverse/echo-realms/feywild/feywild.md)
@@ -104,6 +103,9 @@
             - [Tanshi Worship](cosmology/religions/northern-folk-religions/tanshi-worship.md)
                 - {glob: cosmology/gods/tanshi}
             - [Zariya](cosmology/religions/northern-folk-religions/zariya.md)
+        - Other Religions
+            - [Dwarven](cosmology/religions/dwarven-religious-practice.md)
+            - [Halfling](cosmology/religions/halfling-religious-practice.md)
         - Other Gods
             - [High Gods](cosmology/gods/high-gods/high-gods.md)
                 - {glob: cosmology/gods/high-gods/, exclude: high-gods.md}

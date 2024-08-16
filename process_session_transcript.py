@@ -219,7 +219,15 @@ def gpt_summarize_individual_scene(context, scene, scene_text, globs):
     input_messages.append({"role": "user", "content": prompt})
     response = get_gpt_summary(client, input_messages, model=model, max_tokens=max_tokens, logging_path=logging_path)
     clean_resp = response.choices[0].message.content.replace("```", "").replace("json", "").strip()
-    return json.loads(clean_resp)
+    json_string = re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]', '', clean_resp)
+    try:
+        json.loads(json_string)
+    except json.JSONDecodeError as e:
+        print(f"JSON decoding error: {e}")
+        print(f"Offending JSON string: {json_string}")
+        raise
+    return json.loads(json_string)
+
 
 def get_gpt_summary(client, prompt, model="gpt-4o", max_tokens=3000, logging_path=None):
     response = client.chat.completions.create(
@@ -306,6 +314,7 @@ def main():
     You will return a JSON object with two entries: 'detailed_events' and 'short_summary'.
     The 'detailed_events' entry will be a list where each element in the list is a markdown bullet point summarizing an event in the scene.
     The 'short_summary' entry will be a short summary of the scene in no more than 2 sentences.
+    Please double check that your response follows these instructions. It must be JSON, and the keys must be 'detailed_events' and 'short_summary', and the content must be a list of strings and a string, respectively.
     """
 
     SYS_PROMPT_SUBSCENE = """
