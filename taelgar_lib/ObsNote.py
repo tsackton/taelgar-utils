@@ -219,8 +219,8 @@ class ObsNote:
 
     def _clean_inline_tags(self, text):
         def date_to_string(match):
-            inline_tag = match.group(2)
-            tag_value = match.group(3)
+            inline_tag = match.group(1)
+            tag_value = match.group(2)
             if inline_tag == "DR" or inline_tag == "DR_end":
                 parts = tag_value.split("-")
                 if len(parts) > 1:
@@ -233,7 +233,7 @@ class ObsNote:
                     return(f'{parts[0]} DR')
             return inline_tag + " " + tag_value
         
-        pattern = r'\((\w+)::\s*(\S+)\s*\)(?=\))?'
+        pattern = r'\((\w+)::\s*([^\s\)]+)\s*\)\)?'
         return re.sub(pattern, date_to_string, text, flags=re.DOTALL)
 
     def _page_title(self):
