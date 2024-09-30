@@ -138,6 +138,7 @@ parser.add_argument('--debug', '-vv', required=False, action="store_true")
 parser.add_argument('--context', '-c', required=False)
 parser.add_argument('--reload', '-r', required=False)
 parser.add_argument('--backup', '-b', required=False, action="store_true")
+parser.add_argument('--prompt', '-p', required=False)
 args = parser.parse_args()
 session_note_file = Path(args.file)
 num_generations = 1 if not args.gens else int(args.gens)
@@ -149,6 +150,12 @@ if args.context:
 else:
     context = "the following narrative describes events happening to a group of adventurers called the Dunmar Fellowship, occurring in the D&D world of Taelgar."
 context = "Context: " + context.strip() + "\n===\n"
+
+## If context is provided as an argument, open the file and read it into context
+if args.prompt:
+    with open(args.prompt, 'r', encoding='utf-8') as file:
+        summary_sys_prompt = file.read()
+
 
 load_dotenv()
 client = OpenAI(
@@ -236,14 +243,23 @@ if not note.metadata.get("name", None):
 title = note.metadata["name"]
 
 # Write to file
+try:
+    start_date = str(note.metadata["DR"])
+except KeyError:
+    start_date = None
 
-start_date = str(note.metadata["DR"])
-end_date = str(note.metadata["DR_end"])
-if start_date == end_date:
+try:
+    end_date = str(note.metadata["DR_end"])
+except KeyError:
+    end_date = start_date
+
+if start_date and start_date == end_date:
     taelgar_date_string = TaelgarDate.get_dr_date_string(start_date, dr=True)
-else:
+elif start_date and end_date:
     taelgar_date_string = TaelgarDate.get_dr_date_string(start_date, dr=True) + " to " + TaelgarDate.get_dr_date_string(end_date, dr=True)
-
+else:
+    taelgar_date_string = "Unknown"
+    
 real_world_date_string = note.metadata["realWorldDate"].strftime("%A %b %d, %Y")
 output_metadata = yaml.dump(note.metadata, sort_keys=False, default_flow_style=None, allow_unicode=True, width=2000, Dumper=CustomDumper)
 
