@@ -92,11 +92,10 @@ class SessionNote:
 
         :return: List of world-specific terms and names.
         """
-        world_info = ["Drankor", "Vindristjarna", "Taelgar", "Fausto", "Chardon", "Dunmar", 
-                      "Dimitaur", "Faldrak", "Riswynn", "halfling", "halflings", "elf", "elves", 
-                      "dwarf", "dwarves", "stoneborn", "lizardfolk", "Mos Numena", "Hkar"]
-        if self.metadata.characters:
-            world_info.extend(self.metadata.characters)
+        world_info = ["Drankor", "Vindristjarna", "Taelgar", "Chardon", "Dunmar", 
+                      "Faldrak", "Riswynn", "Delwath", "Seeker", "Wellby", "Kenzo",
+                      "Mos Numena", "Sembara", "Hkar", "Cha'mutte", "Apollyon",
+                      "halfling", "halflings", "elf", "elves", "dwarf", "dwarves", "stoneborn", "lizardfolk"]
 
         if self.metadata.world_info_file and os.path.exists(self.metadata.world_info_file):
             with open(self.metadata.world_info_file, 'r') as f:
@@ -366,6 +365,14 @@ class SessionNote:
         client = OpenAI(api_key=self.openai_api_key)
         transcription_file = os.path.join(self.LOG_DIR, f"{os.path.basename(chunk_metadata['chunk_file'])}_transcription.json")
 
+        prompt = "This is a transcript of a D&D session, with the following terms: "
+        prompt_tokens = len(prompt.split()) * 1.33
+        max_word_info = (240 - prompt_tokens) * 0.75
+        if self.world_info and len(self.world_info) < max_word_info:
+            prompt += ", ".join(self.world_info)
+        else:
+            prompt += ", ".join(self.world_info[:max_word_info])
+        
         if os.path.exists(transcription_file):
             logging.info(f"Loading existing transcription for {chunk_metadata['chunk_file']}.")
             with open(transcription_file, 'r') as f:
@@ -377,24 +384,37 @@ class SessionNote:
                     model="whisper-1",
                     file=audio_file,
                     response_format="verbose_json",
-                    timestamp_granularities=["word"]
+                    timestamp_granularities=["word"],
+                    prompt=prompt
                 )
 
             # Adjust timestamps by adding the chunk's start time (offset)
             adjusted_segments = []
             chunk_start_time = chunk_metadata['start']
 
-            for segment in response.get('words', []):
-                segment['start'] += chunk_start_time
-                segment['end'] += chunk_start_time
-                adjusted_segments.append(segment)
+            # Iterate over each TranscriptionWord object in the response
+            for segment in response.words:
+                # Create a new dictionary with adjusted timestamps
+                adjusted_segment = {
+                    "word": segment.word,
+                    "start": segment.start + chunk_start_time,
+                    "end": segment.end + chunk_start_time
+                }
+                adjusted_segments.append(adjusted_segment)
 
-            response['words'] = adjusted_segments
-            response_dict = self.convert_to_dict(response)
+            # Replace the words in the response with the adjusted segments
+            response_dict = {
+                "language": response.language,
+                "duration": response.duration,
+                "text": response.text,
+                "words": adjusted_segments
+            }
 
+            # Save the adjusted transcription to a JSON file
             with open(transcription_file, 'w') as f:
                 json.dump(response_dict, f, indent=4)
             logging.info(f"Transcribed chunk {chunk_metadata['chunk_file']} and saved to {transcription_file}.")
+
             return response_dict
 
         except Exception as e:
@@ -671,7 +691,6 @@ class SessionNote:
         Copy the raw transcript file to the scene file, prompt the user to edit it, and split it into scenes.
         """
 
-        ## NEEDS WORK ##
         try:
             if self.status['scenes'] == 'processed':
                 logging.info("Scenes have already been processed.")
@@ -685,11 +704,15 @@ class SessionNote:
             scene_file = self.metadata.scene_file
 
             if self.status['scenes'] == 'missing':
-                shutil.copy(cleaned_transcript_file, scene_file)
-                logging.info(f"Copied {cleaned_transcript_file} to {scene_file}.")
+                if os.path.exists(scene_file):
+                    logging.info(f"Scene file {scene_file} already exists.")
+                else: # Copy cleaned transcript to scene file
+                    shutil.copy(cleaned_transcript_file, scene_file)
+                    logging.info(f"Copied {cleaned_transcript_file} to {scene_file}.")
+                
                 self.prompt_user_to_edit_file()
                 scenes = self.split_on_scene_breaks()
-                self.metadata.scene_segments = scenes  # Temporarily store scenes
+                self.metadata.scene_segments = scenes
                 self.status['scenes'] = 'edited'
 
             if self.status['scenes'] == 'edited':
@@ -714,44 +737,82 @@ class SessionNote:
         :return: System prompt for the OpenAI API.
         """
 
-        characters = self.metadata.characters or []
-        world_info = self.world_info or []
+        characters = ", ".join(self.metadata.characters or [])
+        world_info = ", ".join(self.world_info or [])
+        speakers = ", ".join(speakers)
 
-        prompt = """
-        You are a transcript cleaner for tabletop roleplaying game sessions, particularly for Dungeons & Dragons. Your goal is to **maintain the original intent, tone, length, and content** of the transcript while **cleaning up spelling, grammar, and readability**. You should make **minimal changes**, only when necessary for clarity, and **keep the text as close as possible** to the original. 
-        
-        1. **Do not remove any content** unless it is clearly a filler word (e.g., "um," "uh," "like") or a repeated phrase. Ensure the dialogue flows naturally.
-        2. **Do not remove or shorten dialogue** or descriptive content. The cleaned transcript should be **as close in length as the original**, while improving flow, clarity, and readability.
-        3. **Preserve all speaker names**. Do not omit any speaker names or change them.
-        4. Do not abbreviate or streamline content. Simply improve readability without changing anything significant.
-        
-        Correct spelling of in-world characters and locations:
-        """
-        prompt += "\n".join([f"- {word}" for word in world_info])
+        if self.metadata.vtt_file:
+            prompt = """
+            You are a transcript cleaner for tabletop roleplaying game sessions, particularly for Dungeons & Dragons. Your goal is to 
+            **maintain the original intent, tone, length, and content** of the transcript while **cleaning up spelling, grammar, and readability**. 
+            You should make **minimal changes**, only when necessary for clarity, and **keep the text as close as possible** to the original. 
+            
+            1. **Do not remove any content** unless it is clearly a filler word (e.g., "um," "uh," "like") or a repeated phrase. Ensure the dialogue flows naturally.
+            2. **Do not remove or shorten dialogue** or descriptive content. The cleaned transcript should be **as close in length as the original**, while 
+            improving flow, clarity, and readability.
+            3. **Preserve all speaker names**. Do not omit any speaker names or change them.
+            4. Do not abbreviate or streamline content. Simply improve readability without changing anything significant.
+            
+            Correct spelling of in-world characters and locations:
+            """
+            prompt += world_info + "\n"
 
-        prompt += """
+            prompt += """
 
-        ### Output Instructions:
-        1. **Return the cleaned transcript** that is equal in length to the original. Every speaker's dialogue must be preserved.
-        2. **Return a list of speakers found in the transcript**, mapping each speaker to a known character in the game.
-        """
-        prompt += "\n\n**Known Speakers:**"
-        for speaker in speakers:
-            prompt += f"\n- {speaker}"
+            ### Output Instructions:
+            1. **Return the cleaned transcript** that is equal in length to the original. Every speaker's dialogue must be preserved.
+            2. **Return a list of speakers found in the transcript**, mapping each speaker to a known character in the game.
+            """
+            prompt += "\n**Known Speakers:**" + speakers
+            prompt += "\n**Known Characters:**" + characters + ", DM\n"
+            prompt += """
 
-        if characters:
-            prompt += "\n\n**Known Characters:**"
-            for character in characters:
-                prompt += f"\n- {character}"
-            prompt += "\n- DM"
+            **Important**: Each speaker must map to one of the known characters. If a speaker is missing, add them and map accordingly.
+            Make sure the cleaned transcript preserves the exact structure of the original.
+            """
+            return prompt
 
-        prompt += """
+        if self.metadata.audio_file and not self.metadata.vtt_file:
+            prompt = """
+            You are a transcript cleaner for tabletop roleplaying game sessions, particularly for Dungeons & Dragons. You will receive a transcript that
+            was produced with automated transcription software, and may have errors. Your goal is to **maintain the original intent, tone, length, and content** 
+            of the transcript while **cleaning up spelling, grammar, readabilit, and especially transcription errors**. 
 
-        **Important**: Each speaker must map to one of the known characters. If a speaker is missing, add them and map accordingly.
-        Make sure the cleaned transcript preserves the exact structure of the original.
-        """
+            You should focus on the following points:
+            1. **Do not remove any content** unless it is clearly a filler word (e.g., "um," "uh," "like") or a repeated phrase. Ensure the dialogue flows naturally.
+            2. **Do not remove or shorten dialogue** or descriptive content. The cleaned transcript should be **as close in length as the original**, while 
+            improving flow, clarity, and readability.
 
-        return prompt
+            Follow these STRICT RULES for updating speakers:
+            1. **Preserve David Kong, David Schwartz, and Eric Rosenbaum speaker names precisely as they are in the input**. 
+            2. The audio transcription software may have trouble distinguishing between Tim Sackton (who is the DM) and Mike Sackton (who plays the character Delwath).
+            Please attempt to guess which dialogue lines are DM lines and which are Delwath's lines, and correct assignment errors. You may in this case 
+            replace dialogue assignments and labels with the correct speaker. HOWEVER, DO NOT CHANGE OTHER SPEAKER NAMES. Other speakers who are not Tim
+            Sackton, Mike Sackton, or Unknown should be preserved.
+            3. There are some dialogue lines that are assigned to an unknown speaker. You can assign these lines to the correct speaker** based on the context, 
+            if it is obvious who is speaking. If it is not clear, you can leave the speaker as Unknown. Only assign Unkown speakers if you are confident in the prediction.
+            
+            Correct spelling of in-world characters and locations:
+            """
+            prompt += world_info + "\n"
+
+            prompt += """
+
+            ### Output Instructions:
+            1. **Return the cleaned transcript** that is equal in length to the original. Every speaker's dialogue must be preserved.
+            2. **Return a list of speakers found in the transcript**, mapping each speaker to a known character in the game. Note this may be altered by 
+            error correction. 
+            """
+            prompt += "\n**Known Speakers:**" + speakers
+            prompt += "\n**Known Characters:**" + characters + ", DM\n"
+            prompt += """
+
+            """
+            return prompt
+    
+        # if we get here, we don't have a vtt and we don't have audio. throw an error
+        raise ValueError("No audio or VTT file found. Cannot generate transcript cleaner prompt.")
+
 
     def extract_unique_speakers(self, transcript_text: str) -> set:
         """

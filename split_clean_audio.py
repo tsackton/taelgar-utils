@@ -1,39 +1,126 @@
 import os
 import argparse
+import subprocess
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
+from tqdm import tqdm
+import multiprocessing
+import re
 
-def normalize_audio(audio, target_dBFS=-20.0):
+def normalize_audio(audio, target_dBFS=-20.0, headroom=1.0):
     """
-    Normalize the audio to the target dBFS.
+    Normalize the audio to the target RMS dBFS and prevent clipping.
+    
+    Parameters:
+        audio (AudioSegment): The audio to normalize.
+        target_dBFS (float): The target RMS dBFS.
+        headroom (float): The headroom below 0 dBFS to prevent clipping.
+        
+    Returns:
+        AudioSegment: The normalized audio.
     """
-    change_in_dBFS = target_dBFS - audio.max_dBFS
-    print(f"Normalizing audio by {change_in_dBFS:.2f} dB")
-    return audio.apply_gain(change_in_dBFS)
+    original_dBFS = audio.dBFS
+    print(f"Original average dBFS: {original_dBFS:.2f} dBFS")
+    
+    # Calculate the gain needed to reach target dBFS
+    change_in_dBFS = target_dBFS - original_dBFS
+    print(f"Applying gain of {change_in_dBFS:.2f} dB to reach target dBFS of {target_dBFS} dBFS")
+    normalized_audio = audio.apply_gain(change_in_dBFS)
+    
+    # Prevent clipping by limiting the peak to (0 - headroom) dBFS
+    peak_dBFS = normalized_audio.max_dBFS
+    print(f"Peak dBFS after normalization: {peak_dBFS:.2f} dBFS")
+    
+    if peak_dBFS > (-headroom):
+        clipping_gain = (-headroom) - peak_dBFS
+        print(f"Peak dBFS exceeds the headroom of {-headroom} dBFS. Applying additional gain of {clipping_gain:.2f} dB to prevent clipping.")
+        normalized_audio = normalized_audio.apply_gain(clipping_gain)
+        print(f"Peak dBFS after clipping prevention: {normalized_audio.max_dBFS:.2f} dBFS")
+    else:
+        print("No clipping detected. No additional gain applied.")
+    
+    final_dBFS = normalized_audio.dBFS
+    final_peak = normalized_audio.max_dBFS
+    print(f"Final normalized average dBFS: {final_dBFS:.2f} dBFS")
+    print(f"Final normalized peak dBFS: {final_peak:.2f} dBFS")
+    
+    return normalized_audio
 
-def split_audio_on_silence(audio, min_silence_len=1000, silence_thresh=-40, keep_silence=500):
+def detect_silences_ffmpeg(input_file, silence_thresh=-40, min_silence_len=1000):
     """
-    Split audio based on silence.
+    Detect silences in the audio file using FFmpeg's silencedetect filter.
+    
+    Returns a list of tuples indicating the start and end times (in ms) of silences.
     """
-    print("Splitting audio into chunks based on silence...")
-    chunks = split_on_silence(
-        audio,
-        min_silence_len=min_silence_len,
-        silence_thresh=silence_thresh,
-        keep_silence=keep_silence
-    )
-    print(f"Number of initial chunks after silence splitting: {len(chunks)}")
+    print("Detecting silences using FFmpeg...")
+    # Construct the FFmpeg command
+    cmd = [
+        'ffmpeg',
+        '-i', input_file,
+        '-af', f'silencedetect=noise={silence_thresh}dB:d={min_silence_len/1000}',
+        '-f', 'null',
+        '-'
+    ]
+    
+    # Execute the FFmpeg command
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    stdout, stderr = process.communicate()
+    
+    # Parse the stderr for silence information
+    silence_starts = []
+    silence_ends = []
+    
+    for line in stderr.split('\n'):
+        if 'silence_start' in line:
+            try:
+                silence_start = float(re.findall(r'silence_start: (\d+\.\d+)', line)[0])
+                silence_starts.append(silence_start)
+            except IndexError:
+                pass
+        elif 'silence_end' in line:
+            try:
+                silence_end = float(re.findall(r'silence_end: (\d+\.\d+)', line)[0])
+                silence_ends.append(silence_end)
+            except IndexError:
+                pass
+    
+    # Combine starts and ends into list of tuples
+    silences = list(zip(silence_starts, silence_ends))
+    print(f"Detected {len(silences)} silences.")
+    return silences
+
+def split_audio_on_silence(audio, silences):
+    """
+    Split audio based on detected silences.
+    
+    Returns a list of AudioSegment chunks.
+    """
+    print("Splitting audio based on detected silences...")
+    chunks = []
+    previous_end = 0  # in ms
+    for silence_start, silence_end in silences:
+        chunk = audio[previous_end: silence_start * 1000]  # silence_start is in seconds
+        if len(chunk) > 0:
+            chunks.append(chunk)
+        previous_end = silence_end * 1000  # silence_end is in seconds
+    # Add the last chunk
+    last_chunk = audio[previous_end:]
+    if len(last_chunk) > 0:
+        chunks.append(last_chunk)
+    print(f"Number of chunks after silence splitting: {len(chunks)}")
     return chunks
 
 def combine_chunks(chunks, max_length_ms):
     """
     Combine smaller chunks to ensure each chunk is as close as possible to max_length_ms without exceeding it.
+    
+    Returns a list of combined AudioSegment chunks.
     """
     print(f"Combining chunks to ensure each is up to {max_length_ms / 60000:.2f} minutes long...")
     combined_chunks = []
     current_chunk = AudioSegment.empty()
     
-    for i, chunk in enumerate(chunks, start=1):
+    for chunk in tqdm(chunks, desc="Combining Chunks"):
         if len(current_chunk) + len(chunk) <= max_length_ms:
             current_chunk += chunk
         else:
@@ -47,16 +134,40 @@ def combine_chunks(chunks, max_length_ms):
     print(f"Number of final combined chunks: {len(combined_chunks)}")
     return combined_chunks
 
-def export_chunks(chunks, output_dir, base_filename, format="mp3", bitrate="192k"):
+def export_chunk(args):
     """
-    Export audio chunks to the specified format.
+    Export a single audio chunk.
+    
+    Parameters:
+        args: Tuple containing (chunk, output_dir, base_filename, index, format, bitrate)
     """
+    chunk, output_dir, base_filename, index, format, bitrate = args
+    chunk_filename = os.path.join(output_dir, f"{base_filename}_chunk{index}.{format}")
+    # Export the chunk
+    chunk.export(chunk_filename, format=format, bitrate=bitrate)
+    return chunk_filename
+
+def export_chunks_multiprocessing(chunks, output_dir, base_filename, format="mp3", bitrate="192k"):
+    """
+    Export audio chunks using multiprocessing for faster performance.
+    
+    Returns a list of exported file paths.
+    """
+    print("Exporting chunks with multiprocessing...")
     os.makedirs(output_dir, exist_ok=True)
-    for i, chunk in enumerate(chunks, start=1):
-        chunk_filename = os.path.join(output_dir, f"{base_filename}_chunk{i}.{format}")
-        print(f"Exporting chunk {i}: {chunk_filename} (Duration: {len(chunk)/1000:.2f} seconds)")
-        chunk.export(chunk_filename, format=format, bitrate=bitrate)
+    
+    # Prepare arguments for each chunk
+    export_args = [
+        (chunk, output_dir, base_filename, i+1, format, bitrate)
+        for i, chunk in enumerate(chunks)
+    ]
+    
+    # Use multiprocessing Pool to export chunks in parallel
+    with multiprocessing.Pool() as pool:
+        results = list(tqdm(pool.imap(export_chunk, export_args), total=len(export_args), desc="Exporting Chunks"))
+    
     print(f"All chunks have been exported to '{output_dir}'.")
+    return results
 
 def main():
     parser = argparse.ArgumentParser(description="Split large audio files into smaller MP3 chunks based on silence, with normalization and maximum length control.")
@@ -91,10 +202,16 @@ def main():
     print(f"Original audio duration: {len(audio)/60000:.2f} minutes")
     
     # Normalize audio
-    audio = normalize_audio(audio)
+    # Adjust target_dBFS as needed based on your audio's original levels
+    target_dBFS = -10.0  # Example: set to -10 dBFS
+    headroom = 1.0        # 1 dB headroom to prevent clipping
+    audio = normalize_audio(audio, target_dBFS=target_dBFS, headroom=headroom)
     
-    # Split audio on silence
-    initial_chunks = split_audio_on_silence(audio, min_silence_len, silence_thresh, keep_silence)
+    # Detect silences using FFmpeg
+    silences = detect_silences_ffmpeg(input_file, silence_thresh, min_silence_len)
+    
+    # Split audio based on silences
+    initial_chunks = split_audio_on_silence(audio, silences)
     
     # Define maximum chunk length in milliseconds
     max_length_ms = max_length_min * 60 * 1000  # Convert minutes to milliseconds
@@ -105,8 +222,8 @@ def main():
     # Get base filename without extension
     base_filename = os.path.splitext(os.path.basename(input_file))[0]
     
-    # Export chunks
-    export_chunks(final_chunks, output_dir, base_filename, format=audio_format, bitrate=bitrate)
+    # Export chunks using multiprocessing
+    export_chunks_multiprocessing(final_chunks, output_dir, base_filename, format=audio_format, bitrate=bitrate)
 
 if __name__ == "__main__":
     main()
