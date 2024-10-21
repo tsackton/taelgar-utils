@@ -43,6 +43,8 @@
             - {glob: people/skaer/}
         - Tollenders
             - {glob: people/tollenders/}
+        - Addermarians
+            - {glob: people/addermarians}
         - Other Humans
             - {glob: people/other-humans/}
     - [Elves](species/children-of-the-embodied-gods/elves/elves.md)
@@ -70,15 +72,12 @@
         - {glob: gazetteer, exclude: green-sea.md;geography-of-taelgar.md;gazetteer.md}
         - [Green Sea](gazetteer/green-sea.md)
     - Other Planes
-        - [Feywild](cosmology/multiverse/echo-realms/feywild/feywild.md)
-            - {glob: cosmology/multiverse/echo-realms/feywild/}
-        - [Shadowfell](cosmology/multiverse/echo-realms/shadowfell/shadowfell.md)
-            - {glob: cosmology/multiverse/echo-realms/shadowfell/}
+        - [Echo Realms](cosmology/multiverse/echo-realms/echo-realms.md)
+            - {glob: cosmology/multiverse/echo-realms/}
         - [Spiritual Realms](cosmology/multiverse/spiritual-realms/spiritual-realms.md)
             - {glob: cosmology/multiverse/spiritual-realms/}
         - [Energy Realms](cosmology/multiverse/energy-realms/energy-realms.md)
             - {glob: cosmology/multiverse/energy-realms/}
-        - [Mirror Realm](cosmology/multiverse/echo-realms/mirror-realm.md)
     - Religion
         - [Mos Numena](cosmology/religions/mos-numena/mos-numena.md)
             - {glob: cosmology/religions/mos-numena/, exclude: mos-numena.md}
@@ -135,3 +134,5 @@
             - {glob: people/pcs/great-war/, exclude: heroes-of-the-great-war.md}
     - [Labyrinths of the Lost](campaigns/labyrinths-of-the-lost/labyrinths-of-the-lost.md)
         - {glob: campaigns/labyrinths-of-the-lost, exclude: labyrinths-of-the-lost.md}
+    - Addermarch
+        - {glob: campaigns/addermarch}
