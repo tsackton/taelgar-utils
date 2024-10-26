@@ -15,6 +15,8 @@
             - {glob: campaigns/dunmari-frontier/dreams-and-visions/}
         - Scrying
             - {glob: campaigns/dunmari-frontier/scrying-and-spying/}
+        - Treasure Hoards
+            - {glob: campaigns/dunmari-frontier/hoards/}
     - [Treasure](campaigns/dunmari-frontier/party-treasure.md)
         - [Vindristjarna](things/ships/vindristjarna.md)
             - [Bastion Facilities](campaigns/dunmari-frontier/vindristjarna-room-planning.md)
