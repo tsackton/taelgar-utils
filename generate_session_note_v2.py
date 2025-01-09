@@ -847,7 +847,7 @@ class SessionNote:
         try:
             client = OpenAI(api_key = self.openai_api_key)
             completion = client.beta.chat.completions.parse(
-                model="gpt-4o-2024-08-06",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": transcript_text},
