@@ -2,6 +2,7 @@
 - [Dunmar Campaign](campaigns/dunmari-frontier/dunmari-frontier-campaign.md)
     - [Characters](people/pcs/dunmar-fellowship/dunmar-fellowship.md)
         - {glob: people/pcs/dunmar-fellowship/, exclude: dunmar-fellowship.md}
+    - [Timeline](campaigns/dunmari-frontier/dunmari-frontier-timeline.md)
     - Session Info
         - [Session Notes](campaigns/dunmari-frontier/sessions.md)
         - [Mirror Visions](campaigns/dunmari-frontier/mirror-visions.md)
@@ -26,11 +27,8 @@
             - {glob: things/artifacts-of-power}
         - Books of Taelgar
             - {glob: things/books}
-    - Mechanics
-        - {glob: campaigns/mechanics/}
-        - [Languages](species/languages.md)
 - [People](species/species.md)
-    - [Humans](species/children-of-divine-creation/humans/humans.md)
+    - [Humans](species/humans.md)
         - Chardonians
             - {glob: people/chardonians/}
         - Deno'qai
@@ -48,20 +46,20 @@
         - Addermarians
             - {glob: people/addermarians}
         - Other Humans
-            - {glob: people/other-humans/}
-    - [Elves](species/children-of-the-embodied-gods/elves/elves.md)
+            - {glob: people/other-humans/;people/maseauns;people/tyrwinghans;flatten}
+    - [Elves](species/elves.md)
         - {glob: people/elves/}
-    - [Dwarves](species/children-of-the-embodied-gods/dwarves/dwarves.md)
+    - [Dwarves](species/dwarves.md)
         - {glob: people/dwarves/}
-    - [Halflings](species/children-of-the-embodied-gods/halflings/halflings.md)
+    - [Halflings](species/halflings.md)
         - {glob: people/halflings/}
-    - [Lizardfolk](species/children-of-the-embodied-gods/lizardfolk/lizardfolk.md)
+    - [Lizardfolk](species/lizardfolk.md)
         - {glob: people/lizardfolk/}
-    - [Stoneborn](species/children-of-the-embodied-gods/stoneborn/stoneborn.md)
+    - [Stoneborn](species/stoneborn.md)
         - [Umli](people/other-nonhumans/umli.md)
-    - [Orcs](species/children-of-the-embodied-gods/orcs/orcs.md)
+    - [Orcs](species/orcs.md)
         - {glob: people/orcs/}
-    - [Fey](species/children-of-the-riving/fey/fey.md)
+    - [Fey](species/extraplanar/fey.md)
         - {glob: people/fey}
     - Other Nonhumans
         - {glob: people/other-nonhumans;people/giants;people/kenku, exclude: umli.md}
@@ -69,56 +67,20 @@
         - {glob: people/extraplanar-powers/}
     - Organizations
         - {glob: groups/}
+    - [Languages](background/languages.md)
 - [Gazetteer](campaigns/player-s-guide.md)
     - [World of Taelgar](gazetteer/geography-of-taelgar.md)
-        - {glob: gazetteer, exclude: green-sea.md;geography-of-taelgar.md;gazetteer.md}
+        - {glob: gazetteer, exclude: green-sea.md;geography-of-taelgar.md;gazetteer.md;endless-ocean.md;sentinel-range.md}
         - [Green Sea](gazetteer/green-sea.md)
-    - Other Planes
-        - [Echo Realms](cosmology/multiverse/echo-realms/echo-realms.md)
-            - {glob: cosmology/multiverse/echo-realms/}
-        - [Spiritual Realms](cosmology/multiverse/spiritual-realms/spiritual-realms.md)
-            - {glob: cosmology/multiverse/spiritual-realms/}
-        - [Energy Realms](cosmology/multiverse/energy-realms/energy-realms.md)
-            - {glob: cosmology/multiverse/energy-realms/}
+        - [Endless Ocean](gazetteer/endless-ocean.md)
+        - [Sentinel Range](gazetteer/sentinel-range.md)
     - Religion
-        - [Mos Numena](cosmology/religions/mos-numena/mos-numena.md)
-            - {glob: cosmology/religions/mos-numena/, exclude: mos-numena.md}
-            - [Gods](cosmology/gods/incorporeal-gods/mos-numena-pantheon/mos-numena-pantheon.md)
-                - {glob: cosmology/gods/incorporeal-gods/mos-numena-pantheon/, exclude: mos-numena-pantheon.md}
-            - [Festivals](time/holidays-and-festivals/mos-numena-feast-days.md)
-                - [Festival of the Bridge](time/holidays-and-festivals/festival-of-the-bridge.md)
-                - [Miracle of the Mist](time/holidays-and-festivals/festival-of-the-miracle-of-the-mist.md)
-                - [Pyravela](time/holidays-and-festivals/pyravela.md)
-                - [Viatela](time/holidays-and-festivals/viatela.md)
-        - [Dunmari Faith](cosmology/religions/five-siblings/five-siblings.md)
-            - {glob: cosmology/religions/five-siblings/, exclude: five-siblings.md}
-            - [Gods](cosmology/gods/incorporeal-gods/dunmari-pantheon/dunmari-pantheon.md)
-                - [Sampa](cosmology/gods/high-gods/divine-presence.md)
-                - [Shurat](cosmology/gods/high-gods/divine-presence.md)
-                - {glob: cosmology/gods/incorporeal-gods/dunmari-pantheon/, exclude: dunmari-pantheon.md}
-            - [Festivals](time/holidays-and-festivals/dunmari-festivals/dunmari-festivals.md)
-                - {glob: time/holidays-and-festivals/dunmari-festivals, exclude: dunmari-festivals.md}
-        - [Northern Folk Religions](cosmology/religions/northern-folk-religions/northern-folk-religions.md)
-            - [Kestavo](cosmology/religions/northern-folk-religions/kestavo.md)
-                - {glob: cosmology/gods/kestavo/}
-            - [Tanshi Worship](cosmology/religions/northern-folk-religions/tanshi-worship.md)
-                - {glob: cosmology/gods/tanshi}
-            - [Zariya](cosmology/religions/northern-folk-religions/zariya.md)
-        - Other Religions
-            - [Dwarven](cosmology/religions/dwarven-religious-practice.md)
-            - [Halfling](cosmology/religions/halfling-religious-practice.md)
-        - Other Gods
-            - [High Gods](cosmology/gods/high-gods/high-gods.md)
-                - {glob: cosmology/gods/high-gods/, exclude: high-gods.md}
-            - [Embodied Gods](cosmology/gods/embodied-gods/embodied-gods.md)
-                - {glob: cosmology/gods/embodied-gods/, exclude: embodied-gods.md}
-            - [Incorporeal Gods](cosmology/gods/incorporeal-gods/incorporeal-gods.md)
-                - [Kaikkea](cosmology/gods/incorporeal-gods/kaikkea.md)
-                - [Sarqon](cosmology/gods/incorporeal-gods/sarqon.md)
-                - [The Fox and Hunter](cosmology/gods/incorporeal-gods/fox-and-hunter.md)
-- [World Map](gazetteer/gazetteer.md)
+        - {glob: gods-and-religions/}
+    - [Cosmology](cosmology/multiverse.md)
+        - {glob: cosmology/, exclude:multiverse.md}
+- [World Map](gazetteer/world-of-taelgar.md)
 - [History](history/history.md)
-    - [Calendar Eras](time/calendar-eras.md)
+    - [Calendar Eras](background/calendar-eras.md)
     - {glob: history/}
     - People
         - {glob: people/historical-figures}
