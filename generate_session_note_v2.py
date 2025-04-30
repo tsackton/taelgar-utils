@@ -11,6 +11,29 @@ from pydub import AudioSegment
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
+# Prompts for scene summarization
+PLAIN_BULLETS_PROMPT = """
+You will receive the raw text of a single scene.
+Return a JSON object with two keys:
+1. "scene_title": a 3–8 word descriptive title for this scene.
+2. "bullet_points": an array of 4–6 concise, precise bullet strings that capture the primary events in this scene. Focus on detail and accuracy. 
+No extra keys. No narrative—just title and bullets.
+"""
+
+IN_WORLD_NARRATIVE_PROMPT = """
+You are a summarizer of D&D session transcripts.
+Your job: write a short, self-contained retelling the events of this scene as an in-world narrative,
+avoiding any meta-game language (no "DM", "rolls", etc.). Your narrative should be between 100-250 words. 
+Focus on key happenings, and character actions, while avoiding flowerly language and carefully following the style guide below.
+Style Guide: 
+- The narrative style is clear, grounded, and concise, balancing practical descriptions of actions with subtle atmospheric detail. 
+- It maintains a strong focus on characters' specific deeds, decisions, and interactions, clearly noting important magical elements or artifacts. 
+- Sentences are typically direct, with restrained use of evocative language, ensuring clarity and readability. 
+- Combat and exploration scenes are described methodically but briefly, emphasizing key strategies, magical effects, and decisive outcomes. 
+- Dialogue and character interactions are succinctly summarized rather than fully quoted. 
+- Occasional descriptive flourishes enhance the sense of atmosphere or mood, yet the prose consistently avoids excessive dramatization or overly ornate language.
+"""
+
 # Configure logging
 logging.basicConfig(
     filename='session_note.log',
@@ -36,6 +59,7 @@ class MetadataModel(BaseModel):
 
     # optional metadata
     world_info_file: Optional[str] = None
+    style_guide_file: Optional[str] = None  # Path to a JSON style guide for transcript cleaning
 
     # either vtt or audio file is required to start processing
     audio_file: Optional[str] = None
@@ -49,6 +73,10 @@ class MetadataModel(BaseModel):
     scene_segments: Optional[List[str]] = []
     speaker_mapping_file: Optional[str] = None
 
+    # new fields for examples and scene summaries
+    example_session_files: Optional[List[str]] = None  # paths to markdown files with example narratives
+    scene_summary_files: Optional[List[str]] = None    # paths to generated scene summary JSON files
+
     # not yet implemented
     summary_file: Optional[str] = None
     timeline_file: Optional[str] = None
@@ -58,6 +86,13 @@ class MetadataModel(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+
+# Model for scene summaries
+class SceneSummaryModel(BaseModel):
+    scene_title: str
+    bullet_points: List[str]
+    narrative: Optional[str] = None
 
 class SessionNote:
     LOG_DIR = "logs"
@@ -189,7 +224,8 @@ class SessionNote:
             status['scenes'] = 'missing'
 
         # Summaries status
-        if self.metadata.summary_file and os.path.exists(self.metadata.summary_file):
+        summary_files = self.metadata.scene_summary_files or []
+        if summary_files and all(os.path.exists(f) for f in summary_files):
             status['summaries'] = 'processed'
         else:
             status['summaries'] = 'missing'
@@ -201,6 +237,101 @@ class SessionNote:
     ######################
     ## HELPER METHODS ##
     ######################
+    def _load_example_narratives(self) -> str:
+        """
+        Load narrative examples from markdown files listed in metadata.example_session_files.
+        Extract the first paragraph under "## Narrative" in each and return as joined examples.
+        """
+        examples = []
+        for path in self.metadata.example_session_files or []:
+            if os.path.exists(path):
+                md = open(path, 'r').read()
+                if "## Narrative" in md:
+                    part = md.split("## Narrative", 1)[1]
+                    para = part.strip().split("\n\n", 1)[0].strip()
+                    examples.append(para)
+        return "\n\n".join(f"Example Narrative:\n{e}" for e in examples)
+
+    def call_openai_responses(self, instructions: str, input: str, response_format: str):
+        """
+        Wrapper for OpenAI Responses endpoint.
+        """
+        client = OpenAI(api_key=self.openai_api_key)
+        response = client.responses.create(
+            model="gpt-4.1-2025-04-14",
+            instructions=instructions,
+            input=input,
+            temperature=0.0
+        )
+        if response_format == "json":
+            return json.loads(response.output_text)
+        return response.output_text
+
+    def summarize_scene(self, scene_path: str) -> SceneSummaryModel:
+        """
+        Summarize a single scene: get title + bullets and in-world narrative.
+        """
+        text = open(scene_path, 'r').read()
+        # Bullets + title
+        bullets_data = self.call_openai_responses(
+            instructions=PLAIN_BULLETS_PROMPT,
+            input=text,
+            response_format="json"
+        )
+        summary = SceneSummaryModel.parse_obj(bullets_data)
+        # In-world narrative with examples
+        narrative_instr = IN_WORLD_NARRATIVE_PROMPT
+        narrative_instr += "\n\n" + self._load_example_narratives()
+        narrative_text = self.call_openai_responses(
+            instructions=narrative_instr,
+            input=text,
+            response_format="text"
+        ).strip()
+        summary.narrative = narrative_text
+        return summary
+
+    def merge_summaries_to_markdown(self):
+        """
+        Merge individual scene summary JSON files into a final Markdown session note.
+        """
+        session_num = self.metadata.session_number
+        output_file = f"Session{session_num}.md"
+        lines = []
+
+        # Narrative section
+        lines.append("## Narrative\n\n")
+        for summary_path in self.metadata.scene_summary_files or []:
+            with open(summary_path, 'r') as f:
+                data = json.load(f)
+            narrative = data.get('narrative', '').strip()
+            if narrative:
+                lines.append(narrative + "\n\n")
+
+        # Separator
+        lines.append("%%\n\n")
+
+        # Detailed Summary
+        lines.append("## Detailed Summary\n\n")
+        for summary_path in self.metadata.scene_summary_files or []:
+            with open(summary_path, 'r') as f:
+                data = json.load(f)
+            title = data.get('scene_title', 'Untitled Scene')
+            bullets = data.get('bullet_points', [])
+            lines.append(f"### {title}\n\n")
+            for bullet in bullets:
+                lines.append(f"- {bullet}\n")
+            lines.append("\n")
+
+        lines.append("%%\n")
+
+        # Write to file
+        with open(output_file, 'w') as f:
+            f.writelines(lines)
+        logging.info(f"Final session note merged into {output_file}")
+
+        # Update metadata
+        self.metadata.final_note = output_file
+        self.write_metadata()
 
     def convert_to_dict(self, obj: Any) -> Any:
         """
@@ -703,6 +834,11 @@ class SessionNote:
 
             scene_file = self.metadata.scene_file
 
+            # For edited status, load scenes from metadata or scene breaks
+            if self.status['scenes'] == 'edited':
+                # metadata.scene_segments holds raw scene texts
+                scenes = self.metadata.scene_segments or self.split_on_scene_breaks()
+
             if self.status['scenes'] == 'missing':
                 if os.path.exists(scene_file):
                     logging.info(f"Scene file {scene_file} already exists.")
@@ -742,33 +878,37 @@ class SessionNote:
         speakers = ", ".join(speakers)
 
         if self.metadata.vtt_file:
+            # System prompt guiding the transcript cleaner
             prompt = """
-            You are a transcript cleaner for tabletop roleplaying game sessions, particularly for Dungeons & Dragons. Your goal is to 
-            **maintain the original intent, tone, length, and content** of the transcript while **cleaning up spelling, grammar, and readability**. 
-            You should make **minimal changes**, only when necessary for clarity, and **keep the text as close as possible** to the original. 
-            
-            1. **Do not remove any content** unless it is clearly a filler word (e.g., "um," "uh," "like") or a repeated phrase. Ensure the dialogue flows naturally.
-            2. **Do not remove or shorten dialogue** or descriptive content. The cleaned transcript should be **as close in length as the original**, while 
-            improving flow, clarity, and readability.
-            3. **Preserve all speaker names**. Do not omit any speaker names or change them.
-            4. Do not abbreviate or streamline content. Simply improve readability without changing anything significant.
-            
-            Correct spelling of in-world characters and locations:
-            """
-            prompt += world_info + "\n"
+            You are an expert transcript cleaner for tabletop roleplaying game sessions. Your goal is to take an automated or messy transcript chunk and return a fully cleaned version, preserving every line of dialogue in order while correcting only actual errors.
 
-            prompt += """
+            Tasks & Scope
+            1. Error Types to Fix:
+               - Spelling mistakes (including proper nouns)
+               - Filler words (e.g., “um,” “uh,” “like”)
+               - Broken punctuation and capitalization
+               - Mis-attributed speakers and timestamp artefacts
+            2. Structure & Content Preservation:
+               - Keep the exact sequence and timing of utterances
+               - Do not remove any non-filler content or shorten dialogue
+               - Preserve all speaker labels; correct typos only
+            3. Style & Terminology Reference:
+               - Refer to the JSON style guide file if provided by the metadata
+            4. Chunk Context:
+               - Chunks may overlap by a few sentences—use that for continuity but clean only this chunk
 
-            ### Output Instructions:
-            1. **Return the cleaned transcript** that is equal in length to the original. Every speaker's dialogue must be preserved.
-            2. **Return a list of speakers found in the transcript**, mapping each speaker to a known character in the game.
-            """
-            prompt += "\n**Known Speakers:**" + speakers
-            prompt += "\n**Known Characters:**" + characters + ", DM\n"
-            prompt += """
+            Example
+            Input:
+            “um I think we shoud– ran… . . . Delwth: hey DM can we move on?”
+            Output:
+            “I think we should run…
+            Delwath: Hey DM, can we move on?”
 
-            **Important**: Each speaker must map to one of the known characters. If a speaker is missing, add them and map accordingly.
-            Make sure the cleaned transcript preserves the exact structure of the original.
+            Output Format:
+            Return a JSON object with:
+            - "transcript": the full cleaned text
+            - "speakers": list of {"name": "...", "in_world_character": "..."} entries
+
             """
             return prompt
 
@@ -845,27 +985,29 @@ class SessionNote:
         :return: Dictionary with cleaned transcript and list of speakers.
         """
         try:
-            client = OpenAI(api_key = self.openai_api_key)
-            completion = client.beta.chat.completions.parse(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": transcript_text},
-                ],
-                response_format=PydanticModel,
+            client = OpenAI(api_key=self.openai_api_key)
+            # Prepare instructions by appending style guide if available
+            instructions = system_prompt
+            if self.metadata.style_guide_file and os.path.exists(self.metadata.style_guide_file):
+                with open(self.metadata.style_guide_file, 'r') as sg:
+                    instructions += "\n\nJSON Style Guide:\n" + sg.read()
+            # Use the new Responses endpoint
+            response = client.responses.create(
+                model="gpt-4.1-2025-04-14",
+                instructions=instructions,
+                input=transcript_text,
+                temperature=0.0
             )
-
-            message = completion.choices[0].message
-            if message.parsed:
-                result = {
-                    "transcript": message.parsed.transcript,
-                    "speakers": message.parsed.speakers
-                }
-                logging.info("Cleaned transcript obtained from OpenAI.")
-                return result
-            else:
-                logging.error("Failed to parse response from OpenAI.")
-                raise Exception("Failed to parse response")
+            # The Responses API returns raw text in response.output_text
+            output = response.output_text
+            # Parse the JSON output into our Pydantic model
+            parsed = PydanticModel.parse_raw(output)
+            result = {
+                "transcript": parsed.transcript,
+                "speakers": parsed.speakers
+            }
+            logging.info("Cleaned transcript obtained from OpenAI Responses endpoint.")
+            return result
         except Exception as e:
             logging.error(f"An error occurred while cleaning transcript with OpenAI: {e}")
             raise
@@ -879,8 +1021,8 @@ class SessionNote:
         aggregated_speaker_character = {}
         cleaned_pieces = []
 
-        # Step 1: Split raw transcript into chunks of around 1500 words
-        raw_pieces = self.split_transcript_into_chunks(raw_transcript, word_limit=1500)
+        # Step 1: Split raw transcript into chunks of around 3000 words
+        raw_pieces = self.split_transcript_into_chunks(raw_transcript, word_limit=3000)
 
         try:
             chunk_count = 1
@@ -1040,9 +1182,30 @@ class SessionNote:
                 print("Processing transcript into scenes.")
                 self.process_transcript_into_scenes()
 
-            self.write_metadata()
-            logging.info("Processing completed successfully.")
-            print("Metadata updated.")
+            # Summaries step
+            if self.status['summaries'] == 'missing' and self.status['scenes'] == 'processed':
+                # Summarize each scene automatically
+                summaries = []
+                for scene_file in self.metadata.scene_segments or []:
+                    summ = self.summarize_scene(scene_file)
+                    summary_path = scene_file.replace(".txt", ".summary.json")
+                    with open(summary_path, 'w') as f:
+                        json.dump(summ.dict(), f, indent=2)
+                    summaries.append(summary_path)
+                self.metadata.scene_summary_files = summaries
+                self.write_metadata()
+                # Recompute status now that summaries exist
+                self.status = self.compute_status()
+                logging.info("Summaries completed successfully.")
+                print("Summaries updated.")
+                # After summaries are updated, merge into final markdown
+                self.merge_summaries_to_markdown()
+                print(f"Final session note written to {self.metadata.final_note}")
+
+            # Final merge step if summaries already exist but final note not yet created
+            if self.status['summaries'] == 'processed':
+                self.merge_summaries_to_markdown()
+                print(f"Final session note written to {self.metadata.final_note}")
         except Exception as e:
             logging.error(f"An error occurred during execution: {e}")
             print(f"An error occurred: {e}")
