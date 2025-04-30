@@ -5,6 +5,7 @@ import sys
 import webvtt
 import yaml
 import logging
+from json import JSONDecodeError
 import json
 import yaml
 from pathlib import Path
@@ -15,6 +16,7 @@ from openai import OpenAI
 from pydub import AudioSegment
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+import re
 
 # Prompts for scene summarization
 PLAIN_BULLETS_PROMPT = """
@@ -71,6 +73,7 @@ class MetadataModel(BaseModel):
     # required metadata
     session_number: int
     campaign: str
+    campaign_name: str
     characters: List[str]
     dm: str
 
@@ -100,7 +103,7 @@ class MetadataModel(BaseModel):
     final_note: Optional[str] = None
 
     # optional metadata for final session note
-    realWorldDate: Optional[date] = None
+    session_date: Optional[date] = None
     DR: Optional[str] = None
     DR_end: Optional[str] = None
 
@@ -292,9 +295,21 @@ class SessionNote:
             input=input,
             temperature=temperature
         )
+        raw_output = response.output_text
+        # Strip Markdown code fences if present
+        raw_clean = re.sub(r"^```json\s*|\s*```$", "", raw_output.strip())
+        logging.debug(f"Cleaned raw_output (first 500 chars): {repr(raw_clean[:500])}")
         if response_format == "json":
-            return json.loads(response.output_text)
-        return response.output_text
+            try:
+                data = json.loads(raw_clean)
+            except JSONDecodeError as e:
+                logging.error(f"JSON decode error in call_openai_responses: {e}")
+                logging.error(f"Offending cleaned raw_output: {repr(raw_clean)}")
+                raise
+            logging.debug(f"Parsed JSON data keys: {list(data.keys())}")
+            return data
+        else:
+            return raw_output
 
     def summarize_scene(self, scene_path: str) -> SceneSummaryModel:
         """
@@ -307,6 +322,7 @@ class SessionNote:
             input=text,
             response_format="json"
         )
+        logging.debug(f"Scene bullets raw data: {bullets_data}")
         summary = SceneSummaryModel.parse_obj(bullets_data)
         # In-world narrative with examples
         narrative_instr = IN_WORLD_NARRATIVE_PROMPT
@@ -326,11 +342,14 @@ class SessionNote:
         """
         ctx = self.metadata.dict().get("context", "")
         prompt = f"Context: {ctx}\n===\n{session_text}"
-        return self.call_openai_responses(
+        logging.debug(f"Generating session summary with prompt (first 500 chars): {repr(prompt[:500])}")
+        resp = self.call_openai_responses(
             instructions=system_prompt,
             input=prompt,
             response_format="json"
         )
+        logging.debug(f"Session summary response dict keys: {list(resp.keys())}")
+        return resp
 
     def write_session_markdown(self, file_path: Path, resp_data: dict):
         """
@@ -346,31 +365,31 @@ class SessionNote:
         location   = resp_data.get("location", "").strip()
 
         # Metadata fields
-        campaign   = self.metadata.campaign
+        campaign   = self.metadata.campaign_name
         sess_num   = self.metadata.session_number
         players    = self.metadata.characters or []
         companions = getattr(self.metadata, "companions", []) or []
 
         # Date fields
-        # Write to file
-        try:
-            start_date = str(self.metadata["DR"])
-        except KeyError:
-            start_date = None
-
-        try:
-            end_date = str(self.metadata["DR_end"])
-        except KeyError:
-            end_date = start_date
+        start_date = self.metadata.DR
+        end_date = self.metadata.DR_end or start_date
 
         if start_date and start_date == end_date:
             taelgar_date_string = TaelgarDate.get_dr_date_string(start_date, dr=True)
         elif start_date and end_date:
-            taelgar_date_string = TaelgarDate.get_dr_date_string(start_date, dr=True) + " to " + TaelgarDate.get_dr_date_string(end_date, dr=True)
+            taelgar_date_string = (
+                f"{TaelgarDate.get_dr_date_string(start_date, dr=True)} "
+                f"to {TaelgarDate.get_dr_date_string(end_date, dr=True)}"
+            )
         else:
             taelgar_date_string = "Unknown"
-            
-        real_world_date_string = self.metadata["realWorldDate"].strftime("%A %b %d, %Y")
+
+        if self.metadata.session_date:
+            real_world_date_string = self.metadata.session_date.strftime("%A %b %d, %Y")
+            real_world_date_iso = self.metadata.session_date.isoformat()
+        else:
+            real_world_date_string = "Unknown"
+            real_world_date_iso = ""
 
         # Build frontmatter lines
         header = [
@@ -379,7 +398,7 @@ class SessionNote:
             f"name: {campaign} - Session {sess_num}",
             f"campaign: {campaign}",
             f"sessionNumber: {sess_num}",
-            f"realWorldDate: {self.metadata["realWorldDate"].strftime('%Y-%m-%d')}",
+            f"realWorldDate: {real_world_date_iso}",
             f"DR: {start_date}",
             f"DR_end: {end_date}",
             f"players: [{', '.join(players)}]",
@@ -387,10 +406,10 @@ class SessionNote:
             f"tagline: {tagline}",
             f"descTitle: {desc_title}",
             "---",
-            "",
             f"# {campaign} - Session {sess_num}",
+            "",
             f">[!info] {desc_title}: {tagline}",
-            f"> *Featuring: {', '.join([f"[[{player}]]" for player in players])}*"
+            f"> *Featuring: {', '.join([f'[[{player}]]' for player in players])}*"
         ]
 
         if companions:
@@ -401,7 +420,7 @@ class SessionNote:
         header.append(f"> *Location: {location}*")
 
         # Add one-sentence summary and bullets
-        header += [one_liner, "", "## Session Info", "### Summary"]
+        header += ["", one_liner, "", "## Session Info", "### Summary"]
         for b in bullets:
             header.append(f"- {b}")
         header.append("")
