@@ -1,0 +1,56 @@
+{
+  "characters": [
+    "Seeker",
+    "Delwath",
+    "Kenzo",
+    "Wellby",
+    "Riswynn",
+    "Ismara",
+    "Valeris",
+    "Count Vashan",
+    "Lady Eventide",
+    "Lirien",
+    "Auntie Mulberry",
+    "Faldrak Bronzehammer",
+    "Faldrak",
+    "Egnir",
+    "Lord Sovin",
+    "Cloudspinner",
+    "Gloomshaper",
+    "Lord Umbraeth",
+    "Lord Soven",
+    "Master of Revels",
+    "Harrow",
+    "Wend"
+  ],
+  "factions": [
+    "Dunmar Fellowship",
+    "Eightfold Flame"
+  ],
+  "places": [
+    "Feywild",
+    "Emberwine",
+    "Amberglow",
+    "Sunwine Hall",
+    "Sunset Gate",
+    "Redsun Watch",
+    "Bitterwine Oak",
+    "Everlight’s Bloom",
+    "Nocturne Vale",
+    "Shrouded Archive",
+    "Cloud Palace",
+    "Heartwood Grove",
+    "Fate’s Ruin",
+    "Prismwell",
+    "Garamjala Desert",
+    "Chardon",
+    "Darba"
+  ],
+  "items": [
+    "Amberlight",
+    "Crown of Purity"
+  ],
+  "creatures": [
+    "duskhounds"
+  ]
+}
