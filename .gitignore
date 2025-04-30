@@ -1,5 +1,6 @@
 # ignore env file
 .env
+.s3-uploader_accessKeys.csv
 
 # this is a "personal config" file; not checked in
 config.json
