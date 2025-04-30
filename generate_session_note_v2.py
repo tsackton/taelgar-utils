@@ -5,6 +5,11 @@ import sys
 import webvtt
 import yaml
 import logging
+import json
+import yaml
+from pathlib import Path
+from datetime import date
+from taelgar_lib.TaelgarDate import TaelgarDate
 from dotenv import load_dotenv
 from openai import OpenAI
 from pydub import AudioSegment
@@ -32,6 +37,18 @@ Style Guide:
 - Combat and exploration scenes are described methodically but briefly, emphasizing key strategies, magical effects, and decisive outcomes. 
 - Dialogue and character interactions are succinctly summarized rather than fully quoted. 
 - Occasional descriptive flourishes enhance the sense of atmosphere or mood, yet the prose consistently avoids excessive dramatization or overly ornate language.
+"""
+
+SESSION_SUMMARY_PROMPT = """
+Summarize the D&D session described below. Return a JSON object with the following keys:
+1. "title": A short, evocative session title (max 6 words), that would be suitable to use as a chapter title in a book
+2. "tagline": 5-10 words that could be used as a subtitle for the text; it should capture the main event of the narrative succinctly and clearly, 
+    and ALWAYS start with the words *in which* 
+3. "short_summary": Exactly one sentence summarizing the primary gist of the session (for use as a preview).
+4. "summary": An array of 4–8 bullet points highlighting the most important events, discoveries, and plot developments.
+5. "location": The main in-world location(s) where the session takes place, which can be either one or possibly two major places
+     the events happen at or a phrase like on the road between place1 and place2, although you will prefer to choose a single location if possible.
+Do not include any extra keys. Be specific and use in-world names and terminology where possible.
 """
 
 # Configure logging
@@ -82,6 +99,11 @@ class MetadataModel(BaseModel):
     timeline_file: Optional[str] = None
     final_note: Optional[str] = None
 
+    # optional metadata for final session note
+    realWorldDate: Optional[date] = None
+    DR: Optional[str] = None
+    DR_end: Optional[str] = None
+
     # Add additional fields as necessary
 
     class Config:
@@ -93,6 +115,8 @@ class SceneSummaryModel(BaseModel):
     scene_title: str
     bullet_points: List[str]
     narrative: Optional[str] = None
+
+
 
 class SessionNote:
     LOG_DIR = "logs"
@@ -252,16 +276,21 @@ class SessionNote:
                     examples.append(para)
         return "\n\n".join(f"Example Narrative:\n{e}" for e in examples)
 
-    def call_openai_responses(self, instructions: str, input: str, response_format: str):
+    def call_openai_responses(self, instructions: str, input: str, response_format: str, temperature: float = 1.0):
         """
         Wrapper for OpenAI Responses endpoint.
+
+        :param instructions: System instructions for the API.
+        :param input: Input text to send.
+        :param response_format: "json" or other to parse the output.
+        :param temperature: Sampling temperature for the model (default 1.0).
         """
         client = OpenAI(api_key=self.openai_api_key)
         response = client.responses.create(
             model="gpt-4.1-2025-04-14",
             instructions=instructions,
             input=input,
-            temperature=0.0
+            temperature=temperature
         )
         if response_format == "json":
             return json.loads(response.output_text)
@@ -289,6 +318,95 @@ class SessionNote:
         ).strip()
         summary.narrative = narrative_text
         return summary
+
+    def generate_session_summary(self, session_text: str, system_prompt: str) -> dict:
+        """
+        Build a prompt combining metadata context and full merged markdown,
+        call the provided OpenAI wrapper, and return the parsed JSON dict.
+        """
+        ctx = self.metadata.dict().get("context", "")
+        prompt = f"Context: {ctx}\n===\n{session_text}"
+        return self.call_openai_responses(
+            instructions=system_prompt,
+            input=prompt,
+            response_format="json"
+        )
+
+    def write_session_markdown(self, file_path: Path, resp_data: dict):
+        """
+        Prepend frontmatter and summary block to the existing markdown file.
+        """
+        original = file_path.read_text(encoding="utf-8")
+        # Extract fields
+        title      = resp_data.get("title", "").strip()
+        tagline    = resp_data.get("tagline", "").strip()
+        desc_title = title
+        one_liner  = resp_data.get("short_summary", "").strip()
+        bullets    = resp_data.get("summary", [])
+        location   = resp_data.get("location", "").strip()
+
+        # Metadata fields
+        campaign   = self.metadata.campaign
+        sess_num   = self.metadata.session_number
+        players    = self.metadata.characters or []
+        companions = getattr(self.metadata, "companions", []) or []
+
+        # Date fields
+        # Write to file
+        try:
+            start_date = str(self.metadata["DR"])
+        except KeyError:
+            start_date = None
+
+        try:
+            end_date = str(self.metadata["DR_end"])
+        except KeyError:
+            end_date = start_date
+
+        if start_date and start_date == end_date:
+            taelgar_date_string = TaelgarDate.get_dr_date_string(start_date, dr=True)
+        elif start_date and end_date:
+            taelgar_date_string = TaelgarDate.get_dr_date_string(start_date, dr=True) + " to " + TaelgarDate.get_dr_date_string(end_date, dr=True)
+        else:
+            taelgar_date_string = "Unknown"
+            
+        real_world_date_string = self.metadata["realWorldDate"].strftime("%A %b %d, %Y")
+
+        # Build frontmatter lines
+        header = [
+            "---",
+            "tags: [session-note]",
+            f"name: {campaign} - Session {sess_num}",
+            f"campaign: {campaign}",
+            f"sessionNumber: {sess_num}",
+            f"realWorldDate: {self.metadata["realWorldDate"].strftime('%Y-%m-%d')}",
+            f"DR: {start_date}",
+            f"DR_end: {end_date}",
+            f"players: [{', '.join(players)}]",
+            f"companions: [{', '.join(companions)}]",
+            f"tagline: {tagline}",
+            f"descTitle: {desc_title}",
+            "---",
+            "",
+            f"# {campaign} - Session {sess_num}",
+            f">[!info] {desc_title}: {tagline}",
+            f"> *Featuring: {', '.join([f"[[{player}]]" for player in players])}*"
+        ]
+
+        if companions:
+            header.append(f"> *Companions: {', '.join([f'[[{comp}]]' for comp in companions])}*")
+        
+        header.append(f"> *In Taelgar: {taelgar_date_string}*")
+        header.append(f"> *On Earth: {real_world_date_string}*")
+        header.append(f"> *Location: {location}*")
+
+        # Add one-sentence summary and bullets
+        header += [one_liner, "", "## Session Info", "### Summary"]
+        for b in bullets:
+            header.append(f"- {b}")
+        header.append("")
+
+        file_path.write_text("\n".join(header) + original, encoding="utf-8")
 
     def merge_summaries_to_markdown(self):
         """
@@ -332,6 +450,18 @@ class SessionNote:
         # Update metadata
         self.metadata.final_note = output_file
         self.write_metadata()
+
+    def generate_final_session_note(self):
+        """
+        Produce final session note by summarizing the merged scenes markdown
+        and prepending frontmatter + summary info.
+        """
+        merged_path = Path(self.metadata.final_note)
+        merged_md   = merged_path.read_text(encoding="utf-8")
+        # call the new summary helper
+        resp = self.generate_session_summary(merged_md, SESSION_SUMMARY_PROMPT)
+        # prepend frontmatter + summary
+        self.write_session_markdown(merged_path, resp)
 
     def convert_to_dict(self, obj: Any) -> Any:
         """
@@ -1200,11 +1330,15 @@ class SessionNote:
                 print("Summaries updated.")
                 # After summaries are updated, merge into final markdown
                 self.merge_summaries_to_markdown()
+                # after merging scene summaries, generate final summary
+                self.generate_final_session_note()
                 print(f"Final session note written to {self.metadata.final_note}")
 
             # Final merge step if summaries already exist but final note not yet created
             if self.status['summaries'] == 'processed':
                 self.merge_summaries_to_markdown()
+                # after merging scene summaries, generate final summary
+                self.generate_final_session_note()
                 print(f"Final session note written to {self.metadata.final_note}")
         except Exception as e:
             logging.error(f"An error occurred during execution: {e}")
@@ -1218,8 +1352,3 @@ if __name__ == "__main__":
     metadata_file = sys.argv[1]
     session_note = SessionNote(metadata_file)
     session_note.execute()
-
-
-## STILL TO DO ##
-## Summarize each cleaned transcript / scene into bullet points, timeline, summary, title ##
-## Generate final note with all information ##
