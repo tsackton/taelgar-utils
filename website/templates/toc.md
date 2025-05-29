@@ -1,28 +1,28 @@
 - [Home](index.md)
-- [Dunmar Campaign](campaigns/dunmari-frontier/dunmari-frontier-campaign.md)
+- [Dunmar Campaign](campaigns/dunmari-frontier-campaign/dunmari-frontier-campaign.md)
     - [Characters](people/pcs/dunmar-fellowship/dunmar-fellowship.md)
         - {glob: people/pcs/dunmar-fellowship/, exclude: dunmar-fellowship.md}
-    - [Timeline](campaigns/dunmari-frontier/dunmari-frontier-timeline.md)
+    - [Timeline](campaigns/dunmari-frontier-campaign/dunmari-frontier-timeline.md)
     - Session Info
-        - [Session Notes](campaigns/dunmari-frontier/sessions.md)
-        - [Mirror Visions](campaigns/dunmari-frontier/mirror-visions.md)
+        - [Session Notes](campaigns/dunmari-frontier-campaign/sessions.md)
+        - [Mirror Visions](campaigns/dunmari-frontier-campaign/mirror-visions.md)
         - Kenzo's Collected Stories
-            - {glob: campaigns/dunmari-frontier/collected-stories/}
+            - {glob: campaigns/dunmari-frontier-campaign/collected-stories/}
         - Letters and Notes
-            - {glob: campaigns/dunmari-frontier/letters-and-notes/}
+            - {glob: campaigns/dunmari-frontier-campaign/letters-and-notes/}
         - Tales and Stories
-            - {glob: campaigns/dunmari-frontier/tales-and-stories}
+            - {glob: campaigns/dunmari-frontier-campaign/tales-and-stories}
         - Dreams and Visions
-            - {glob: campaigns/dunmari-frontier/dreams-and-visions/}
+            - {glob: campaigns/dunmari-frontier-campaign/dreams-and-visions/}
         - Scrying
-            - {glob: campaigns/dunmari-frontier/scrying-and-spying/}
+            - {glob: campaigns/dunmari-frontier-campaign/scrying-and-spying/}
         - Treasure Hoards
-            - {glob: campaigns/dunmari-frontier/hoards/}
-    - [Treasure](campaigns/dunmari-frontier/party-treasure.md)
+            - {glob: campaigns/dunmari-frontier-campaign/hoards/}
+    - [Treasure](campaigns/dunmari-frontier-campaign/party-treasure.md)
         - [Vindristjarna](things/ships/vindristjarna.md)
-            - [Bastion Facilities](campaigns/dunmari-frontier/vindristjarna-room-planning.md)
+            - [Bastion Facilities](campaigns/dunmari-frontier-campaign/vindristjarna-room-planning.md)
         - Dunmari Frontier Items
-            - {glob: campaigns/dunmari-frontier/treasure/;things/magic-items/;flatten}
+            - {glob: campaigns/dunmari-frontier-campaign/treasure/;things/magic-items/;flatten}
         - Artifacts of Power
             - {glob: things/artifacts-of-power}
         - Books of Taelgar
@@ -89,14 +89,15 @@
     - Primary Sources
         - {glob: primary-sources/}
 - [Other Campaigns](people/pcs/pcs.md)
-    - [Mawar](campaigns/mawar-confederacy/mawar-adventures.md)
+    - [Mawar](campaigns/mawar-adventures/mawar-adventures.md)
         - Characters
-            - {glob: people/pcs/mawar-confederacy}
-        - {glob: campaigns/mawar-confederacy/, exclude: mawar-adventures.md}
-    - Great War
-        - [Characters](people/pcs/great-war/heroes-of-the-great-war.md)
-            - {glob: people/pcs/great-war/, exclude: heroes-of-the-great-war.md}
-    - [Labyrinths of the Lost](campaigns/labyrinths-of-the-lost/labyrinths-of-the-lost.md)
-        - {glob: campaigns/labyrinths-of-the-lost, exclude: labyrinths-of-the-lost.md}
-    - Addermarch
-        - {glob: campaigns/addermarch}
+            - {glob: people/pcs/mawar}
+        - {glob: campaigns/mawar-adventures/, exclude: mawar-adventures.md}
+    - [Great Library](campaigns/great-library-campaign/great-library-campaign.md)
+        - {glob: campaigns/great-library-campaign/, exclude: great-library-campaign.md}
+    - [Great War](people/pcs/great-war/heroes-of-the-great-war.md)
+        - {glob: people/pcs/great-war/, exclude: heroes-of-the-great-war.md}
+    - [Labyrinths of the Lost](campaigns/one-shots/labyrinths-of-the-lost/labyrinths-of-the-lost.md)
+        - {glob: campaigns/one-shots/labyrinths-of-the-lost, exclude: labyrinths-of-the-lost.md}
+    - [Addermarch](campaigns/addermarch-campaign/addermarch-campaign.md)
+        - {glob: campaigns/addermarch-campaign, exclude: addermarch-campaign.md}

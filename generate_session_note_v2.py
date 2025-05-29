@@ -279,32 +279,53 @@ class SessionNote:
                     examples.append(para)
         return "\n\n".join(f"Example Narrative:\n{e}" for e in examples)
 
-    def call_openai_responses(self, instructions: str, input: str, response_format: str, temperature: float = 1.0):
+    def call_openai_responses(self, instructions: str, input: str, response_format, temperature: float = 1.0):
         """
         Wrapper for OpenAI Responses endpoint.
-
-        :param instructions: System instructions for the API.
-        :param input: Input text to send.
-        :param response_format: "json" or other to parse the output.
-        :param temperature: Sampling temperature for the model (default 1.0).
+        Handles text, JSON mode, or structured JSON schema output.
         """
+        # Ensure instructions mention JSON when expecting JSON output
+        if response_format == "json" or isinstance(response_format, dict):
+            instructions = "Please respond with valid JSON only.\n" + instructions
         client = OpenAI(api_key=self.openai_api_key)
-        response = client.responses.create(
-            model="gpt-4.1-2025-04-14",
-            instructions=instructions,
-            input=input,
-            temperature=temperature
-        )
-        raw_output = response.output_text
-        # Strip Markdown code fences if present
-        raw_clean = re.sub(r"^```json\s*|\s*```$", "", raw_output.strip())
-        logging.debug(f"Cleaned raw_output (first 500 chars): {repr(raw_clean[:500])}")
+        kwargs = {
+            "model": "gpt-4.1-2025-04-14",
+            "instructions": instructions,
+            "input": input,
+            "temperature": temperature,
+        }
         if response_format == "json":
+            # Structured Outputs for generic JSON object
+            kwargs["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "name": "json_output",
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": True
+                    },
+                    "strict": True
+                }
+            }
+        elif isinstance(response_format, dict):
+            # Structured JSON Schema Mode: wrap raw schema in the required format
+            kwargs["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "name": "structured_output",
+                    "schema": response_format,
+                    "strict": True
+                }
+            }
+        # else: text mode, no extra
+        response = client.responses.create(**kwargs)
+        raw_output = response.output_text
+        if response_format == "json" or isinstance(response_format, dict):
             try:
-                data = json.loads(raw_clean)
+                data = json.loads(raw_output)
             except JSONDecodeError as e:
                 logging.error(f"JSON decode error in call_openai_responses: {e}")
-                logging.error(f"Offending cleaned raw_output: {repr(raw_clean)}")
+                logging.error(f"Offending output: {repr(raw_output)}")
                 raise
             logging.debug(f"Parsed JSON data keys: {list(data.keys())}")
             return data
@@ -316,11 +337,31 @@ class SessionNote:
         Summarize a single scene: get title + bullets and in-world narrative.
         """
         text = open(scene_path, 'r').read()
-        # Bullets + title
+        # Bullets + title using structured JSON schema
+        scene_schema = {
+            "type": "object",
+            "properties": {
+                "scene_title": {"type": "string", "description": "3–8 word descriptive title"},
+                "bullet_points": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 4,
+                    "maxItems": 6,
+                    "description": "4–6 concise bullet strings"
+                }
+            },
+            "required": ["scene_title", "bullet_points"],
+            "additionalProperties": False
+        }
         bullets_data = self.call_openai_responses(
             instructions=PLAIN_BULLETS_PROMPT,
             input=text,
-            response_format="json"
+            response_format={
+                "type": "json_schema",
+                "name": "scene_summary",
+                "schema": scene_schema,
+                "strict": True
+            }
         )
         logging.debug(f"Scene bullets raw data: {bullets_data}")
         summary = SceneSummaryModel.parse_obj(bullets_data)
@@ -343,10 +384,28 @@ class SessionNote:
         ctx = self.metadata.dict().get("context", "")
         prompt = f"Context: {ctx}\n===\n{session_text}"
         logging.debug(f"Generating session summary with prompt (first 500 chars): {repr(prompt[:500])}")
+        # Structured JSON schema to enforce valid session summary
+        summary_schema = {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "tagline": {"type": "string"},
+                "short_summary": {"type": "string"},
+                "summary": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 4,
+                    "maxItems": 8
+                },
+                "location": {"type": "string"}
+            },
+            "required": ["title", "tagline", "short_summary", "summary", "location"],
+            "additionalProperties": False
+        }
         resp = self.call_openai_responses(
             instructions=system_prompt,
             input=prompt,
-            response_format="json"
+            response_format=summary_schema
         )
         logging.debug(f"Session summary response dict keys: {list(resp.keys())}")
         return resp
@@ -1133,33 +1192,46 @@ class SessionNote:
         :param PydanticModel: The Pydantic model for validation.
         :return: Dictionary with cleaned transcript and list of speakers.
         """
-        try:
-            client = OpenAI(api_key=self.openai_api_key)
-            # Prepare instructions by appending style guide if available
-            instructions = system_prompt
-            if self.metadata.style_guide_file and os.path.exists(self.metadata.style_guide_file):
-                with open(self.metadata.style_guide_file, 'r') as sg:
-                    instructions += "\n\nJSON Style Guide:\n" + sg.read()
-            # Use the new Responses endpoint
-            response = client.responses.create(
-                model="gpt-4.1-2025-04-14",
-                instructions=instructions,
-                input=transcript_text,
-                temperature=0.0
-            )
-            # The Responses API returns raw text in response.output_text
-            output = response.output_text
-            # Parse the JSON output into our Pydantic model
-            parsed = PydanticModel.parse_raw(output)
-            result = {
-                "transcript": parsed.transcript,
-                "speakers": parsed.speakers
-            }
-            logging.info("Cleaned transcript obtained from OpenAI Responses endpoint.")
-            return result
-        except Exception as e:
-            logging.error(f"An error occurred while cleaning transcript with OpenAI: {e}")
-            raise
+        # Prepare instructions by appending style guide if available
+        instructions = system_prompt
+        if self.metadata.style_guide_file and os.path.exists(self.metadata.style_guide_file):
+            with open(self.metadata.style_guide_file, 'r') as sg:
+                instructions += "\n\nJSON Style Guide:\n" + sg.read()
+        # Define the transcript schema for structured outputs
+        transcript_schema = {
+            "type": "object",
+            "properties": {
+                "transcript": {"type": "string"},
+                "speakers": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "in_world_character": {"type": ["string", "null"]}
+                        },
+                        "required": ["name", "in_world_character"],
+                        "additionalProperties": False
+                    }
+                }
+            },
+            "required": ["transcript", "speakers"],
+            "additionalProperties": False
+        }
+        # Call through helper to enforce structured JSON output
+        response_data = self.call_openai_responses(
+            instructions=instructions,
+            input=transcript_text,
+            response_format=transcript_schema
+        )
+        # Parse into Pydantic model
+        parsed = PydanticModel.parse_obj(response_data)
+        result = {
+            "transcript": parsed.transcript,
+            "speakers": parsed.speakers
+        }
+        logging.info("Cleaned transcript obtained via helper.")
+        return result
 
     def produce_cleaned_transcript(self):
         """
