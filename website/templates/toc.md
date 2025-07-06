@@ -20,7 +20,8 @@
             - {glob: campaigns/dunmari-frontier-campaign/hoards/}
     - [Treasure](campaigns/dunmari-frontier-campaign/party-treasure.md)
         - [Vindristjarna](things/ships/vindristjarna.md)
-            - [Bastion Facilities](campaigns/dunmari-frontier-campaign/vindristjarna-room-planning.md)
+            - [Bastion Facilities](campaigns/dunmari-frontier-campaign/vindristjarna-bastion-rules.md)
+            - [Mechanics](campaigns/dunmari-frontier-campaign/vindristjarna-mechanics.md)
         - Dunmari Frontier Items
             - {glob: campaigns/dunmari-frontier-campaign/treasure/;things/magic-items/;flatten}
         - Artifacts of Power
@@ -68,7 +69,7 @@
     - Organizations
         - {glob: groups/}
     - [Languages](background/languages.md)
-- [Gazetteer](campaigns/player-s-guide.md)
+- [Gazetteer](background/player-s-guide.md)
     - [World of Taelgar](gazetteer/geography-of-taelgar.md)
         - {glob: gazetteer, exclude: green-sea.md;geography-of-taelgar.md;gazetteer.md;endless-ocean.md;sentinel-range.md}
         - [Green Sea](gazetteer/green-sea.md)

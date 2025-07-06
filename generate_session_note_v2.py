@@ -308,13 +308,21 @@ class SessionNote:
                 }
             }
         elif isinstance(response_format, dict):
-            # Structured JSON Schema Mode: wrap raw schema in the required format
+            # Structured JSON Schema Mode: embed JSON Schema under text.format
+            # Determine if the dict is a full config or a raw schema
+            if "schema" in response_format:
+                schema = response_format["schema"]
+                strict = response_format.get("strict", True)
+            else:
+                schema = response_format
+                strict = True
+            name = response_format.get("name", "structured_output")
             kwargs["text"] = {
                 "format": {
                     "type": "json_schema",
-                    "name": "structured_output",
-                    "schema": response_format,
-                    "strict": True
+                    "name": name,
+                    "strict": strict,
+                    "schema": schema
                 }
             }
         # else: text mode, no extra
