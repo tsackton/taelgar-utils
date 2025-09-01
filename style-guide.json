@@ -21,7 +21,9 @@
     "Lord Soven",
     "Master of Revels",
     "Harrow",
-    "Wend"
+    "Wend",
+    "Dhrukmir",
+    "Magistros"
   ],
   "factions": [
     "Dunmar Fellowship",
@@ -44,11 +46,13 @@
     "Prismwell",
     "Garamjala Desert",
     "Chardon",
-    "Darba"
+    "Darba",
+    "Chataan Mountains"
   ],
   "items": [
     "Amberlight",
-    "Crown of Purity"
+    "Crown of Purity",
+    "chalyte"
   ],
   "creatures": [
     "duskhounds"

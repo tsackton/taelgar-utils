@@ -289,7 +289,7 @@ class SessionNote:
             instructions = "Please respond with valid JSON only.\n" + instructions
         client = OpenAI(api_key=self.openai_api_key)
         kwargs = {
-            "model": "gpt-4.1-2025-04-14",
+            "model": "gpt-5-2025-08-07",
             "instructions": instructions,
             "input": input,
             "temperature": temperature,
