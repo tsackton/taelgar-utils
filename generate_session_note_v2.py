@@ -6,8 +6,6 @@ import webvtt
 import yaml
 import logging
 from json import JSONDecodeError
-import json
-import yaml
 from pathlib import Path
 from datetime import date
 from taelgar_lib.TaelgarDate import TaelgarDate
@@ -18,39 +16,75 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import re
 
+# ----------------------------
+# Model & generation settings
+# ----------------------------
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-thinking")
+DEFAULT_TEMP = float(os.getenv("OPENAI_DEFAULT_TEMP", "0.2"))
+NARRATIVE_TEMP = float(os.getenv("OPENAI_NARRATIVE_TEMP", "0.4"))
+TRANSFORM_TEMP = float(os.getenv("OPENAI_TRANSFORM_TEMP", "0.1"))
+DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "25000"))
+DEFAULT_SEED = os.getenv("OPENAI_SEED")  # optional; may be None
+
+# Optional per-task caps (can be tuned per project)
+MAX_TOKENS_BULLETS = int(os.getenv("OPENAI_MAX_TOKENS_BULLETS", "5000"))
+MAX_TOKENS_NARRATIVE = int(os.getenv("OPENAI_MAX_TOKENS_NARRATIVE", "5000"))
+MAX_TOKENS_SESSION_SUMMARY = int(os.getenv("OPENAI_MAX_TOKENS_SESSION_SUMMARY", "5000"))
+
 # Prompts for scene summarization
 PLAIN_BULLETS_PROMPT = """
-You will receive the raw text of a single scene.
-Return a JSON object with two keys:
-1. "scene_title": a 3–8 word descriptive title for this scene.
-2. "bullet_points": an array of 4–6 concise, precise bullet strings that capture the primary events in this scene. Focus on detail and accuracy. 
-No extra keys. No narrative—just title and bullets.
+You will receive exactly one scene from a D&D session.
+
+Produce:
+- scene_title — 3–8 words, no colon, no episode numbering.
+- bullet_points — 4–6 bullets that capture only the primary events in this scene.
+
+Rules
+- Use past tense and in-world terms; do not mention the DM, dice, rolls, or mechanics.
+- Each bullet is one clear sentence; lead with the key action or outcome.
+- Prefer concrete nouns, named locations, and proper names as spelled in the input.
+- Do not invent events or cross-reference other scenes.
+
+Quality checks
+- Remove filler (“then”, “suddenly”, “basically”) unless needed for meaning.
+- Collapse redundant bullets; keep the 4–6 most important.
 """
 
 IN_WORLD_NARRATIVE_PROMPT = """
-You are a summarizer of D&D session transcripts.
-Your job: write a short, self-contained retelling the events of this scene as an in-world narrative,
-avoiding any meta-game language (no "DM", "rolls", etc.). Your narrative should be between 100-250 words. 
-Focus on key happenings, and character actions, while avoiding flowerly language and carefully following the style guide below.
-Style Guide: 
-- The narrative style is clear, grounded, and concise, balancing practical descriptions of actions with subtle atmospheric detail. 
-- It maintains a strong focus on characters' specific deeds, decisions, and interactions, clearly noting important magical elements or artifacts. 
-- Sentences are typically direct, with restrained use of evocative language, ensuring clarity and readability. 
-- Combat and exploration scenes are described methodically but briefly, emphasizing key strategies, magical effects, and decisive outcomes. 
-- Dialogue and character interactions are succinctly summarized rather than fully quoted. 
-- Occasional descriptive flourishes enhance the sense of atmosphere or mood, yet the prose consistently avoids excessive dramatization or overly ornate language.
+Write a concise in-world retelling of this scene.
+
+Voice & scope
+- 120–200 words, past tense, 1–2 short paragraphs.
+- Third-person neutral (no “I”/“we”), no direct dialogue; summarize speech briefly.
+- No meta-game language (no “DM”, “rolls”, “advantage”, etc.).
+- Emphasize concrete actions, decisions, magic effects, places, and outcomes.
+
+Style
+- Clear, grounded, and restrained—evocative details are fine, but avoid purple prose.
+- Prefer specific names and locations exactly as spelled in the input.
+- Do not introduce new lore or off-scene context.
+
+Exit checks
+- If the scene is mostly travel or setup, focus on the few pivotal beats and the resulting stakes.
 """
 
 SESSION_SUMMARY_PROMPT = """
-Summarize the D&D session described below. Return a JSON object with the following keys:
-1. "title": A short, evocative session title (max 6 words), that would be suitable to use as a chapter title in a book
-2. "tagline": 5-10 words that could be used as a subtitle for the text; it should capture the main event of the narrative succinctly and clearly, 
-    and ALWAYS start with the words *in which* 
-3. "short_summary": Exactly one sentence summarizing the primary gist of the session (for use as a preview).
-4. "summary": An array of 4–8 bullet points highlighting the most important events, discoveries, and plot developments.
-5. "location": The main in-world location(s) where the session takes place, which can be either one or possibly two major places
-     the events happen at or a phrase like on the road between place1 and place2, although you will prefer to choose a single location if possible.
-Do not include any extra keys. Be specific and use in-world names and terminology where possible.
+Summarize the entire session.
+
+Fields
+- title — ≤6 words, evocative, no punctuation at the end.
+- tagline — start with the exact words "in which " (lowercase), 5–10 words total; capture the main event.
+- short_summary — exactly one sentence.
+- summary — 4–8 bullets; each bullet should describe a distinct plot development, discovery, or consequence.
+- location — choose the single primary in-world location whenever reasonable; if travel dominates, prefer “on the road between X and Y”.
+
+Constraints
+- Use in-world names/terminology from the input; do not invent lore or cross-session spoilers.
+- No meta-game terms. Be specific about artifacts, spells, and factions when evident from the text.
+
+Quality checks
+- Bullets should read as outcomes, not notes-to-self (“They discover…”, “The party…”).
+- Avoid redundancy between bullets and short_summary.
 """
 
 # Configure logging
@@ -279,66 +313,72 @@ class SessionNote:
                     examples.append(para)
         return "\n\n".join(f"Example Narrative:\n{e}" for e in examples)
 
-    def call_openai_responses(self, instructions: str, input: str, response_format, temperature: float = 1.0):
+    def call_openai_responses(
+        self,
+        instructions: str,
+        input_text: str,
+        response_format=None,
+        *,
+        temperature: float = DEFAULT_TEMP,
+        max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+        seed: Optional[int] = DEFAULT_SEED
+    ):
         """
-        Wrapper for OpenAI Responses endpoint.
-        Handles text, JSON mode, or structured JSON schema output.
+        Wrapper for the OpenAI Responses endpoint with strict Structured Outputs.
+
+        - `instructions`: developer/system-style rules (keep concise).
+        - `input_text`: user/content payload (scene text, session text, etc.).
+        - `response_format`: either None (text) or a JSON Schema dict (or a dict containing {"schema": ...}).
+        - Deterministic defaults suitable for transform/summarize tasks.
         """
-        # Ensure instructions mention JSON when expecting JSON output
-        if response_format == "json" or isinstance(response_format, dict):
-            instructions = "Please respond with valid JSON only.\n" + instructions
         client = OpenAI(api_key=self.openai_api_key)
+
         kwargs = {
-            "model": "gpt-5-2025-08-07",
+            "model": DEFAULT_MODEL,
             "instructions": instructions,
-            "input": input,
+            "input": input_text,
             "temperature": temperature,
+            "max_output_tokens": max_output_tokens,
         }
-        if response_format == "json":
-            # Structured Outputs for generic JSON object
-            kwargs["text"] = {
-                "format": {
-                    "type": "json_schema",
-                    "name": "json_output",
-                    "schema": {
-                        "type": "object",
-                        "additionalProperties": True
-                    },
-                    "strict": True
-                }
-            }
-        elif isinstance(response_format, dict):
-            # Structured JSON Schema Mode: embed JSON Schema under text.format
-            # Determine if the dict is a full config or a raw schema
-            if "schema" in response_format:
+        if seed is not None:
+            try:
+                kwargs["seed"] = int(seed)
+            except Exception:
+                pass  # ignore invalid seed
+
+        # Enforce schema if provided
+        if response_format is not None:
+            if isinstance(response_format, dict) and "schema" in response_format:
                 schema = response_format["schema"]
                 strict = response_format.get("strict", True)
+                name = response_format.get("name", "structured_output")
             else:
                 schema = response_format
                 strict = True
-            name = response_format.get("name", "structured_output")
+                name = "structured_output"
+
             kwargs["text"] = {
                 "format": {
                     "type": "json_schema",
                     "name": name,
-                    "strict": strict,
-                    "schema": schema
+                    "schema": schema,
+                    "strict": strict
                 }
             }
-        # else: text mode, no extra
+
         response = client.responses.create(**kwargs)
         raw_output = response.output_text
-        if response_format == "json" or isinstance(response_format, dict):
+
+        # Parse JSON if schema was requested
+        if response_format is not None:
             try:
-                data = json.loads(raw_output)
+                return json.loads(raw_output)
             except JSONDecodeError as e:
                 logging.error(f"JSON decode error in call_openai_responses: {e}")
                 logging.error(f"Offending output: {repr(raw_output)}")
                 raise
-            logging.debug(f"Parsed JSON data keys: {list(data.keys())}")
-            return data
-        else:
-            return raw_output
+
+        return raw_output
 
     def summarize_scene(self, scene_path: str) -> SceneSummaryModel:
         """
@@ -363,13 +403,15 @@ class SessionNote:
         }
         bullets_data = self.call_openai_responses(
             instructions=PLAIN_BULLETS_PROMPT,
-            input=text,
+            input_text=text,
             response_format={
                 "type": "json_schema",
                 "name": "scene_summary",
                 "schema": scene_schema,
                 "strict": True
-            }
+            },
+            temperature=TRANSFORM_TEMP,
+            max_output_tokens=MAX_TOKENS_BULLETS
         )
         logging.debug(f"Scene bullets raw data: {bullets_data}")
         summary = SceneSummaryModel.parse_obj(bullets_data)
@@ -378,8 +420,10 @@ class SessionNote:
         narrative_instr += "\n\n" + self._load_example_narratives()
         narrative_text = self.call_openai_responses(
             instructions=narrative_instr,
-            input=text,
-            response_format="text"
+            input_text=text,
+            response_format=None,
+            temperature=NARRATIVE_TEMP,
+            max_output_tokens=MAX_TOKENS_NARRATIVE
         ).strip()
         summary.narrative = narrative_text
         return summary
@@ -412,8 +456,10 @@ class SessionNote:
         }
         resp = self.call_openai_responses(
             instructions=system_prompt,
-            input=prompt,
-            response_format=summary_schema
+            input_text=prompt,
+            response_format=summary_schema,
+            temperature=TRANSFORM_TEMP,
+            max_output_tokens=MAX_TOKENS_SESSION_SUMMARY
         )
         logging.debug(f"Session summary response dict keys: {list(resp.keys())}")
         return resp
@@ -1083,91 +1129,51 @@ class SessionNote:
 
     def generate_transcript_cleaner_prompt(self, speakers: set) -> str:
         """
-        Generate a prompt for the OpenAI API to clean the transcript.
-
-        :param speakers: Set of unique speakers in the transcript.
-        :return: System prompt for the OpenAI API.
+        Generate a concise, rule-based developer prompt for the transcript cleaner.
+        Includes chunk-boundary rules and a bulleted glossary to anchor spellings.
         """
+        # Canonical speakers we want preserved verbatim, plus Unknown
+        preserved_speakers = ["David Kong", "David Schwartz", "Eric Rosenbaum", "Kate Sackton", "Mike Sackton"]
+        dm_hint = "Tim Sackton = DM. If obvious DM lines are misattributed to other speakers, correct them."
 
-        characters = ", ".join(self.metadata.characters or [])
-        world_info = ", ".join(self.world_info or [])
-        speakers = ", ".join(speakers)
+        # Bulleted glossary (cleaner than a comma list)
+        glossary_lines = []
+        for term in sorted(set(self.world_info or [])):
+            t = str(term).strip()
+            if t:
+                glossary_lines.append(f"- {t}")
+        glossary_text = "\n".join(glossary_lines) if glossary_lines else "- (none)"
 
-        if self.metadata.vtt_file:
-            # System prompt guiding the transcript cleaner
-            prompt = """
-            You are an expert transcript cleaner for tabletop roleplaying game sessions. Your goal is to take an automated or messy transcript chunk and return a fully cleaned version, preserving every line of dialogue in order while correcting only actual errors.
+        base_rules = f"""
+    You are a transcript cleaner for a D&D session.
 
-            Tasks & Scope
-            1. Error Types to Fix:
-               - Spelling mistakes (including proper nouns)
-               - Filler words (e.g., “um,” “uh,” “like”)
-               - Broken punctuation and capitalization
-               - Mis-attributed speakers and timestamp artefacts
-            2. Structure & Content Preservation:
-               - Keep the exact sequence and timing of utterances
-               - Do not remove any non-filler content or shorten dialogue
-               - Preserve all speaker labels; correct typos only
-            3. Style & Terminology Reference:
-               - Refer to the JSON style guide file if provided by the metadata
-            4. Chunk Context:
-               - Chunks may overlap by a few sentences—use that for continuity but clean only this chunk
+    GOAL
+    - Preserve every line and order; fix only real errors (spelling incl. proper nouns, casing, punctuation, obvious ASR glitches).
+    - Reassign speaker lines ONLY when obviously misattributed.
 
-            Example
-            Input:
-            “um I think we shoud– ran… . . . Delwth: hey DM can we move on?”
-            Output:
-            “I think we should run…
-            Delwath: Hey DM, can we move on?”
+    DON’TS
+    - Do not shorten or rewrite content.
+    - Do not invent speakers/content.
+    - No meta-game/mechanics.
+    - If speaker uncertainty < 90% → leave as "Unknown".
 
-            Output Format:
-            Return a JSON object with:
-            - "transcript": the full cleaned text
-            - "speakers": list of {"name": "...", "in_world_character": "..."} entries
+    SPEAKER POLICY
+    - Preserve exact spellings for: {", ".join(preserved_speakers)}.
+    - {dm_hint}
 
-            """
-            return prompt
+    CHUNK RULES
+    - Chunks may overlap. If a line repeats due to overlap, keep the later occurrence only.
+    - If a line is cut mid-sentence at the boundary, keep it as-is; do not invent continuation.
 
-        if self.metadata.audio_file and not self.metadata.vtt_file:
-            prompt = """
-            You are a transcript cleaner for tabletop roleplaying game sessions, particularly for Dungeons & Dragons. You will receive a transcript that
-            was produced with automated transcription software, and may have errors. Your goal is to **maintain the original intent, tone, length, and content** 
-            of the transcript while **cleaning up spelling, grammar, readabilit, and especially transcription errors**. 
+    GLOSSARY (exact spellings; use only these names/terms):
+    {glossary_text}
 
-            You should focus on the following points:
-            1. **Do not remove any content** unless it is clearly a filler word (e.g., "um," "uh," "like") or a repeated phrase. Ensure the dialogue flows naturally.
-            2. **Do not remove or shorten dialogue** or descriptive content. The cleaned transcript should be **as close in length as the original**, while 
-            improving flow, clarity, and readability.
+    OUTPUT
+    - Must follow the provided JSON Schema exactly.
+    - Transform, not rewrite: keep length within ±5% of input character count.
+    """.strip()
 
-            Follow these STRICT RULES for updating speakers:
-            1. **Preserve David Kong, David Schwartz, and Eric Rosenbaum speaker names precisely as they are in the input**. 
-            2. The audio transcription software may have trouble distinguishing between Tim Sackton (who is the DM) and Mike Sackton (who plays the character Delwath).
-            Please attempt to guess which dialogue lines are DM lines and which are Delwath's lines, and correct assignment errors. You may in this case 
-            replace dialogue assignments and labels with the correct speaker. HOWEVER, DO NOT CHANGE OTHER SPEAKER NAMES. Other speakers who are not Tim
-            Sackton, Mike Sackton, or Unknown should be preserved.
-            3. There are some dialogue lines that are assigned to an unknown speaker. You can assign these lines to the correct speaker** based on the context, 
-            if it is obvious who is speaking. If it is not clear, you can leave the speaker as Unknown. Only assign Unkown speakers if you are confident in the prediction.
-            
-            Correct spelling of in-world characters and locations:
-            """
-            prompt += world_info + "\n"
-
-            prompt += """
-
-            ### Output Instructions:
-            1. **Return the cleaned transcript** that is equal in length to the original. Every speaker's dialogue must be preserved.
-            2. **Return a list of speakers found in the transcript**, mapping each speaker to a known character in the game. Note this may be altered by 
-            error correction. 
-            """
-            prompt += "\n**Known Speakers:**" + speakers
-            prompt += "\n**Known Characters:**" + characters + ", DM\n"
-            prompt += """
-
-            """
-            return prompt
-    
-        # if we get here, we don't have a vtt and we don't have audio. throw an error
-        raise ValueError("No audio or VTT file found. Cannot generate transcript cleaner prompt.")
+        return base_rules
 
 
     def extract_unique_speakers(self, transcript_text: str) -> set:
@@ -1227,10 +1233,14 @@ class SessionNote:
             "additionalProperties": False
         }
         # Call through helper to enforce structured JSON output
+        # approximate cap based on input size; keeps transform bounded
+        approx_tokens = max(10000, min(50000, int(len(transcript_text) / 2)))
         response_data = self.call_openai_responses(
             instructions=instructions,
-            input=transcript_text,
-            response_format=transcript_schema
+            input_text=transcript_text,
+            response_format=transcript_schema,
+            temperature=TRANSFORM_TEMP,
+            max_output_tokens=approx_tokens
         )
         # Parse into Pydantic model
         parsed = PydanticModel.parse_obj(response_data)
