@@ -1083,7 +1083,6 @@ def transcribe_audio_chunk_integrated(self, chunk_metadata) -> Optional[List[Dic
 
     return diarized_entries
 
-
     def combine_transcriptions(self, chunk_transcriptions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Combine transcriptions from multiple chunks into a single transcript.

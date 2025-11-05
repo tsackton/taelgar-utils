@@ -236,9 +236,16 @@ def cmd_run(args) -> int:
         example_files=examples,
     )
 
-    # Import SessionNote lazily
+    # Import SessionNote lazily from local file to avoid shadowing by other modules
     try:
-        from generate_session_note_v2 import SessionNote  # type: ignore
+        import importlib.util, pathlib
+        mod_path = pathlib.Path(__file__).with_name("generate_session_note_v2.py")
+        spec = importlib.util.spec_from_file_location("taelgar_generate_session_note_v2", str(mod_path))
+        if spec is None or spec.loader is None:
+            raise ModuleNotFoundError("generate_session_note_v2")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[arg-type]
+        SessionNote = getattr(mod, "SessionNote")
     except ModuleNotFoundError as e:
         missing = str(e).split("'")[-2] if "'" in str(e) else str(e)
         print(
@@ -316,7 +323,14 @@ def cmd_validate(args) -> int:
     )
 
     try:
-        from generate_session_note_v2 import SessionNote  # type: ignore
+        import importlib.util, pathlib
+        mod_path = pathlib.Path(__file__).with_name("generate_session_note_v2.py")
+        spec = importlib.util.spec_from_file_location("taelgar_generate_session_note_v2", str(mod_path))
+        if spec is None or spec.loader is None:
+            raise ModuleNotFoundError("generate_session_note_v2")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[arg-type]
+        SessionNote = getattr(mod, "SessionNote")
     except ModuleNotFoundError as e:
         missing = str(e).split("'")[-2] if "'" in str(e) else str(e)
         print(
