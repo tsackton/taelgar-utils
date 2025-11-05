@@ -98,14 +98,34 @@ Prompts used by the pipeline are now externalized in `prompts/` and can be edite
 Notes:
 - If these files are missing, the code falls back to built-in defaults.
 - You can override a specific prompt path via environment variable `PROMPT_<NAME>`, where `<NAME>` is the filename stem uppercased. For example:
-	- `PROMPT_SCENE_BULLETS=/path/to/custom_bullets.md`
-	- `PROMPT_SCENE_NARRATIVE=/path/to/custom_narrative.md`
-	- `PROMPT_SESSION_SUMMARY=/path/to/custom_session_summary.md`
-	- `PROMPT_TRANSCRIPT_CLEANER=/path/to/custom_cleaner.md`
+  - `PROMPT_SCENE_BULLETS=/path/to/custom_bullets.md`
+  - `PROMPT_SCENE_NARRATIVE=/path/to/custom_narrative.md`
+  - `PROMPT_SESSION_SUMMARY=/path/to/custom_session_summary.md`
+  - `PROMPT_TRANSCRIPT_CLEANER=/path/to/custom_cleaner.md`
 - The transcript cleaner template supports placeholders that are filled at runtime:
-	- `{preserved_speakers}`, `{dm_hint}`, `{glossary_text}`
+  - `{preserved_speakers}`, `{dm_hint}`, `{glossary_text}`
 
-### Requirements
+### Model configuration (Phase B - models extracted)
+
+Model choices and settings are now defined in `profiles/default.yaml`. You can create alternative profiles (e.g., `profiles/fast.yaml`, `profiles/quality.yaml`) and switch using the `PIPELINE_PROFILE` environment variable.
+
+```bash
+PIPELINE_PROFILE=fast python3 session_cli.py run --args-yaml args.example.yaml
+```
+
+Each profile specifies per-step models:
+- `cleaner` — transcript cleaning (chunked, schema-validated transform)
+- `scene_bullets` — scene title + bullet points
+- `scene_narrative` — in-world narrative for each scene
+- `session_summary` — session-level summary/frontmatter
+
+Each step config includes:
+- `id` — OpenAI model name (e.g., gpt-4o, gpt-4o-mini)
+- `temperature` — sampling temperature
+- `max_output_tokens` — token cap
+- `seed` — optional seed for determinism
+
+Audio chunking and cleaning defaults are also in the profile. See `profiles/default.yaml` for an example. If the profile file is missing, the code falls back to environment variables and hard-coded defaults.### Requirements
 
 `session_cli.py` reuses the existing implementation in `generate_session_note_v2.py` and expects these packages to be installed (plus standard libs):
 

@@ -135,6 +135,7 @@ def _add_common_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--campaign-name", type=str, help="Campaign display name (defaults to --campaign)")
     p.add_argument("--players", type=str, help="Comma/semicolon-separated list of players")
     p.add_argument("--dm", type=str, help="Dungeon Master name")
+    p.add_argument("--profile", type=str, help="Profile name (e.g., default, fast); uses profiles/<name>.yaml")
 
     p.add_argument("--audio", type=str, help="Path to audio file")
     p.add_argument("--diarization", type=str, help="Path to diarization JSON (required if using --audio)")
@@ -166,7 +167,7 @@ def _apply_yaml_defaults(parser: argparse.ArgumentParser, subparsers: Dict[str, 
     def norm_key(k: str) -> str:
         return (k or "").replace("-", "_")
 
-    # Map 'from'/'to' to parser dests
+    # Map 'from'/'to' to parser dests; also accept 'profile' from YAML
     mapped: Dict[str, Any] = {}
     for k, v in raw.items():
         nk = norm_key(k)
@@ -197,6 +198,10 @@ def _apply_yaml_defaults(parser: argparse.ArgumentParser, subparsers: Dict[str, 
 
 
 def cmd_run(args) -> int:
+    # Apply profile before any steps run
+    if getattr(args, "profile", None):
+        os.environ["PIPELINE_PROFILE"] = args.profile
+
     ensure_step_bounds(args.from_step, args.to_step)
 
     players = parse_players(args.players)
@@ -211,7 +216,7 @@ def cmd_run(args) -> int:
     if args.from_step == "audio" and args.vtt and not args.audio:
         print("[info] --from audio with --vtt provided: will use WebVTT path for transcript.")
     if args.audio and not args.diarization and not args.vtt:
-        print("[warn] --audio provided without --diarization; transcribe step will fail unless diarization exists in metadata.", file=sys.stderr)
+        print("[info] --audio provided without --diarization; will attempt integrated diarization via OpenAI if available.")
 
     # Build temporary metadata YAML to satisfy SessionNote's current API
     meta_path = build_temp_metadata(
@@ -286,6 +291,10 @@ def _print_exists(label: str, path: Optional[str]):
 
 
 def cmd_validate(args) -> int:
+    # Apply profile before SessionNote loads
+    if getattr(args, "profile", None):
+        os.environ["PIPELINE_PROFILE"] = args.profile
+
     players = parse_players(args.players)
     examples = parse_players(args.examples)
 

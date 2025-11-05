@@ -18,20 +18,44 @@ import re
 import inspect
 
 # ----------------------------
-# Model & generation settings
+# Profile & model loading
 # ----------------------------
-DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-5")
+PROFILE_DIR = os.getenv("PROFILE_DIR", "profiles")
+PROFILE_NAME = os.getenv("PIPELINE_PROFILE", "default")
+
+def _load_profile() -> dict:
+    """Load model/config from profiles/<name>.yaml; fall back to env vars and hard defaults."""
+    profile_path = os.path.join(PROFILE_DIR, f"{PROFILE_NAME}.yaml")
+    profile = {}
+    if os.path.exists(profile_path):
+        try:
+            with open(profile_path, "r") as f:
+                profile = yaml.safe_load(f) or {}
+            logging.info(f"Loaded profile: {profile_path}")
+        except Exception as e:
+            logging.warning(f"Failed to load profile {profile_path}: {e}")
+    return profile
+
+_PROFILE = _load_profile()
+
+def _get_model_config(step_name: str) -> dict:
+    """Return model config dict for a step (id, temperature, max_output_tokens, seed)."""
+    models = _PROFILE.get("models", {})
+    step_cfg = models.get(step_name, {})
+    return {
+        "id": step_cfg.get("id", os.getenv("OPENAI_MODEL", "gpt-4o")),
+        "temperature": step_cfg.get("temperature", float(os.getenv("OPENAI_DEFAULT_TEMP", "0.2"))),
+        "max_output_tokens": step_cfg.get("max_output_tokens", int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "5000"))),
+        "seed": step_cfg.get("seed") or os.getenv("OPENAI_SEED"),
+    }
+
+# Backward-compat env var fallbacks (deprecated but kept for safety)
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 DEFAULT_TEMP = float(os.getenv("OPENAI_DEFAULT_TEMP", "0.2"))
-NARRATIVE_TEMP = float(os.getenv("OPENAI_NARRATIVE_TEMP", "1"))
+NARRATIVE_TEMP = float(os.getenv("OPENAI_NARRATIVE_TEMP", "1.0"))
 TRANSFORM_TEMP = float(os.getenv("OPENAI_TRANSFORM_TEMP", "0.1"))
-DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "25000"))
+DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "5000"))
 DEFAULT_SEED = os.getenv("OPENAI_SEED")  # optional; may be None
-
-
-# Optional per-task caps (can be tuned per project)
-MAX_TOKENS_BULLETS = int(os.getenv("OPENAI_MAX_TOKENS_BULLETS", "5000"))
-MAX_TOKENS_NARRATIVE = int(os.getenv("OPENAI_MAX_TOKENS_NARRATIVE", "5000"))
-MAX_TOKENS_SESSION_SUMMARY = int(os.getenv("OPENAI_MAX_TOKENS_SESSION_SUMMARY", "5000"))
 
 # Helper to detect models that do NOT support temperature
 def _supports_temperature(model_name: str) -> bool:
@@ -237,12 +261,15 @@ class SessionNote:
     ######################
 
     def get_audio_config(self) -> Dict[str, Any]:
-        return {'audio_file': self.metadata.audio_file,
-                'chunk_size_mb': 20,
-                'overlap_ms': 1000,
-                'output_format': 'mp3',
-                'sample_rate': 16000,
-                'bitrate': "64k" }
+        audio_cfg = _PROFILE.get("audio", {})
+        return {
+            'audio_file': self.metadata.audio_file,
+            'chunk_size_mb': audio_cfg.get('chunk_size_mb', 20),
+            'overlap_ms': audio_cfg.get('overlap_ms', 1000),
+            'output_format': audio_cfg.get('output_format', 'mp3'),
+            'sample_rate': audio_cfg.get('sample_rate', 16000),
+            'bitrate': audio_cfg.get('bitrate', "64k"),
+        }
 
     def get_world_info(self) -> List[str]:
         """
@@ -381,9 +408,10 @@ class SessionNote:
         input_text: str,
         response_format=None,
         *,
-        temperature: float = DEFAULT_TEMP,
+        temperature: Optional[float] = None,
         max_output_tokens: Optional[int] = None,
-        seed: Optional[int] = DEFAULT_SEED
+        seed: Optional[int] = None,
+        model_id: Optional[str] = None
     ):
         """
         Wrapper for the OpenAI Responses endpoint with strict Structured Outputs.
@@ -391,11 +419,11 @@ class SessionNote:
         - `instructions`: developer/system-style rules (keep concise).
         - `input_text`: user/content payload (scene text, session text, etc.).
         - `response_format`: either None (text) or a JSON Schema dict (or a dict containing {"schema": ...}).
-        - Deterministic defaults suitable for transform/summarize tasks.
+        - `model_id`, `temperature`, `max_output_tokens`, `seed` can be overridden; if None, uses defaults.
         """
         client = OpenAI(api_key=self.openai_api_key)
 
-        model_name = _normalize_model_name(DEFAULT_MODEL)
+        model_name = _normalize_model_name(model_id or DEFAULT_MODEL)
         kwargs = {
             "model": model_name,
             "instructions": instructions,
@@ -550,6 +578,7 @@ class SessionNote:
             "required": ["scene_title", "bullet_points"],
             "additionalProperties": False
         }
+        bullets_cfg = _get_model_config("scene_bullets")
         bullets_data = self.call_openai_responses(
             instructions=PLAIN_BULLETS_PROMPT,
             input_text=text,
@@ -559,18 +588,25 @@ class SessionNote:
                 "schema": scene_schema,
                 "strict": True
             },
-            temperature=TRANSFORM_TEMP
+            temperature=bullets_cfg["temperature"],
+            max_output_tokens=bullets_cfg["max_output_tokens"],
+            seed=bullets_cfg["seed"],
+            model_id=bullets_cfg["id"]
         )
         logging.debug(f"Scene bullets raw data: {bullets_data}")
         summary = SceneSummaryModel.parse_obj(bullets_data)
         # In-world narrative with examples
         narrative_instr = IN_WORLD_NARRATIVE_PROMPT
         narrative_instr += "\n\n" + self._load_example_narratives()
+        narrative_cfg = _get_model_config("scene_narrative")
         narrative_text = self.call_openai_responses(
             instructions=narrative_instr,
             input_text=text,
             response_format=None,
-            temperature=NARRATIVE_TEMP
+            temperature=narrative_cfg["temperature"],
+            max_output_tokens=narrative_cfg["max_output_tokens"],
+            seed=narrative_cfg["seed"],
+            model_id=narrative_cfg["id"]
         ).strip()
         summary.narrative = narrative_text
         return summary
@@ -601,11 +637,15 @@ class SessionNote:
             "required": ["title", "tagline", "short_summary", "summary", "location"],
             "additionalProperties": False
         }
+        summary_cfg = _get_model_config("session_summary")
         resp = self.call_openai_responses(
             instructions=system_prompt,
             input_text=prompt,
             response_format=summary_schema,
-            temperature=TRANSFORM_TEMP
+            temperature=summary_cfg["temperature"],
+            max_output_tokens=summary_cfg["max_output_tokens"],
+            seed=summary_cfg["seed"],
+            model_id=summary_cfg["id"]
         )
         logging.debug(f"Session summary response dict keys: {list(resp.keys())}")
         return resp
@@ -1359,7 +1399,8 @@ OUTPUT
         self,
         transcript_text: str,
         system_prompt: str,
-        PydanticModel: BaseModel
+        PydanticModel: BaseModel,
+        model_config: Optional[dict] = None
     ) -> Dict[str, Any]:
         """
         Call OpenAI to clean the transcript using the structured output format.
@@ -1367,6 +1408,7 @@ OUTPUT
         :param transcript_text: The raw transcript as input.
         :param system_prompt: System prompt to guide the GPT model.
         :param PydanticModel: The Pydantic model for validation.
+        :param model_config: Optional dict with id, temperature, max_output_tokens, seed.
         :return: Dictionary with cleaned transcript and list of speakers.
         """
         # Prefer typed parsing via Responses.parse with the Pydantic model provided
@@ -1378,8 +1420,10 @@ OUTPUT
             with open(self.metadata.style_guide_file, 'r') as sg:
                 instructions += "\n\nJSON Style Guide:\n" + sg.read()
 
-        # Choose a model that is known-good for typed parsing and schema adherence
-        parse_model = _normalize_model_name(DEFAULT_MODEL)
+        # Model config from profile or fallback
+        if model_config is None:
+            model_config = _get_model_config("cleaner")
+        parse_model = _normalize_model_name(model_config["id"])
 
         # Max tokens guard – generous but finite; keep deterministic temp if supported
         kwargs = {
@@ -1388,8 +1432,15 @@ OUTPUT
             "input": transcript_text,
             "text_format": PydanticModel,
         }
-        if _supports_temperature(parse_model):
-            kwargs["temperature"] = TRANSFORM_TEMP
+        if _supports_temperature(parse_model) and model_config.get("temperature") is not None:
+            kwargs["temperature"] = model_config["temperature"]
+        if model_config.get("max_output_tokens"):
+            kwargs["max_output_tokens"] = model_config["max_output_tokens"]
+        if model_config.get("seed"):
+            try:
+                kwargs["seed"] = int(model_config["seed"])
+            except Exception:
+                pass
 
         response = client.responses.parse(**kwargs)
         # Log token usage for parse() as well
@@ -1483,8 +1534,8 @@ OUTPUT
         aggregated_speaker_character = {}
         cleaned_pieces = []
 
-        # Step 1: Split raw transcript into chunks of around 3000 words
-        raw_pieces = self.split_transcript_into_chunks(raw_transcript, word_limit=3000)
+        # Step 1: Split raw transcript into chunks; limit from profile or default 3000
+        raw_pieces = self.split_transcript_into_chunks(raw_transcript)
 
         try:
             chunk_count = 1
@@ -1516,8 +1567,11 @@ OUTPUT
             raise
 
 
-    def split_transcript_into_chunks(self, raw_transcript, word_limit=2000):
+    def split_transcript_into_chunks(self, raw_transcript, word_limit=None):
         """Split the transcript into chunks of approximately word_limit words."""
+        if word_limit is None:
+            # Try loading from profile, fallback to 3000
+            word_limit = _PROFILE.get("cleaning", {}).get("chunk_word_limit", 3000)
         with open(raw_transcript, 'r') as f:
             transcript_text = f.read()
         transcript_pieces = transcript_text.split('\n')
@@ -1549,10 +1603,12 @@ OUTPUT
         logging.debug(f"System prompt for chunk {chunk_count}:\n{system_prompt}")
 
         # Step 4: Get cleaned transcript and speaker->character mapping from OpenAI
+        cleaner_cfg = _get_model_config("cleaner")
         cleaned_result = self.get_cleaned_transcript_from_openai(
             transcript_text=transcript_chunk,
             system_prompt=system_prompt,
-            PydanticModel=TranscriptModel
+            PydanticModel=TranscriptModel,
+            model_config=cleaner_cfg
         )
         
         # Log the cleaned transcript and speakers from OpenAI
