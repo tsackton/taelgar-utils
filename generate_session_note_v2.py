@@ -15,21 +15,57 @@ from pydub import AudioSegment
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import re
+import inspect
 
 # ----------------------------
 # Model & generation settings
 # ----------------------------
-DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-thinking")
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-5")
 DEFAULT_TEMP = float(os.getenv("OPENAI_DEFAULT_TEMP", "0.2"))
-NARRATIVE_TEMP = float(os.getenv("OPENAI_NARRATIVE_TEMP", "0.4"))
+NARRATIVE_TEMP = float(os.getenv("OPENAI_NARRATIVE_TEMP", "1"))
 TRANSFORM_TEMP = float(os.getenv("OPENAI_TRANSFORM_TEMP", "0.1"))
 DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "25000"))
 DEFAULT_SEED = os.getenv("OPENAI_SEED")  # optional; may be None
+
 
 # Optional per-task caps (can be tuned per project)
 MAX_TOKENS_BULLETS = int(os.getenv("OPENAI_MAX_TOKENS_BULLETS", "5000"))
 MAX_TOKENS_NARRATIVE = int(os.getenv("OPENAI_MAX_TOKENS_NARRATIVE", "5000"))
 MAX_TOKENS_SESSION_SUMMARY = int(os.getenv("OPENAI_MAX_TOKENS_SESSION_SUMMARY", "5000"))
+
+# Helper to detect models that do NOT support temperature
+def _supports_temperature(model_name: str) -> bool:
+    """Return True if this model supports the `temperature` parameter."""
+    m = (model_name or "").lower()
+    # Reasoning / thinking families typically do not allow temperature tuning
+    if m.startswith("o1") or m.startswith("o3"):
+        return False
+    if m.startswith("gpt-5"):
+        return False
+    if "thinking" in m or "reason" in m:
+        return False
+    return True
+
+# Helper to normalize model names (legacy/ChatGPT UI labels)
+def _normalize_model_name(model_name: str) -> str:
+    """Map legacy/ChatGPT UI labels to API model IDs where possible."""
+    m = (model_name or "").strip()
+    lower = m.lower()
+    # Common mislabels seen in logs / configs
+    aliases = {
+        "gpt5-thinking": "gpt-5",
+        "gpt-5-thinking": "gpt-5",
+        "gpt5": "gpt-5",
+    }
+    return aliases.get(lower, m)
+
+# Feature-detect support for response_format param on Responses.create
+def _supports_response_format(client) -> bool:
+    """Return True if this SDK exposes a `response_format` parameter on Responses.create."""
+    try:
+        return "response_format" in inspect.signature(client.responses.create).parameters
+    except Exception:
+        return False
 
 # Prompts for scene summarization
 PLAIN_BULLETS_PROMPT = """
@@ -320,7 +356,7 @@ class SessionNote:
         response_format=None,
         *,
         temperature: float = DEFAULT_TEMP,
-        max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+        max_output_tokens: Optional[int] = None,
         seed: Optional[int] = DEFAULT_SEED
     ):
         """
@@ -333,52 +369,139 @@ class SessionNote:
         """
         client = OpenAI(api_key=self.openai_api_key)
 
+        model_name = _normalize_model_name(DEFAULT_MODEL)
         kwargs = {
-            "model": DEFAULT_MODEL,
+            "model": model_name,
             "instructions": instructions,
             "input": input_text,
-            "temperature": temperature,
-            "max_output_tokens": max_output_tokens,
         }
+        if max_output_tokens is not None:
+            kwargs["max_output_tokens"] = max_output_tokens
+
+        # Only include `temperature` for models that support it (reasoning/"thinking" models reject it)
+        if temperature is not None and _supports_temperature(model_name):
+            kwargs["temperature"] = temperature
+        else:
+            logging.debug(f"Skipping temperature for model {model_name}")
+
         if seed is not None:
             try:
                 kwargs["seed"] = int(seed)
             except Exception:
                 pass  # ignore invalid seed
 
-        # Enforce schema if provided
+        # Enforce structured output if a schema was provided
+        use_rf = _supports_response_format(client)
         if response_format is not None:
+            # Allow two caller styles:
+            #  (A) response_format is a dict with keys {"type": "json_schema", "name", "schema", "strict"}
+            #  (B) response_format is a raw JSON Schema dict
             if isinstance(response_format, dict) and "schema" in response_format:
                 schema = response_format["schema"]
-                strict = response_format.get("strict", True)
+                strict = bool(response_format.get("strict", True))
                 name = response_format.get("name", "structured_output")
             else:
                 schema = response_format
                 strict = True
                 name = "structured_output"
 
-            kwargs["text"] = {
-                "format": {
+            if use_rf:
+                kwargs["response_format"] = {
                     "type": "json_schema",
-                    "name": name,
-                    "schema": schema,
-                    "strict": strict
+                    "json_schema": {
+                        "name": name,
+                        "strict": strict,
+                        "schema": schema,
+                    },
                 }
-            }
+            else:
+                kwargs["text"] = {
+                    "format": {
+                        "type": "json_schema",
+                        "name": name,
+                        "schema": schema,
+                        "strict": strict,
+                    }
+                }
 
+        # Single create call (no try/except fallback noise)
         response = client.responses.create(**kwargs)
-        raw_output = response.output_text
+        # Log token usage if available (helps diagnose truncation/empty outputs)
+        try:
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                def _get(obj, name):
+                    return getattr(obj, name, None) if hasattr(obj, name) else (obj.get(name) if isinstance(obj, dict) else None)
+                input_tokens = _get(usage, "input_tokens")
+                output_tokens = _get(usage, "output_tokens")
+                total_tokens = _get(usage, "total_tokens")
+                details = _get(usage, "output_tokens_details")
+                reasoning_tokens = _get(details, "reasoning_tokens") if details is not None else None
+                logging.info(f"Responses.create usage — input: {input_tokens}, output: {output_tokens}, reasoning: {reasoning_tokens}, total: {total_tokens}")
+        except Exception as _e:
+            logging.debug(f"Unable to log usage tokens for create(): {_e}")
 
-        # Parse JSON if schema was requested
+        # Prefer parsed/JSON outputs when a schema is requested; fall back gracefully otherwise
         if response_format is not None:
-            try:
-                return json.loads(raw_output)
-            except JSONDecodeError as e:
-                logging.error(f"JSON decode error in call_openai_responses: {e}")
-                logging.error(f"Offending output: {repr(raw_output)}")
-                raise
+            # 1) Newer SDKs expose a convenience property
+            parsed = getattr(response, "output_parsed", None)
+            if parsed is not None:
+                return parsed
 
-        return raw_output
+            # 2) Inspect the low-level output array for JSON-bearing items
+            try:
+                output_items = getattr(response, "output", []) or []
+                for item in output_items:
+                    contents = getattr(item, "content", []) or []
+                    for c in contents:
+                        ctype = getattr(c, "type", None)
+                        # Some SDK versions emit a dedicated JSON carrier
+                        if ctype in ("output_json", "json") and hasattr(c, "json"):
+                            json_obj = getattr(c, "json")
+                            if json_obj is not None:
+                                return json_obj
+                        # Older/newer variants may still deliver JSON as text
+                        if ctype in ("output_text", "text") and getattr(c, "text", None):
+                            try:
+                                return json.loads(c.text)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+            # 3) Last resort: aggregate text and parse
+            raw_output = getattr(response, "output_text", None)
+            if isinstance(raw_output, str) and raw_output.strip():
+                try:
+                    return json.loads(raw_output)
+                except JSONDecodeError as e:
+                    logging.error(f"JSON decode error in call_openai_responses: {e}")
+                    logging.error(f"Offending output: {repr(raw_output)}")
+                    raise
+
+            # If we get here, the SDK likely returned no text output (known regression in some releases)
+            raise RuntimeError(
+                "Empty structured output from model. Consider upgrading the openai Python SDK or inspect `response.output` for JSON parts."
+            )
+
+        # Non-structured (plain text) path
+        raw_output = getattr(response, "output_text", None)
+        if isinstance(raw_output, str) and raw_output.strip():
+            return raw_output
+        # Fallback to assembling from content parts
+        try:
+            output_items = getattr(response, "output", []) or []
+            texts = []
+            for item in output_items:
+                contents = getattr(item, "content", []) or []
+                for c in contents:
+                    if getattr(c, "type", None) in ("output_text", "text") and getattr(c, "text", None):
+                        texts.append(c.text)
+            if texts:
+                return "".join(texts)
+        except Exception:
+            pass
+        return ""
 
     def summarize_scene(self, scene_path: str) -> SceneSummaryModel:
         """
@@ -410,8 +533,7 @@ class SessionNote:
                 "schema": scene_schema,
                 "strict": True
             },
-            temperature=TRANSFORM_TEMP,
-            max_output_tokens=MAX_TOKENS_BULLETS
+            temperature=TRANSFORM_TEMP
         )
         logging.debug(f"Scene bullets raw data: {bullets_data}")
         summary = SceneSummaryModel.parse_obj(bullets_data)
@@ -422,8 +544,7 @@ class SessionNote:
             instructions=narrative_instr,
             input_text=text,
             response_format=None,
-            temperature=NARRATIVE_TEMP,
-            max_output_tokens=MAX_TOKENS_NARRATIVE
+            temperature=NARRATIVE_TEMP
         ).strip()
         summary.narrative = narrative_text
         return summary
@@ -458,8 +579,7 @@ class SessionNote:
             instructions=system_prompt,
             input_text=prompt,
             response_format=summary_schema,
-            temperature=TRANSFORM_TEMP,
-            max_output_tokens=MAX_TOKENS_SESSION_SUMMARY
+            temperature=TRANSFORM_TEMP
         )
         logging.debug(f"Session summary response dict keys: {list(resp.keys())}")
         return resp
@@ -1206,49 +1326,109 @@ class SessionNote:
         :param PydanticModel: The Pydantic model for validation.
         :return: Dictionary with cleaned transcript and list of speakers.
         """
-        # Prepare instructions by appending style guide if available
+        # Prefer typed parsing via Responses.parse with the Pydantic model provided
+        client = OpenAI(api_key=self.openai_api_key)
+
+        # Build the instructions (append JSON style guide if present)
         instructions = system_prompt
         if self.metadata.style_guide_file and os.path.exists(self.metadata.style_guide_file):
             with open(self.metadata.style_guide_file, 'r') as sg:
                 instructions += "\n\nJSON Style Guide:\n" + sg.read()
-        # Define the transcript schema for structured outputs
-        transcript_schema = {
-            "type": "object",
-            "properties": {
-                "transcript": {"type": "string"},
-                "speakers": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "in_world_character": {"type": ["string", "null"]}
-                        },
-                        "required": ["name", "in_world_character"],
-                        "additionalProperties": False
-                    }
-                }
-            },
-            "required": ["transcript", "speakers"],
-            "additionalProperties": False
+
+        # Choose a model that is known-good for typed parsing and schema adherence
+        parse_model = _normalize_model_name(DEFAULT_MODEL)
+
+        # Max tokens guard – generous but finite; keep deterministic temp if supported
+        kwargs = {
+            "model": parse_model,
+            "instructions": instructions,
+            "input": transcript_text,
+            "text_format": PydanticModel,
         }
-        # Call through helper to enforce structured JSON output
-        # approximate cap based on input size; keeps transform bounded
-        approx_tokens = max(10000, min(50000, int(len(transcript_text) / 2)))
-        response_data = self.call_openai_responses(
-            instructions=instructions,
-            input_text=transcript_text,
-            response_format=transcript_schema,
-            temperature=TRANSFORM_TEMP,
-            max_output_tokens=approx_tokens
-        )
-        # Parse into Pydantic model
-        parsed = PydanticModel.parse_obj(response_data)
+        if _supports_temperature(parse_model):
+            kwargs["temperature"] = TRANSFORM_TEMP
+
+        response = client.responses.parse(**kwargs)
+        # Log token usage for parse() as well
+        try:
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                def _get(obj, name):
+                    return getattr(obj, name, None) if hasattr(obj, name) else (obj.get(name) if isinstance(obj, dict) else None)
+                input_tokens = _get(usage, "input_tokens")
+                output_tokens = _get(usage, "output_tokens")
+                total_tokens = _get(usage, "total_tokens")
+                details = _get(usage, "output_tokens_details")
+                reasoning_tokens = _get(details, "reasoning_tokens") if details is not None else None
+                logging.info(f"Responses.parse usage — input: {input_tokens}, output: {output_tokens}, reasoning: {reasoning_tokens}, total: {total_tokens}")
+        except Exception as _e:
+            logging.debug(f"Unable to log usage tokens for parse(): {_e}")
+
+        # The SDK returns a typed object at response.output_parsed
+        parsed = getattr(response, "output_parsed", None)
+        if parsed is None:
+            # GPT‑5 series sometimes returns only message/reasoning items with no output_text.
+            # Try to recover JSON from response.output content blocks.
+            try:
+                output_items = getattr(response, "output", []) or []
+                json_candidate = None
+                text_candidate = None
+
+                for item in output_items:
+                    itype = getattr(item, "type", None)
+                    # Message items may contain content blocks with json or text
+                    if itype == "message":
+                        for c in (getattr(item, "content", []) or []):
+                            ctype = getattr(c, "type", None)
+                            if ctype in ("output_json", "json") and getattr(c, "json", None) is not None:
+                                json_candidate = getattr(c, "json")
+                                break
+                            if ctype in ("output_text", "text") and getattr(c, "text", None):
+                                text_candidate = getattr(c, "text")
+                        if json_candidate is not None:
+                            break
+                    # Some SDK versions surface top-level text blocks
+                    elif itype in ("output_text", "text") and getattr(item, "text", None):
+                        text_candidate = getattr(item, "text")
+
+                if json_candidate is not None:
+                    parsed = PydanticModel.parse_obj(json_candidate)
+                elif text_candidate:
+                    t = (text_candidate or "").strip()
+                    # Strip fenced code blocks if present
+                    if t.startswith("```"):
+                        try:
+                            import re as _re
+                            t = _re.sub(r"^```(?:json)?\n|```$", "", t, flags=_re.IGNORECASE | _re.DOTALL).strip()
+                        except Exception:
+                            pass
+                    data = json.loads(t)
+                    parsed = PydanticModel.parse_obj(data)
+            except Exception as e:
+                logging.error(f"Failed to recover JSON from response.output: {e}")
+
+            # Final fallback: try output_text if present
+            if parsed is None:
+                raw_output = getattr(response, "output_text", None) or ""
+                if raw_output.strip():
+                    try:
+                        data = json.loads(raw_output)
+                        parsed = PydanticModel.parse_obj(data)
+                    except Exception as e:
+                        logging.error(f"Failed to parse fallback JSON from output_text: {e}")
+                        raise
+                else:
+                    logging.error("responses.parse(): no output_parsed and no parsable content in `output`; inspect response object for details")
+                    raise RuntimeError("Empty structured output from responses.parse()")
+
         result = {
             "transcript": parsed.transcript,
-            "speakers": parsed.speakers
+            "speakers": [
+                {"name": s.name, "in_world_character": s.in_world_character}
+                for s in parsed.speakers
+            ],
         }
-        logging.info("Cleaned transcript obtained via helper.")
+        logging.info("Cleaned transcript obtained via responses.parse().")
         return result
 
     def produce_cleaned_transcript(self):
@@ -1348,19 +1528,32 @@ class SessionNote:
 
 
     def aggregate_speaker_character_mappings(self, aggregated_mapping, speakers_list):
-        """Aggregate speaker to character mappings."""
+        """Aggregate speaker to character mappings.
+        Accepts items that may be dicts ({"name": ..., "in_world_character": ...})
+        or objects with attributes (.name, .in_world_character).
+        """
         for speaker in speakers_list:
-            speaker_name = speaker.name
-            character_name = speaker.in_world_character
-            if speaker_name in aggregated_mapping:
-                if aggregated_mapping[speaker_name] != character_name:
-                    logging.warning(
-                        f"Speaker '{speaker_name}' has conflicting character mappings: "
-                        f"'{aggregated_mapping[speaker_name]}' and '{character_name}'."
-                    )
-                    continue
+            # Support both dict and object shapes
+            if isinstance(speaker, dict):
+                speaker_name = speaker.get("name")
+                character_name = speaker.get("in_world_character")
             else:
+                speaker_name = getattr(speaker, "name", None)
+                character_name = getattr(speaker, "in_world_character", None)
+
+            if not speaker_name:
+                logging.debug("Skipping speaker entry without a name: %r", speaker)
+                continue
+
+            # If we already have a mapping and the new value is different and non-empty, warn and keep the first
+            existing = aggregated_mapping.get(speaker_name)
+            if existing is None:
                 aggregated_mapping[speaker_name] = character_name
+            elif existing != character_name and character_name not in (None, ""):
+                logging.warning(
+                    "Speaker '%s' has conflicting character mappings: '%s' vs '%s'. Keeping existing.",
+                    speaker_name, existing, character_name
+                )
 
 
     def save_speaker_character_mapping(self, aggregated_mapping):
