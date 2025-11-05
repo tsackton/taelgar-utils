@@ -1,0 +1,42 @@
+# Fast profile for quick/cheaper runs
+# Use with: PIPELINE_PROFILE=fast python3 session_cli.py run ...
+
+models:
+  transcribe_integrated:
+    id: gpt-4o-transcribe-diarize
+    temperature: null
+    max_output_tokens: null
+    seed: null
+  cleaner:
+    id: gpt-4o-mini
+    temperature: 0.1
+    max_output_tokens: 4000
+    seed: null
+
+  scene_bullets:
+    id: gpt-4o-mini
+    temperature: 0.2
+    max_output_tokens: 2000
+    seed: null
+
+  scene_narrative:
+    id: gpt-4o-mini
+    temperature: 0.9
+    max_output_tokens: 3000
+    seed: null
+
+  session_summary:
+    id: gpt-4o-mini
+    temperature: 0.2
+    max_output_tokens: 3000
+    seed: null
+
+audio:
+  chunk_size_mb: 20
+  overlap_ms: 1000
+  output_format: mp3
+  sample_rate: 16000
+  bitrate: 64k
+
+cleaning:
+  chunk_word_limit: 3000

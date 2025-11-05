@@ -1,0 +1,39 @@
+1. Audio Processing Module (for recordings)
+generate_diarization(audio_file): Run the Google Colab/cloud-based diarization on the audio file and return speaker segments.
+load_diarization_results(diarization_file): Load pre-computed diarization results locally from a JSON or similar format.
+transcribe_with_whisper(audio_file, diarization_results): Use Whisper API to transcribe the audio, split by diarized speakers.
+convert_vtt_to_text(vtt_file): Parse a WebVTT or other transcript format into plain text.
+
+2. Initial Transcript Cleaning Module
+detect_scene_breaks(transcript): Wait for or insert scene breaks, which can either be manually done or handled programmatically by detecting pauses or keywords.
+
+3. Scene-Level Cleaning and Enrichment Module
+clean_scene(scene_text, world_info): Use OpenAI’s API to clean up the text by correcting names, punctuation, streamline text, spellcheck, and guessing speakers based on the context. world_info provides context on NPC names, places, etc.
+replace_generic_speaker_names(transcript, name_mappings): Replace generic speaker labels like "Speaker 1" with actual player or character names, using a dictionary of mappings.
+
+
+4. Summarization Module
+generate_scene_summary(scene_text): Use OpenAI to generate a bullet point summary and timeline for each scene.
+generate_narrative_from_summary(bullet_points): Take the bullet points from the scene summary and generate a narrative summary.
+generate_session_metadata(bullet_points): Generate meta information for the session, including title, tag line, one-sentence summary, and five key events.
+
+5. Formatting and Output Module
+format_markdown(session_data): Format all processed data (transcript, summaries, timeline) into a markdown file with proper YAML frontmatter.
+save_markdown_file(markdown_content, file_path): Save the formatted markdown file to the desired location.
+
+
+
+
+Current status:
+- part 1 works, except that speaker diarization is kind of bad; probably the correct solution is to train on model on our voices, 
+which should also allow labeling; look at pyannote.ai for a possibly simpler way to do this. 
+consider also adding a prompt to whisper with the (max 244 tokens) 200 most important names to help with transcription
+
+- part 2 works fine
+
+- part 3: have a system prompt that seems to work to clean up a transcript, but need to write code. each scene is probably around ~10k tokens so about 18 cents.
+consider also what kind of world information to input (manually curated? from Obsidian file names?). consider whether 
+
+- part 4: just need to refine old code
+
+- part 5: from scratch

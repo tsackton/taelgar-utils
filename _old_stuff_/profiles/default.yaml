@@ -1,0 +1,51 @@
+# Default profile for session pipeline model choices
+# You can create alternative profiles (e.g., profiles/fast.yaml, profiles/quality.yaml)
+# and switch via env var PIPELINE_PROFILE=fast or --profile flag (future)
+
+# Model choices per step
+models:
+  # Integrated diarization + transcription (used when no diarization file is present)
+  transcribe_integrated:
+    id: gpt-4o-transcribe-diarize
+    temperature: null
+    max_output_tokens: null
+    seed: null
+  # Transcript cleaning (chunked, schema-validated transform)
+  cleaner:
+    id: gpt-4o
+    temperature: 0.1
+    max_output_tokens: 5000
+    seed: null
+
+  # Scene bullets (title + 4-6 bullet points)
+  scene_bullets:
+    id: gpt-4o
+    temperature: 0.2
+    max_output_tokens: 3000
+    seed: null
+
+  # Scene narrative (120-200 word in-world retelling)
+  scene_narrative:
+    id: gpt-4o
+    temperature: 1.0
+    max_output_tokens: 4000
+    seed: null
+
+  # Session-level summary (title, tagline, bullets, location)
+  session_summary:
+    id: gpt-4o
+    temperature: 0.2
+    max_output_tokens: 5000
+    seed: null
+
+# Audio chunking defaults (for transcribe step)
+audio:
+  chunk_size_mb: 20
+  overlap_ms: 1000
+  output_format: mp3
+  sample_rate: 16000
+  bitrate: 64k
+
+# Transcript cleaning defaults
+cleaning:
+  chunk_word_limit: 3000
