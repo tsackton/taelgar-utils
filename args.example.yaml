@@ -1,0 +1,41 @@
+# Example defaults for session_cli.py
+# You can pass this file with: --args-yaml args.example.yaml
+# Any flags provided on the command line override values here.
+
+session_number: 106
+campaign: Dunmar
+campaign_name: Dunmar
+
+# Either provide a VTT transcript...
+# vtt: /absolute/path/to/GMT20240913-002058_Recording.transcript.vtt
+
+# ...or audio along with diarization JSON
+# audio: /absolute/path/to/session106_audio.mp3
+# diarization: /absolute/path/to/Dunmar-CO-Rec4_diarization.json
+
+players:
+  - Faldrak
+  - Delwath
+  - Kenzo
+  - Wellby
+  - Riswynn
+
+dm: Tim Sackton
+
+# Dates for frontmatter
+session_date: 2024-09-13
+dr: 968-04-06
+dr_end: 968-04-06
+
+# Optional additional context
+world_info_file: world.txt
+style_guide_file: style-guide.json
+examples:
+  - examples/session-101.md
+
+# Optional run-range defaults
+from: audio
+to: assemble
+
+# Optional toggles
+skip_clean: false

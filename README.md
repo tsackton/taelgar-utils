@@ -86,6 +86,25 @@ See `args.example.yaml` in the repo root for a template. Notes:
 - In YAML, you may use `from:` and `to:` (mapped internally to `from_step`/`to_step`).
 - `players` and `examples` can be lists or comma-separated strings.
 
+### Editing prompts (Phase B - prompts extracted)
+
+Prompts used by the pipeline are now externalized in `prompts/` and can be edited without touching code:
+
+- prompts/scene_bullets.md — title + bullets for each scene
+- prompts/scene_narrative.md — in-world narrative for each scene
+- prompts/session_summary.md — overall session summary/frontmatter fields
+- prompts/transcript_cleaner.md — base rules for the transcript cleaning step
+
+Notes:
+- If these files are missing, the code falls back to built-in defaults.
+- You can override a specific prompt path via environment variable `PROMPT_<NAME>`, where `<NAME>` is the filename stem uppercased. For example:
+	- `PROMPT_SCENE_BULLETS=/path/to/custom_bullets.md`
+	- `PROMPT_SCENE_NARRATIVE=/path/to/custom_narrative.md`
+	- `PROMPT_SESSION_SUMMARY=/path/to/custom_session_summary.md`
+	- `PROMPT_TRANSCRIPT_CLEANER=/path/to/custom_cleaner.md`
+- The transcript cleaner template supports placeholders that are filled at runtime:
+	- `{preserved_speakers}`, `{dm_hint}`, `{glossary_text}`
+
 ### Requirements
 
 `session_cli.py` reuses the existing implementation in `generate_session_note_v2.py` and expects these packages to be installed (plus standard libs):

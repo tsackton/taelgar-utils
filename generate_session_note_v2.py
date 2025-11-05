@@ -67,8 +67,34 @@ def _supports_response_format(client) -> bool:
     except Exception:
         return False
 
-# Prompts for scene summarization
-PLAIN_BULLETS_PROMPT = """
+#############################
+# Prompt loading utilities  #
+#############################
+
+PROMPTS_DIR = os.getenv("PROMPTS_DIR", "prompts")
+
+def _load_prompt_text(filename: str, default_text: str) -> str:
+    """Return the contents of prompts/<filename> if it exists, else default_text.
+    Environment overrides: if an absolute/relative path is provided via env var
+    PROMPT_<NAME> (uppercased stem), use that instead.
+    """
+    # check env override by name
+    env_key = f"PROMPT_{os.path.splitext(os.path.basename(filename))[0].upper()}"
+    override_path = os.getenv(env_key)
+    try_paths = []
+    if override_path:
+        try_paths.append(override_path)
+    try_paths.append(os.path.join(PROMPTS_DIR, filename))
+    for p in try_paths:
+        if p and os.path.exists(p):
+            try:
+                return Path(p).read_text(encoding="utf-8")
+            except Exception:
+                pass
+    return default_text.strip()
+
+# Prompts for scene summarization (loaded from files if present)
+PLAIN_BULLETS_PROMPT = _load_prompt_text("scene_bullets.md", """
 You will receive exactly one scene from a D&D session.
 
 Produce:
@@ -84,9 +110,9 @@ Rules
 Quality checks
 - Remove filler (“then”, “suddenly”, “basically”) unless needed for meaning.
 - Collapse redundant bullets; keep the 4–6 most important.
-"""
+""")
 
-IN_WORLD_NARRATIVE_PROMPT = """
+IN_WORLD_NARRATIVE_PROMPT = _load_prompt_text("scene_narrative.md", """
 Write a concise in-world retelling of this scene.
 
 Voice & scope
@@ -102,9 +128,9 @@ Style
 
 Exit checks
 - If the scene is mostly travel or setup, focus on the few pivotal beats and the resulting stakes.
-"""
+""")
 
-SESSION_SUMMARY_PROMPT = """
+SESSION_SUMMARY_PROMPT = _load_prompt_text("session_summary.md", """
 Summarize the entire session.
 
 Fields
@@ -121,7 +147,7 @@ Constraints
 Quality checks
 - Bullets should read as outcomes, not notes-to-self (“They discover…”, “The party…”).
 - Avoid redundancy between bullets and short_summary.
-"""
+""")
 
 # Configure logging
 logging.basicConfig(
@@ -1250,7 +1276,9 @@ class SessionNote:
     def generate_transcript_cleaner_prompt(self, speakers: set) -> str:
         """
         Generate a concise, rule-based developer prompt for the transcript cleaner.
-        Includes chunk-boundary rules and a bulleted glossary to anchor spellings.
+        If prompts/transcript_cleaner.md exists, it can include placeholders:
+        {preserved_speakers}, {dm_hint}, {glossary_text}.
+        Otherwise, fall back to a built-in default.
         """
         # Canonical speakers we want preserved verbatim, plus Unknown
         preserved_speakers = ["David Kong", "David Schwartz", "Eric Rosenbaum", "Kate Sackton", "Mike Sackton"]
@@ -1264,34 +1292,49 @@ class SessionNote:
                 glossary_lines.append(f"- {t}")
         glossary_text = "\n".join(glossary_lines) if glossary_lines else "- (none)"
 
+        # Try external template first
+        tpl_path = os.path.join(PROMPTS_DIR, "transcript_cleaner.md")
+        if os.path.exists(tpl_path):
+            try:
+                template = Path(tpl_path).read_text(encoding="utf-8")
+                filled = template.format(
+                    preserved_speakers=", ".join(preserved_speakers),
+                    dm_hint=dm_hint,
+                    glossary_text=glossary_text,
+                )
+                return filled.strip()
+            except Exception:
+                pass
+
+        # Fallback to built-in default
         base_rules = f"""
-    You are a transcript cleaner for a D&D session.
+You are a transcript cleaner for a D&D session.
 
-    GOAL
-    - Preserve every line and order; fix only real errors (spelling incl. proper nouns, casing, punctuation, obvious ASR glitches).
-    - Reassign speaker lines ONLY when obviously misattributed.
+GOAL
+- Preserve every line and order; fix only real errors (spelling incl. proper nouns, casing, punctuation, obvious ASR glitches).
+- Reassign speaker lines ONLY when obviously misattributed.
 
-    DON’TS
-    - Do not shorten or rewrite content.
-    - Do not invent speakers/content.
-    - No meta-game/mechanics.
-    - If speaker uncertainty < 90% → leave as "Unknown".
+DON’TS
+- Do not shorten or rewrite content.
+- Do not invent speakers/content.
+- No meta-game/mechanics.
+- If speaker uncertainty < 90% → leave as "Unknown".
 
-    SPEAKER POLICY
-    - Preserve exact spellings for: {", ".join(preserved_speakers)}.
-    - {dm_hint}
+SPEAKER POLICY
+- Preserve exact spellings for: {", ".join(preserved_speakers)}.
+- {dm_hint}
 
-    CHUNK RULES
-    - Chunks may overlap. If a line repeats due to overlap, keep the later occurrence only.
-    - If a line is cut mid-sentence at the boundary, keep it as-is; do not invent continuation.
+CHUNK RULES
+- Chunks may overlap. If a line repeats due to overlap, keep the later occurrence only.
+- If a line is cut mid-sentence at the boundary, keep it as-is; do not invent continuation.
 
-    GLOSSARY (exact spellings; use only these names/terms):
-    {glossary_text}
+GLOSSARY (exact spellings; use only these names/terms):
+{glossary_text}
 
-    OUTPUT
-    - Must follow the provided JSON Schema exactly.
-    - Transform, not rewrite: keep length within ±5% of input character count.
-    """.strip()
+OUTPUT
+- Must follow the provided JSON Schema exactly.
+- Transform, not rewrite: keep length within ±5% of input character count.
+""".strip()
 
         return base_rules
 
