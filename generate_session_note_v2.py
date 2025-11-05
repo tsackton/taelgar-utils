@@ -1,4 +1,5 @@
 import os
+import base64
 import shutil
 import json
 import sys
@@ -904,8 +905,19 @@ class SessionNote:
         chunk_metadata_file = os.path.join(self.LOG_DIR, f"{os.path.basename(audio_file)}_chunks.json")
         if os.path.exists(chunk_metadata_file):
             logging.info(f"Loading existing chunk metadata from {chunk_metadata_file}.")
-            with open(chunk_metadata_file, 'r') as f:
-                return json.load(f)
+            try:
+                with open(chunk_metadata_file, 'r') as f:
+                    chunks = json.load(f)
+                # Verify that all chunk files exist; if any are missing, rebuild
+                missing = [c for c in chunks if not os.path.exists(c.get('chunk_file', ''))]
+                if missing:
+                    logging.warning(
+                        f"Chunk metadata references {len(missing)} missing files; rebuilding audio chunks."
+                    )
+                else:
+                    return chunks
+            except Exception as e:
+                logging.warning(f"Failed to read/verify existing chunk metadata, rebuilding: {e}")
 
         try:
             audio = AudioSegment.from_file(audio_file).set_frame_rate(sample_rate).set_channels(1)
@@ -913,13 +925,14 @@ class SessionNote:
             target_chunk_size_bytes = chunk_size_mb * 1024 * 1024
             chunk_length_ms = int((target_chunk_size_bytes / bytes_per_second) * 1000)
 
-            chunk_dir = "audio_chunks"
+            # Write chunks under logs/audio_chunks to keep paths stable
+            chunk_dir = os.path.join(self.LOG_DIR, "audio_chunks")
             os.makedirs(chunk_dir, exist_ok=True)
 
             chunks_metadata = []
             for idx, i in enumerate(range(0, len(audio), chunk_length_ms - overlap_ms)):
                 chunk = audio[i:i + chunk_length_ms]
-                chunk_file = os.path.join(chunk_dir, f"chunk_{idx}.{output_format}")
+                chunk_file = os.path.abspath(os.path.join(chunk_dir, f"chunk_{idx}.{output_format}"))
                 chunk.export(chunk_file, format=output_format, bitrate=bitrate)
                 chunks_metadata.append({
                     "chunk_file": chunk_file,
@@ -1002,6 +1015,75 @@ class SessionNote:
                 os.remove(transcription_file)
             return None
 
+def transcribe_audio_chunk_integrated(self, chunk_metadata) -> Optional[List[Dict[str, Any]]]:
+    """
+    Transcribe + diarize a single audio chunk using the native audio endpoint.
+    Returns a list of entries with speaker, start, end, text (all floats in seconds).
+    """
+    client = OpenAI(api_key=self.openai_api_key)
+    chunk_path = chunk_metadata["chunk_file"]
+    diar_file = os.path.join(
+        self.LOG_DIR,
+        f"{os.path.basename(chunk_path)}_transcription_diarized.json"
+    )
+
+    # 1. cached?
+    if os.path.exists(diar_file):
+        logging.info(f"Loading existing diarized transcription for {chunk_path}.")
+        with open(diar_file, "r") as f:
+            return json.load(f)
+
+    # 2. call the actual diarizing model
+    try:
+        with open(chunk_path, "rb") as f:
+            # verbose_json to get segments / utterances
+            resp = client.audio.transcriptions.create(
+                model="gpt-4o-transcribe-diarize",
+                file=f,
+                response_format="verbose_json",
+            )
+    except Exception as e:
+        logging.error(f"Integrated diarization failed for {chunk_path}: {e}")
+        return None
+
+    # 3. normalize
+    # The exact field names can vary a bit across releases, but diarizing models
+    # return speaker-attributed segments. We'll check common spots.
+    offset = float(chunk_metadata.get("start", 0.0) or 0.0)
+    diarized_entries: List[Dict[str, Any]] = []
+
+    # some models put them under resp.segments, some under resp.utterances
+    segments = getattr(resp, "segments", None) or getattr(resp, "utterances", None) or []
+
+    for seg in segments:
+        speaker = seg.get("speaker", "Unknown")
+        start = float(seg.get("start", 0.0)) + offset
+        end = float(seg.get("end", seg.get("duration", 0.0))) + offset
+        text = (seg.get("text") or "").strip()
+        if text:
+            diarized_entries.append(
+                {
+                    "speaker": speaker,
+                    "start": start,
+                    "end": end,
+                    "text": text,
+                }
+            )
+
+    if not diarized_entries:
+        logging.warning(f"No diarized segments returned for {chunk_path}.")
+
+    # 4. cache
+    try:
+        with open(diar_file, "w") as f:
+            json.dump(diarized_entries, f, indent=4)
+        logging.info(f"Diarized transcription saved to {diar_file}.")
+    except Exception as e:
+        logging.warning(f"Could not write diarized cache {diar_file}: {e}")
+
+    return diarized_entries
+
+
     def combine_transcriptions(self, chunk_transcriptions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Combine transcriptions from multiple chunks into a single transcript.
@@ -1077,6 +1159,10 @@ class SessionNote:
             speaker = entry['speaker']
             text = entry['text']
 
+            # Skip entries with empty or whitespace-only text
+            if not str(text).strip():
+                continue
+
             if speaker == current_speaker:
                 current_text.append(text)
             else:
@@ -1148,28 +1234,81 @@ class SessionNote:
         try:
             # Generate raw transcript file name
             self.generate_transcript_filenames()
-
             # Chunk the audio file
             self.audio_chunks_metadata = self.chunk_audio_file()
 
-            # Run Whisper on each chunk
-            chunk_transcriptions = []
-            for chunk_metadata in self.audio_chunks_metadata:
-                transcription = self.transcribe_audio_chunk(chunk_metadata)
-                if transcription:
-                    chunk_transcriptions.append(transcription)
+            # Determine mode: use existing diarization file if present; otherwise try integrated diarization
+            use_integrated = not (self.metadata.diarization_file and os.path.exists(self.metadata.diarization_file))
 
-            # Combine chunks into timestamped transcript
-            combined_transcript = self.combine_transcriptions(chunk_transcriptions)
+            if use_integrated:
+                logging.info("No diarization file found. Using integrated diarization model for transcription.")
+                diarized_all: List[Dict[str, Any]] = []
+                for chunk_metadata in self.audio_chunks_metadata:
+                    diarized = self.transcribe_audio_chunk_integrated(chunk_metadata)
+                    if diarized:
+                        diarized_all.extend(diarized)
+                # Sort by start time just in case
+                diarized_all.sort(key=lambda d: d.get('start', 0.0))
+                # If integrated diarization produced nothing, fallback to Whisper words without diarization labels
+                if not diarized_all:
+                    logging.warning("Integrated diarization returned empty output. Falling back to Whisper transcript without diarization labels.")
+                    chunk_transcriptions = []
+                    for chunk_metadata in self.audio_chunks_metadata:
+                        transcription = self.transcribe_audio_chunk(chunk_metadata)
+                        if transcription:
+                            chunk_transcriptions.append(transcription)
+                    combined_transcript = self.combine_transcriptions(chunk_transcriptions)
 
-            # Load diarization results
-            diarization_results = self.load_diarization_results()
+                    # Convert words into simple Unknown-speaker entries using gaps as separators
+                    def _words_to_entries(words: List[Dict[str, Any]], gap_threshold: float = 1.0) -> List[Dict[str, Any]]:
+                        entries: List[Dict[str, Any]] = []
+                        words = [w for w in words if isinstance(w, dict) and 'start' in w and 'end' in w]
+                        if not words:
+                            return entries
+                        words.sort(key=lambda w: w['start'])
+                        current = {
+                            'speaker': 'Unknown',
+                            'start': words[0]['start'],
+                            'end': words[0]['end'],
+                            'text': words[0].get('word', '')
+                        }
+                        for w in words[1:]:
+                            gap = float(w['start']) - float(current['end'])
+                            if gap > gap_threshold:
+                                if str(current['text']).strip():
+                                    entries.append(current)
+                                current = {
+                                    'speaker': 'Unknown',
+                                    'start': w['start'],
+                                    'end': w['end'],
+                                    'text': w.get('word', '')
+                                }
+                            else:
+                                current['end'] = max(current['end'], w['end'])
+                                token = w.get('word', '')
+                                if token:
+                                    current['text'] = (current['text'] + ' ' + token).strip()
+                        if str(current['text']).strip():
+                            entries.append(current)
+                        return entries
 
-            # Synchronize with diarization results
-            raw_transcript = self.sync_transcript_with_diarization(combined_transcript, diarization_results)
-
-            # Concatenate adjacent speakers
-            final_transcript = self.concatenate_adjacent_speakers(raw_transcript)
+                    diarized_all = _words_to_entries(combined_transcript)
+                # Concatenate adjacent speakers
+                final_transcript = self.concatenate_adjacent_speakers(diarized_all)
+            else:
+                # Whisper path requires diarization sync
+                chunk_transcriptions = []
+                for chunk_metadata in self.audio_chunks_metadata:
+                    transcription = self.transcribe_audio_chunk(chunk_metadata)
+                    if transcription:
+                        chunk_transcriptions.append(transcription)
+                # Combine chunks into timestamped transcript
+                combined_transcript = self.combine_transcriptions(chunk_transcriptions)
+                # Load diarization results and synchronize
+                diarization_results = self.load_diarization_results()
+                raw_transcript = self.sync_transcript_with_diarization(combined_transcript, diarization_results)
+                # Concatenate adjacent speakers
+                final_transcript = self.concatenate_adjacent_speakers(raw_transcript)
 
             # Save the final transcript to a file
             self.save_transcript_to_file(final_transcript, self.metadata.raw_transcript_file)
