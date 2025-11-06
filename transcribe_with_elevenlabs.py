@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 Quick helper to run ElevenLabs speech-to-text on one or many local audio files.
 
@@ -14,10 +16,11 @@ import os
 import sys
 from io import BytesIO
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 from dotenv import load_dotenv
 from elevenlabs import ElevenLabs
+from session_pipeline.audio import chunk_audio_file
 
 
 AUDIO_EXTENSIONS = {
@@ -31,6 +34,10 @@ AUDIO_EXTENSIONS = {
     ".webm",
     ".wma",
 }
+
+MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
+CHUNK_MAX_SECONDS = 60 * 60  # 1 hour
+CHUNK_TARGET_BITRATE = "92k"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -93,17 +100,52 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("No audio files found to transcribe.")
         return 1
 
-    if args.output and len(audio_files) > 1:
+    failures: List[Path] = []
+    files_to_transcribe: List[Path] = []
+    warned_output_ignored = False
+    for audio_file in audio_files:
+        try:
+            if audio_file.stat().st_size > MAX_FILE_SIZE_BYTES:
+                print(
+                    f"Chunking {audio_file} ({audio_file.stat().st_size / (1024 * 1024):.1f} MB) before transcription..."
+                )
+                if args.output and len(audio_files) == 1 and not warned_output_ignored:
+                    print(
+                        f"Warning: --output ignored for chunked file {audio_file}; "
+                        "chunks will be transcribed individually.",
+                        file=sys.stderr,
+                    )
+                    warned_output_ignored = True
+
+                chunks = chunk_audio_file(
+                    audio_file,
+                    audio_file.parent,
+                    max_chunk_seconds=CHUNK_MAX_SECONDS,
+                    target_format="mp3",
+                    target_bitrate=CHUNK_TARGET_BITRATE,
+                    chunk_basename=audio_file.stem,
+                )
+                chunk_paths = [Path(chunk["path"]) for chunk in chunks]
+                files_to_transcribe.extend(chunk_paths)
+            else:
+                files_to_transcribe.append(audio_file)
+        except Exception as exc:
+            failures.append(audio_file)
+            print(f"Failed to prepare {audio_file}: {exc}", file=sys.stderr)
+
+    if args.output and len(files_to_transcribe) > 1:
         print("Warning: --output ignored when processing multiple files.", file=sys.stderr)
 
-    failures: List[Path] = []
-    for audio_file in audio_files:
+    for audio_file in files_to_transcribe:
         try:
             output_path = (
                 args.output
-                if args.output and len(audio_files) == 1
+                if args.output and len(files_to_transcribe) == 1
                 else audio_file.with_suffix(audio_file.suffix + ".elevenlabs.json")
             )
+            if output_path.exists():
+                print(f"Skipping {audio_file}: output exists")
+                continue
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             payload = transcribe_file(
