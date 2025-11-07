@@ -4,8 +4,8 @@
 Quick helper to run ElevenLabs speech-to-text on one or many local audio files.
 
 Examples:
-    python3 transcribe_with_elevenlabs.py sample.mp3 --diarize --num-speakers 3
-    python3 transcribe_with_elevenlabs.py file_list.txt --diarize --diarization-threshold 0.6
+    python3 transcribe_with_elevenlabs.py sample.mp3 --num-speakers 3
+    python3 transcribe_with_elevenlabs.py file_list.txt --diarization-threshold 0.6
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from typing import Any, Dict, List
 
 from dotenv import load_dotenv
 from elevenlabs import ElevenLabs
+from pydub import AudioSegment
 from session_pipeline.audio import chunk_audio_file
 
 
@@ -35,9 +36,7 @@ AUDIO_EXTENSIONS = {
     ".wma",
 }
 
-MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 CHUNK_MAX_SECONDS = 60 * 60  # 1 hour
-CHUNK_TARGET_BITRATE = "92k"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,21 +53,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="scribe_v1",
         help="ElevenLabs STT model to use (default: scribe_v1).",
     )
-    parser.add_argument(
-        "--diarize",
-        action="store_true",
-        help="Enable speaker diarization.",
-    )
     diarization_options = parser.add_mutually_exclusive_group()
     diarization_options.add_argument(
         "--num-speakers",
         type=int,
-        help="Optional speaker count hint (requires --diarize).",
+        help="Optional speaker count hint.",
     )
     diarization_options.add_argument(
         "--diarization-threshold",
         type=float,
-        help="Optional diarization confidence threshold (requires --diarize).",
+        help="Optional diarization confidence threshold.",
     )
     parser.add_argument(
         "--output",
@@ -105,9 +99,10 @@ def main(argv: list[str] | None = None) -> int:
     warned_output_ignored = False
     for audio_file in audio_files:
         try:
-            if audio_file.stat().st_size > MAX_FILE_SIZE_BYTES:
+            duration_seconds = get_audio_duration_seconds(audio_file)
+            if duration_seconds > CHUNK_MAX_SECONDS:
                 print(
-                    f"Chunking {audio_file} ({audio_file.stat().st_size / (1024 * 1024):.1f} MB) before transcription..."
+                    f"Chunking {audio_file} ({duration_seconds/3600:.2f} hours) before transcription..."
                 )
                 if args.output and len(audio_files) == 1 and not warned_output_ignored:
                     print(
@@ -121,9 +116,13 @@ def main(argv: list[str] | None = None) -> int:
                     audio_file,
                     audio_file.parent,
                     max_chunk_seconds=CHUNK_MAX_SECONDS,
-                    target_format="mp3",
-                    target_bitrate=CHUNK_TARGET_BITRATE,
+                    target_format="wav",
+                    target_frame_rate=16_000,
+                    target_channels=1,
+                    target_sample_width=2,
+                    target_bitrate=None,
                     chunk_basename=audio_file.stem,
+                    normalise=False,
                 )
                 chunk_paths = [Path(chunk["path"]) for chunk in chunks]
                 files_to_transcribe.extend(chunk_paths)
@@ -151,7 +150,6 @@ def main(argv: list[str] | None = None) -> int:
             payload = transcribe_file(
                 client=client,
                 audio_path=audio_file,
-                diarize=args.diarize,
                 num_speakers=args.num_speakers,
                 diarization_threshold=args.diarization_threshold,
                 model_id=args.model_id,
@@ -207,18 +205,17 @@ def transcribe_file(
     client: ElevenLabs,
     audio_path: Path,
     *,
-    diarize: bool,
     num_speakers: int | None,
     diarization_threshold: float | None,
     model_id: str,
 ) -> Dict[str, Any]:
-    if (num_speakers is not None or diarization_threshold is not None) and not diarize:
-        raise ValueError("--num-speakers and --diarization-threshold require diarize=True")
-
+    file_obj = BytesIO(audio_path.read_bytes())
+    file_obj.name = audio_path.name  # type: ignore[attr-defined]
     convert_kwargs = {
-        "file": BytesIO(audio_path.read_bytes()),
+        "file": file_obj,
         "model_id": model_id,
-        "diarize": diarize,
+        "diarize": True,
+        "file_format": "pcm_s16le_16",
     }
     if num_speakers is not None:
         if num_speakers <= 0:
@@ -234,6 +231,15 @@ def transcribe_file(
     if hasattr(transcription, "dict"):
         return transcription.dict()  # type: ignore[attr-defined]
     return json.loads(json.dumps(transcription, default=str))
+
+
+def get_audio_duration_seconds(path: Path) -> float:
+    try:
+        audio = AudioSegment.from_file(path)
+        return len(audio) / 1000.0
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"Warning: failed to inspect duration for {path}: {exc}", file=sys.stderr)
+        return float("inf")
 
 
 if __name__ == "__main__":

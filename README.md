@@ -1,114 +1,82 @@
 # taelgar-utils
 
-Utilities that support work on the Taelgar campaign vault.  
-
-This reference focuses on the standalone scripts that ship with the repository (excluding the new session-processing pipeline).
-
-## Script Reference
-
-### `extract_yaml_fields.py`
-- **Purpose:** Scan Markdown files for YAML front matter and export selected fields to CSV.
-- **Usage:**
-  ```bash
-  python3 extract_yaml_fields.py /path/to/notes output.csv
-  ```
-- **Inputs:** Directory of `.md` files whose first `---` block contains the desired keys.
-- **Outputs:** CSV file with columns `sessionNumber`, `realWorldDate`, `DR`, `DR_end`, `players`. The `players` field is normalised to a comma-separated list.
-
-### `generate_index_page.py`
-- **Purpose:** Build a link index for a directory of notes, with optional templating and metadata-aware sorting.
-- **Usage:**
-  ```bash
-  python3 generate_index_page.py notes_dir \
-    --link_style wiki \
-    --sort_order sessionNumber \
-    --tie_breaker title \
-    --template "* {link_text} {people_str}"
-  ```
-- **Key options:**
-  - `--link_style`: `relative` (default) or `wiki` style links.
-  - `--sort_order`: `title` or any metadata key (numeric handling for `sessionNumber`; date parsing via `TaelgarDate` when possible).
-  - `--tie_breaker`: Secondary sort key (`file_name`, `title`, `sessionNumber`, or another metadata field).
-  - `--template`: Python `str.format` template with access to note metadata plus helper fields like `people_str` and `event_date_str`.
-- **Inputs:** Directory of Markdown notes compatible with `taelgar_lib.ObsNote`.
-- **Outputs:** Markdown link lines printed to stdout; redirect to file to create an index page.
-
-### `merge_markdown.py`
-- **Purpose:** Flatten multiple Markdown files into a single document while surfacing front-matter fields.
-- **Usage:**
-  ```bash
-  python3 merge_markdown.py --input-dir notes_dir --output-file combined.md
-  ```
-- **Behaviour:** Strips YAML front matter, re-emits each key/value under the title, removes leading blockquote callouts, and joins files with `---`.
-- **Outputs:** Combined Markdown written to the specified file (default `combined.md`).
-
-### `parse_speakers.py`
-- **Purpose:** Derive per-speaker audio tracks using a WebVTT transcript annotated with speaker labels.
-- **Usage:**
-  ```bash
-  python3 parse_speakers.py \
-    --audio session.mp3 \
-    --webvtt session.vtt \
-    --output speaker_tracks \
-    --chunk 10
-  ```
-- **Key options:** `--chunk` defines per-file length in minutes; audio is exported as MP3 chunks after aggregating each speaker’s unique speaking segments.
-- **Inputs:** Full-session audio file plus WebVTT captions formatted as `Speaker: dialogue`.
-- **Outputs:** Directory of `speaker_partN.mp3` files, one series per detected speaker.
-
-### `parse_speakers_from_vtt.py`
-- **Purpose:** Walk every subdirectory, tally word counts per speaker from `.vtt` files, and dump a summary JSON report.
-- **Usage:** Run in-place, e.g. `python3 parse_speakers_from_vtt.py`.
-- **Inputs:** Current directory as root; any `.vtt` encountered is parsed line-by-line.
-- **Outputs:** `vtt_speaker_word_counts.json` mapping each directory to its speakers and aggregated word totals.
-
-### `split_clean_audio.py`
-- **Purpose:** Normalise a large recording, locate silences, and export manageable audio chunks.
-- **Usage:**
-  ```bash
-  python3 split_clean_audio.py \
-    --input session.wav \
-    --output_dir chunks \
-    --min_silence_len 1200 \
-    --silence_thresh -38 \
-    --keep_silence 500 \
-    --max_length 12 \
-    --format mp3 \
-    --bitrate 192k
-  ```
-- **Pipeline:** Normalises level, detects silences via FFmpeg, splits on silent spans, combines into chunks up to `--max_length` minutes, and exports in parallel.
-- **Outputs:** Numbered chunk files in the chosen format plus console logging of the workflow.
-
-### `upload_audio_chunks.py`
-- **Purpose:** Push a directory of audio chunks to S3 and produce presigned download URLs.
-- **Usage:**
-  ```bash
-  python3 upload_audio_chunks.py \
-    --directory chunks \
-    --bucket my-session-bucket \
-    --output presigned_urls.json \
-    --expiration 7200
-  ```
-- **Inputs:** Local directory path, S3 bucket name, optional expiry for the URLs.
-- **Outputs:** JSON mapping filename → presigned URL; progress displayed with a per-file progress bar.
-
-### `website/build_mkdocs_site.py`
-- **Purpose:** Automate exporting the Obsidian vault via the Templater plugin and then build the MkDocs site.
-- **Behaviour:** Reads `autobuild.json` to locate the vault, desired templater config, and export script (default `export_vault.py`). Backs up the active templater config, launches Obsidian through its URI scheme, waits for the process to close, executes the export script, then restores the original config.
-- **Inputs:** Configuration fields in `website/autobuild.json` (`obsidian_template_config`, `obsidian_vault_id`, `obsidian_vault_root`, and optional `export_script` override).
-- **Outputs:** Delegates to `export_vault.py` (not documented here per request); leaves the templater configuration restored on completion.
-
-## Library Modules (`taelgar_lib`)
-
-### `ObsNote`
-- Parses Obsidian Markdown files: extracts front matter, cleans content, infers metadata (title, stub status, outlinks), and supports campaign/date-based content filtering. Provides helpers such as `title_case`, `strip_comments`, and `count_relevant_lines`.
-
-### `TaelgarDate`
-- Normalises Taelgar date strings (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`) to `datetime` objects and formats them back into in-world notation (`Mar 15, 1492 DR`).
-
-### `WikiLinkReplacer`
-- Utility class for converting Obsidian-style wiki links to standard Markdown/HTML links, with support for image syntax, aliases, and anchor generation. Designed to work alongside `ObsNote` instances when preparing content for MkDocs.
+Utilities that support the Taelgar campaign vault, with a focus on processing
+session audio/transcripts and keeping the Obsidian vault in sync.
 
 ---
 
-For requirements, see `requirements.txt`. Most audio- and AWS-related scripts expect system dependencies (FFmpeg, boto3 credentials, etc.) to be configured separately.
+## Session Processing
+
+These scripts form the current audio → transcript → cleaned output pipeline.
+
+1. **Audio preparation** (outside Python)
+   - Recordings are pre-cleaned with `ffmpeg` to 16 kHz mono, 16-bit PCM WAV.
+   - Long sessions can optionally be normalised and denoised before entering the
+     Python pipeline.
+   - Use `process_m4a_sessions.sh` to clean iPhone voice memos specifically. 
+
+2. **`transcribe_with_elevenlabs.py`**
+   - Accepts a single WAV file or a file-of-paths list.
+   - Automatically chunks any file that exceeds one hour using
+     `session_pipeline.audio.chunk_audio_file`, preserving the 16 kHz mono PCM
+     format.
+   - Uploads each chunk to the ElevenLabs Speech-to-Text API with diarization
+     enabled by default and stores the raw JSON response beside the audio.
+
+3. **`normalize_transcript.py`**
+   - Converts raw ElevenLabs JSON, Whisper+diarization JSON, plain-text logs, or WebVTT files into a normalized JSON bundle with segments, word-level detail (when available), speaker hints, and source metadata.
+   - Supports offset alignment via `get_audio_offsets.py` outputs so each chunk knows its absolute session start time.
+
+4. **`run_transcript_pipeline.py` + `synchronize_transcripts.py`**
+   - `run_transcript_pipeline.py` reads a manifest to batch-normalize multiple transcripts and then aggregate them per method (e.g., ElevenLabs split, ElevenLabs merged, Whisper, VTT).
+   - `synchronize_transcripts.py` constructs method-specific bundles with session-relative timestamps and emits:
+     - `method.whisper.json` (L&A-compatible format with `method`, `duration`, `text`, and a `words` array),
+     - `method.diarization.json` (namespaced speaker IDs per chunk),
+     - `method.vtt` (speaker: text cues ready for review or speaker cleanup).
+   - Outputs are written under `<session_id>/<method_name>/…`, making it easy to compare different transcription methods side-by-side.
+
+5. **`clean_speakers.py`**
+   - (Optional) Runs on a chosen method bundle (typically the best-quality transcript) to apply roster mappings and interactively label speakers, producing a speaker mapping, report, and canonical transcript.
+
+6. **Supporting modules & runners**
+   - `session_pipeline/audio.py` – silence-aware chunking helper (now defaulting
+     to 16 kHz mono PCM WAV output and rebalancing trailing chunks to avoid tiny
+     leftovers).
+   - `process_m4a_sessions.sh` – shell wrapper for batch transcoding and
+     transcription runs.
+
+---
+
+## Obsidian Vault Tools
+
+Scripts used to curate and publish the campaign Obsidian vault.
+
+- **`extract_yaml_fields.py`** – scrape YAML front matter from Markdown notes and
+  export selected fields to CSV.
+- **`generate_index_page.py`** – build link indexes with templating and
+  metadata-aware sorting.
+- **`merge_markdown.py`** – merge multiple Markdown files into a single document
+  while inlining key metadata.
+- **`export_vault.py`** – helper invoked by the build scripts to export the
+  vault for publication.
+- **`website/build_mkdocs_site.py`** – orchestration script that triggers an
+  Obsidian templater export and then builds the MkDocs site.
+- **`taelgar_lib/`** – shared library containing `ObsNote`, `TaelgarDate`,
+  wiki-link conversion utilities, and other helpers consumed by the scripts
+  above.
+
+---
+
+## Miscellaneous Tools
+
+Utility scripts that remain handy for specific workflows.
+
+- **`parse_speakers.py`** – generate per-speaker audio tracks from a WebVTT file
+  with labelled cues.
+- **`parse_speakers_from_vtt.py`** – crawl directories of VTT files and report
+  word counts per speaker.
+- **`_old_stuff/`** – archival scripts kept for reference; new projects should
+  prefer the modern pipeline described above.
+
+See `requirements.txt` for Python dependencies. System-level tools such as
+FFmpeg are expected to be installed separately when working with audio.

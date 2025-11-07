@@ -1,0 +1,115 @@
+{
+  "session_id": "duf-session-138",
+  "normalize": [
+    {
+      "input": "Session138-Tim-Chunk-01_chunk_000.mp3.elevenlabs.json",
+      "input_format": "elevenlabs_json",
+      "session_id": "duf-session-138",
+      "audio_path": "Session138-Tim-Chunk-01_chunk_000.mp3",
+      "offsets_json": "session138-mp3s-offsets.json",
+      "output": "duf-session-138-elevenlabs-split01-normalized.json"
+    },
+    {
+      "input": "Session138-Tim-Chunk-01_chunk_001.mp3.elevenlabs.json",
+      "input_format": "elevenlabs_json",
+      "session_id": "duf-session-138",
+      "audio_path": "Session138-Tim-Chunk-01_chunk_001.mp3",
+      "offsets_json": "session138-mp3s-offsets.json",
+      "output": "duf-session-138-elevenlabs-split02-normalized.json"
+    },
+    {
+      "input": "Session138-Tim-Chunk-01_chunk_002.mp3.elevenlabs.json",
+      "input_format": "elevenlabs_json",
+      "session_id": "duf-session-138",
+      "audio_path": "Session138-Tim-Chunk-01_chunk_002.mp3",
+      "offsets_json": "session138-mp3s-offsets.json",
+      "output": "duf-session-138-elevenlabs-split03-normalized.json"
+    },
+    {
+      "input": "Session138-Tim-Chunk-01_chunk_003.mp3.elevenlabs.json",
+      "input_format": "elevenlabs_json",
+      "session_id": "duf-session-138",
+      "audio_path": "Session138-Tim-Chunk-01_chunk_003.mp3",
+      "offsets_json": "session138-mp3s-offsets.json",
+      "output": "duf-session-138-elevenlabs-split04-normalized.json"
+    },
+    {
+      "input": "Session138-Tim-Chunk-01_processed_chunk_000.wav.elevenlabs.json",
+      "input_format": "elevenlabs_json",
+      "session_id": "duf-session-138",
+      "audio_path": "Session138-Tim-Chunk-01_processed_chunk_000.wav",
+      "offsets_json": "session138-wav-chunked-files-offsets.json",
+      "output": "duf-session-138-elevenlabs-merge01-normalized.json"
+    },
+    {
+      "input": "Session138-Tim-Chunk-01_processed_chunk_001.wav.elevenlabs.json",
+      "input_format": "elevenlabs_json",
+      "session_id": "duf-session-138",
+      "audio_path": "Session138-Tim-Chunk-01_processed_chunk_001.wav",
+      "offsets_json": "session138-wav-chunked-files-offsets.json",
+      "output": "duf-session-138-elevenlabs-merge02-normalized.json"
+    },
+    {
+      "input": "Session138-Tim-Chunk-01_processed_chunk_002.wav.elevenlabs.json",
+      "input_format": "elevenlabs_json",
+      "session_id": "duf-session-138",
+      "audio_path": "Session138-Tim-Chunk-01_processed_chunk_002.wav",
+      "offsets_json": "session138-wav-chunked-files-offsets.json",
+      "output": "duf-session-138-elevenlabs-merge03-normalized.json"
+    },
+    {
+      "input": "Session138-Tim-Chunk-01_processed_chunk_003.wav.elevenlabs.json",
+      "input_format": "elevenlabs_json",
+      "session_id": "duf-session-138",
+      "audio_path": "Session138-Tim-Chunk-01_processed_chunk_003.wav",
+      "offsets_json": "session138-wav-chunked-files-offsets.json",
+      "output": "duf-session-138-elevenlabs-merge04-normalized.json"
+    },
+    {
+      "input": "Session138-Tim-Chunk-01.txt",
+      "input_format": "plain_text",
+      "session_id": "duf-session-138",
+      "offset": 0,
+      "output": "duf-session-138-plain_text-normalized.json"
+    },
+    {
+      "input": "Session138-Tim-Chunk-01.vtt",
+      "input_format": "vtt_voice",
+      "session_id": "duf-session-138",
+      "offset": 0,
+      "output": "duf-session-138-vtt_voice-normalized.json"
+    }
+  ],
+  "methods": [
+    {
+      "name": "elevenlabs_split",
+      "inputs": [
+        "duf-session-138-elevenlabs-split01-normalized.json",
+        "duf-session-138-elevenlabs-split02-normalized.json",
+        "duf-session-138-elevenlabs-split03-normalized.json",
+        "duf-session-138-elevenlabs-split04-normalized.json"
+      ]
+    },
+    {
+      "name": "elevenlabs_merge",
+      "inputs": [
+        "duf-session-138-elevenlabs-merge01-normalized.json",
+        "duf-session-138-elevenlabs-merge02-normalized.json",
+        "duf-session-138-elevenlabs-merge03-normalized.json",
+        "duf-session-138-elevenlabs-merge04-normalized.json"
+      ]
+    },
+    {
+      "name": "plain_text",
+      "inputs": [
+        "duf-session-138-plain_text-normalized.json"
+      ]
+    },
+    {
+      "name": "vtt_voice",
+      "inputs": [
+        "duf-session-138-vtt_voice-normalized.json"
+      ]
+    }
+  ]
+}

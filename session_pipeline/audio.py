@@ -10,25 +10,26 @@ def chunk_audio_file(
     destination_dir: Path,
     *,
     max_chunk_seconds: Optional[float] = 900,
-    target_format: str = "mp3",
-    target_frame_rate: Optional[int] = None,
-    target_channels: Optional[int] = None,
-    target_sample_width: Optional[int] = None,
-    target_bitrate: Optional[str] = "192k",
+    target_format: str = "wav",
+    target_frame_rate: Optional[int] = 16_000,
+    target_channels: Optional[int] = 1,
+    target_sample_width: Optional[int] = 2,
+    target_bitrate: Optional[str] = None,
     chunk_basename: Optional[str] = None,
     min_silence_len: int = 1000,
     silence_thresh: int = -40,
     keep_silence: int = 500,
+    normalise: bool = True,
 ) -> List[Dict[str, object]]:
     """
     Split ``source_path`` into audio chunks using silence detection and size limits.
 
     The logic follows ``split_clean_audio.py`` closely:
-        1. Normalise the audio to a stable level.
+        1. Optionally normalise the audio to a stable level.
         2. Use FFmpeg ``silencedetect`` to find long silent spans (in seconds).
         3. Split on those silences, retaining a small buffer of context.
         4. Recombine segments until ``max_chunk_seconds`` would be exceeded.
-        5. Export each chunk as ``target_format`` with ``target_bitrate`` when applicable.
+        5. Export each chunk in the requested format (defaults to 16 kHz mono PCM WAV).
 
     Returns metadata dictionaries describing each chunk.
     """
@@ -41,7 +42,8 @@ def chunk_audio_file(
     destination_dir.mkdir(parents=True, exist_ok=True)
 
     audio = AudioSegment.from_file(source_path)
-    audio = _normalise_audio(audio)
+    if normalise:
+        audio = _normalise_audio(audio)
 
     silence_ranges = _detect_silences_ffmpeg(
         source_path,
@@ -83,6 +85,9 @@ def chunk_audio_file(
                 "path": chunk_filename,
                 "format": target_format,
                 "bitrate": target_bitrate,
+                "frame_rate": chunk_audio.frame_rate,
+                "channels": chunk_audio.channels,
+                "sample_width": chunk_audio.sample_width,
             }
         )
 
@@ -197,4 +202,36 @@ def _combine_segments(segments: List[List[object]], max_length_ms: int) -> List[
 
     combined.append([current_start, current_end, current_audio])
 
+    if len(combined) >= 2:
+        _rebalance_tail_segments(combined)
+
     return combined
+
+
+def _rebalance_tail_segments(segments: List[List[object]], min_ratio: float = 0.75) -> None:
+    """Ensure the final two chunks are roughly even to avoid tiny trailing segments."""
+
+    if len(segments) < 2:
+        return
+
+    tail_len = len(segments[-1][2])
+    max_length = len(segments[-2][2])
+    if tail_len == 0 or max_length == 0:
+        return
+
+    if tail_len / max_length >= min_ratio:
+        return
+
+    prev_start, _, prev_audio = segments[-2]
+    _, last_end, last_audio = segments[-1]
+
+    merged_audio = prev_audio + last_audio
+    midpoint = len(merged_audio) // 2
+    first_audio = merged_audio[:midpoint]
+    second_audio = merged_audio[midpoint:]
+
+    first_end = prev_start + len(first_audio)
+    second_end = first_end + len(second_audio)
+
+    segments[-2] = [prev_start, first_end, first_audio]
+    segments[-1] = [first_end, second_end, second_audio]
