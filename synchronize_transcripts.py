@@ -80,11 +80,16 @@ def main() -> int:
             continue
 
         timeline_start = min(seg["abs_start"] for seg in segments)
-        normalized_segments = normalize_segments(segments, timeline_start)
-        normalized_words = normalize_words(words, timeline_start)
+        normalized_segments = normalize_segments(segments)
+        normalized_words = normalize_words(words)
         speaker_stats = collect_speaker_stats(normalized_segments)
 
-        whisper_payload = build_whisper_payload(method.name, normalized_segments, normalized_words, timeline_start)
+        whisper_payload = build_whisper_payload(
+            method.name,
+            normalized_segments,
+            normalized_words,
+            timeline_start,
+        )
         diarization_payload = build_diarization_payload(normalized_segments, method.name)
         speaker_index = build_speaker_index(
             speaker_stats,
@@ -220,14 +225,14 @@ def aggregate_segments(
     return segments_out, words_out
 
 
-def normalize_segments(segments: Iterable[Dict[str, Any]], timeline_start: float) -> List[Dict[str, Any]]:
+def normalize_segments(segments: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
     for index, segment in enumerate(segments):
         normalized.append(
             {
                 "id": f"seg_{index:06d}",
-                "start": round(segment["abs_start"] - timeline_start, 6),
-                "end": round(segment["abs_end"] - timeline_start, 6),
+                "start": round(segment["abs_start"], 6),
+                "end": round(segment["abs_end"], 6),
                 "text": segment["text"],
                 "speaker_id": segment["speaker_id"],
                 "raw_speaker": segment["raw_speaker"],
@@ -238,12 +243,12 @@ def normalize_segments(segments: Iterable[Dict[str, Any]], timeline_start: float
     return normalized
 
 
-def normalize_words(words: Iterable[Dict[str, Any]], timeline_start: float) -> List[Dict[str, Any]]:
+def normalize_words(words: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
     for word in words:
         entry = dict(word)
-        entry["start"] = round(word["abs_start"] - timeline_start, 6)
-        entry["end"] = round(word["abs_end"] - timeline_start, 6)
+        entry["start"] = round(word["abs_start"], 6)
+        entry["end"] = round(word["abs_end"], 6)
         entry.pop("abs_start", None)
         entry.pop("abs_end", None)
         normalized.append(entry)
@@ -257,7 +262,8 @@ def build_whisper_payload(
     timeline_start: float,
 ) -> Dict[str, Any]:
     text = " ".join(segment["text"] for segment in segments if segment["text"])
-    duration = max((seg["end"] for seg in segments), default=0.0)
+    max_end = max((seg["end"] for seg in segments), default=0.0)
+    duration = max(0.0, max_end - timeline_start)
     if words:
         whisper_words = []
         for word in words:
