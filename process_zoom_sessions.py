@@ -116,6 +116,11 @@ def process_zoom_session(
 
     session_id = f"{SESSION_PREFIX}{session_number}"
     method_name = f"{METHOD_PREFIX}{session_number}"
+    session_dir = sessions_root / session_id
+    method_dir = session_dir / method_name
+    if method_dir.exists():
+        print(f"[skip] {method_dir} already exists; skipping.")
+        return
     normalized_path = sessions_root / f"{session_id}.normalized.json"
 
     print(f"[info] Processing {zoom_dir} -> session {session_id}")
@@ -152,8 +157,6 @@ def process_zoom_session(
         sync_cmd.extend(["--speaker-guesses", str(speaker_roster.expanduser().resolve())])
     run_command(sync_cmd, dry_run=dry_run)
 
-    method_dir = sessions_root / session_id / method_name
-    session_dir = sessions_root / session_id
     blank_roster = method_dir / f"{method_name}.speakers.blank.json"
     if dry_run:
         print(f"[info] (dry-run) Would move normalized JSON into {session_dir}")
