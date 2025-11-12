@@ -8,11 +8,13 @@ import argparse
 import json
 import textwrap
 from collections import defaultdict
-from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from webvtt import WebVTT
+
+from session_pipeline.io_utils import write_json
+from session_pipeline.time_utils import format_timestamp_hundredths, parse_vtt_timestamp
 
 
 DEFAULT_MIN_SPEAKER_FRACTION = 0.01
@@ -253,25 +255,6 @@ def split_speaker_text(text: str) -> Tuple[str, str]:
     return DEFAULT_UNKNOWN, text.strip()
 
 
-def parse_vtt_timestamp(value: Optional[str]) -> float:
-    if not value:
-        return 0.0
-    sanitized = value.replace(",", ".")
-    parts = sanitized.split(":")
-    if len(parts) == 3:
-        hours, minutes, seconds = parts
-    elif len(parts) == 2:
-        hours = "0"
-        minutes, seconds = parts
-    else:
-        return 0.0
-    try:
-        total_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
-    except ValueError:
-        return 0.0
-    return max(0.0, total_seconds)
-
-
 def compute_speaker_stats(segments: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     stats: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
         "duration": 0.0,
@@ -484,21 +467,6 @@ def build_report(
         "speakers": report_entries,
     }
 
-
-def write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
-
-
-def format_timestamp_hundredths(seconds: float) -> str:
-    safe_seconds = Decimal(str(max(0.0, float(seconds))))
-    total_hundredths = int((safe_seconds * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-    total_seconds, hundredths = divmod(total_hundredths, 100)
-    hours, remainder = divmod(total_seconds, 3600)
-    minutes, secs = divmod(remainder, 60)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{hundredths:02d}"
 
 if __name__ == "__main__":
     raise SystemExit(main())

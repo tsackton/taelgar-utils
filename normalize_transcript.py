@@ -12,6 +12,10 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from webvtt import WebVTT
 
+from session_pipeline.offsets import determine_offset
+from session_pipeline.segments import group_words_into_segments
+from session_pipeline.time_utils import parse_timecode
+
 
 SCHEMA_VERSION = "1.0.0"
 
@@ -562,42 +566,6 @@ def parse_whisper_with_diarization(
 # ---------------------------------------------------------------------------
 
 
-def group_words_into_segments(
-    words: List[Dict[str, Any]],
-    gap_seconds: float,
-) -> List[Dict[str, Any]]:
-    if not words:
-        return []
-
-    segments: List[Dict[str, Any]] = []
-    current_words: List[Dict[str, Any]] = [words[0]]
-    current_speaker = words[0]["speaker_id"]
-
-    for word in words[1:]:
-        gap = word["start"] - current_words[-1]["end"]
-        if word["speaker_id"] != current_speaker or gap > gap_seconds:
-            segments.append(segment_from_words(current_words))
-            current_words = [word]
-            current_speaker = word["speaker_id"]
-        else:
-            current_words.append(word)
-
-    segments.append(segment_from_words(current_words))
-    return segments
-
-
-def segment_from_words(words: List[Dict[str, Any]]) -> Dict[str, Any]:
-    speaker_id = words[0]["speaker_id"] if words else DEFAULT_UNKNOWN_SPEAKER
-    text = " ".join(word["text"] for word in words).strip()
-    return {
-        "start": words[0]["start"],
-        "end": words[-1]["end"],
-        "speaker_id": speaker_id,
-        "text": text,
-        "words": words,
-    }
-
-
 def extract_voice_line(line: str, previous_speaker: str) -> Tuple[Optional[str], str]:
     match = VOICE_TAG_PATTERN.match(line)
     if match:
@@ -611,69 +579,6 @@ def extract_voice_line(line: str, previous_speaker: str) -> Tuple[Optional[str],
         line = line[:-4].strip()
 
     return None, line
-
-
-def parse_timecode(value: str) -> float:
-    value = value.strip()
-    parts = value.split(":")
-    if len(parts) == 1:
-        return float(parts[0])
-    if len(parts) == 2:
-        minutes, seconds = parts
-        return float(minutes) * 60 + float(seconds)
-    if len(parts) == 3:
-        hours, minutes, seconds = parts
-        return float(hours) * 3600 + float(minutes) * 60 + float(seconds)
-    raise ValueError(f"Unsupported time code: {value}")
-
-
-def determine_offset(
-    *,
-    manual_offset: Optional[float],
-    offsets_json: Optional[Path],
-    audio_path: Optional[Path],
-) -> float:
-    if offsets_json:
-        if not audio_path:
-            raise SystemExit("--audio-path is required when using --offsets-json")
-        offsets_map = load_offsets_map(offsets_json)
-        resolved = resolve_path(audio_path)
-        basename = Path(resolved).name
-        if resolved in offsets_map:
-            return offsets_map[resolved]
-        if basename in offsets_map:
-            return offsets_map[basename]
-        raise SystemExit(
-            f"Audio path {resolved} (or basename {basename}) not found in offsets JSON {offsets_json}"
-        )
-
-    if manual_offset is not None:
-        return float(manual_offset)
-
-    return 0.0
-
-
-def load_offsets_map(path: Path) -> Dict[str, float]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    offsets: Dict[str, float] = {}
-    for entry in data.get("files", []):
-        file_path = entry.get("path")
-        offset = entry.get("offset_seconds")
-        if file_path is None or offset is None:
-            continue
-        resolved = resolve_path(file_path)
-        offsets[resolved] = float(offset)
-        offsets[Path(resolved).name] = float(offset)
-    return offsets
-
-
-def resolve_path(path: Path | str) -> str:
-    resolved = Path(path).expanduser()
-    if not resolved.is_absolute():
-        resolved = (Path.cwd() / resolved).resolve()
-    else:
-        resolved = resolved.resolve()
-    return str(resolved)
 
 
 if __name__ == "__main__":

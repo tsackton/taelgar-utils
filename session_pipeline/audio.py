@@ -98,6 +98,8 @@ def chunk_audio_file(
 
 
 def _normalise_audio(audio: AudioSegment, target_dbfs: float = -10.0, headroom: float = 1.0) -> AudioSegment:
+    """Return ``audio`` normalised towards ``target_dbfs`` without clipping."""
+
     change_in_dbfs = target_dbfs - audio.dBFS
     normalised = audio.apply_gain(change_in_dbfs)
     peak_dbfs = normalised.max_dBFS
@@ -113,6 +115,10 @@ def _detect_silences_ffmpeg(
     silence_thresh: int,
     min_silence_len: int,
 ) -> List[Dict[str, float]]:
+    """
+    Run ffmpeg ``silencedetect`` over ``source_path`` and return silence ranges.
+    """
+
     cmd = [
         "ffmpeg",
         "-i",
@@ -161,6 +167,10 @@ def _split_audio_on_silence(
     *,
     keep_silence: int,
 ) -> List[List[object]]:
+    """
+    Split ``audio`` into segments around detected silences while keeping context.
+    """
+
     segments: List[List[object]] = []
     previous_end_ms = 0
 
@@ -184,6 +194,10 @@ def _split_audio_on_silence(
 
 
 def _combine_segments(segments: List[List[object]], max_length_ms: int) -> List[List[object]]:
+    """
+    Combine adjacent segments until they reach ``max_length_ms`` in duration.
+    """
+
     if not segments:
         return []
 

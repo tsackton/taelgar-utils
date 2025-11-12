@@ -6,12 +6,11 @@ from __future__ import annotations
 
 import argparse
 import re
-import shlex
-import shutil
-import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import List, Optional
+
+from session_pipeline.runner_utils import move_file, prompt_for_roster_edit, run_cli
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -125,7 +124,7 @@ def process_zoom_session(
 
     print(f"[info] Processing {zoom_dir} -> session {session_id}")
 
-    run_command(
+    run_cli(
         [
             str(python),
             str(NORMALIZE_SCRIPT),
@@ -155,32 +154,16 @@ def process_zoom_session(
     ]
     if speaker_roster:
         sync_cmd.extend(["--speaker-guesses", str(speaker_roster.expanduser().resolve())])
-    run_command(sync_cmd, dry_run=dry_run)
+    run_cli(sync_cmd, dry_run=dry_run)
 
     blank_roster = method_dir / f"{method_name}.speakers.blank.json"
-    if dry_run:
-        print(f"[info] (dry-run) Would move normalized JSON into {session_dir}")
-    else:
-        session_dir.mkdir(parents=True, exist_ok=True)
-        target_normalized = session_dir / normalized_path.name
-        try:
-            shutil.move(str(normalized_path), str(target_normalized))
-            print(f"[info] Moved normalized bundle to {target_normalized}")
-        except FileNotFoundError:
-            print(f"[warn] Normalized file missing before move: {normalized_path}")
+    target_normalized = session_dir / normalized_path.name
+    move_file(normalized_path, target_normalized, dry_run=dry_run)
 
-    if not dry_run and blank_roster.exists():
-        prompt = f"\nEdit {blank_roster} now. Press Enter to continue or type 'skip' to bypass speaker cleanup: "
-        choice = input(prompt).strip().lower()
-        if choice == "skip":
-            print("[info] Skipping clean_speakers per user request.")
-            return
-    elif not dry_run:
-        print("[warn] Blank roster not found; continuing without manual edits.")
-    else:
-        print("[info] (dry-run) Would pause for roster edits if present.")
+    if not prompt_for_roster_edit(blank_roster, dry_run=dry_run):
+        return
 
-    run_command(
+    run_cli(
         [
             str(python),
             str(CLEAN_SCRIPT),
@@ -200,14 +183,6 @@ def select_zoom_vtt(zoom_dir: Path) -> Optional[Path]:
     if len(candidates) != 1:
         return None
     return candidates[0]
-
-
-def run_command(cmd: Sequence[str], *, dry_run: bool) -> None:
-    printable = shlex.join(cmd)
-    print(f"[cmd] {printable}")
-    if dry_run:
-        return
-    subprocess.run(cmd, check=True)
 
 
 if __name__ == "__main__":

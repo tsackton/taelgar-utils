@@ -13,6 +13,9 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from webvtt import Caption, WebVTT
 
+from session_pipeline.io_utils import write_json
+from session_pipeline.time_utils import format_timestamp
+
 
 DEFAULT_UNKNOWN = "unknown_speaker"
 
@@ -445,21 +448,6 @@ def build_vtt_document(segments: Iterable[Dict[str, Any]]) -> WebVTT:
 def write_vtt_file(path: Path, document: WebVTT) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     document.save(str(path))
-
-
-def write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
-
-
-def format_timestamp(seconds: float) -> str:
-    seconds = max(0.0, seconds)
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = seconds - (hours * 3600 + minutes * 60)
-    return f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
 
 
 if __name__ == "__main__":

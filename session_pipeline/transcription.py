@@ -44,12 +44,18 @@ def transcribe_audio_chunks(
 
 
 def _normalise_response(response: Any, response_format: str) -> Any:
+    """
+    Coerce the API response into either text or dict form based on ``response_format``.
+    """
+
     if response_format == "vtt":
         return _ensure_text(response)
     return _ensure_dict(response)
 
 
 def _ensure_text(response: Any) -> str:
+    """Return ``response`` as UTF-8 text, serialising when necessary."""
+
     if isinstance(response, (bytes, bytearray)):
         return response.decode("utf-8")
     if isinstance(response, str):
@@ -71,6 +77,8 @@ def _ensure_text(response: Any) -> str:
 
 
 def _ensure_dict(response: Any) -> Dict[str, Any]:
+    """Return ``response`` as a JSON-serialisable dictionary."""
+
     if isinstance(response, dict):
         return response
     if hasattr(response, "to_dict"):
