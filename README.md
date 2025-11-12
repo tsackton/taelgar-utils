@@ -32,11 +32,17 @@ These scripts form the current audio → transcript → cleaned output pipeline.
    - `synchronize_transcripts.py` constructs method-specific bundles with session-relative timestamps and emits:
      - `method.whisper.json` (L&A-compatible format with `method`, `duration`, `text`, and a `words` array),
      - `method.diarization.json` (namespaced speaker IDs per chunk),
-     - `method.vtt` (speaker: text cues ready for review or speaker cleanup).
+     - `method.vtt` (speaker: text cues ready for review or speaker cleanup),
+     - `method.speakers.json` (summary of all speaker IDs seen in the bundle),
+     - `method.speakers.blank.json` (pre-populated roster template with empty canonical names),
+     - `method.speakers.csv` (speaker statistics for spreadsheet-friendly review).
+    - Pass `--verbose-speakers` if you still need the legacy method/source namespaces inside `speaker_id`.
    - Outputs are written under `<session_id>/<method_name>/…`, making it easy to compare different transcription methods side-by-side.
 
 5. **`clean_speakers.py`**
-   - (Optional) Runs on a chosen method bundle (typically the best-quality transcript) to apply roster mappings and interactively label speakers, producing a speaker mapping, report, and canonical transcript.
+   - (Optional) Runs on a chosen method bundle (typically the best-quality transcript) to apply roster mappings and interactively label speakers, producing a speaker mapping, report, and canonical transcript (now merged per speaker with no timestamps).
+   - Point it at the session directory plus `--method <name>` (or directly at the method folder) to consume `<method>.vtt`; legacy `*.synced.json` bundles are still supported via `--bundle`.
+   - If `<method>.speakers.blank.json` exists, it is automatically used as the roster template (you can still override with `--roster`).
 
 6. **Supporting modules & runners**
    - `session_pipeline/audio.py` – silence-aware chunking helper (now defaulting

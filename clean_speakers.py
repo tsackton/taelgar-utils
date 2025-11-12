@@ -11,6 +11,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from webvtt import WebVTT
+
 
 DEFAULT_MIN_SPEAKER_FRACTION = 0.01
 DEFAULT_UNKNOWN = "unknown_speaker"
@@ -18,11 +20,24 @@ DEFAULT_UNKNOWN = "unknown_speaker"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Name speakers in a synchronized transcript bundle.")
-    parser.add_argument("sync_dir", type=Path, help="Directory containing synchronized outputs.")
+    parser.add_argument("sync_dir", type=Path, help="Session or method directory produced by synchronize_transcripts.")
     parser.add_argument(
         "--bundle",
         type=Path,
-        help="Optional explicit path to the canonical bundle JSON (defaults to *.synced.json inside sync_dir).",
+        help="Optional explicit path to a legacy *.synced.json bundle (skips VTT parsing).",
+    )
+    parser.add_argument(
+        "--method",
+        help="Optional method/prefix inside sync_dir (required when sync_dir contains multiple methods).",
+    )
+    parser.add_argument(
+        "--vtt",
+        type=Path,
+        help="Explicit path to the WebVTT file (defaults to <method>/<method>.vtt).",
+    )
+    parser.add_argument(
+        "--prefix",
+        help="Override output prefix (defaults to method/prefix inferred from inputs).",
     )
     parser.add_argument(
         "--roster",
@@ -48,11 +63,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    bundle_path = resolve_bundle_path(args.sync_dir, args.bundle)
-    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-    roster = load_roster(args.roster) if args.roster else {}
+    segments, out_dir, prefix, default_roster = load_segments_and_context(args)
+    roster_path = args.roster or default_roster
+    roster = load_roster(roster_path) if roster_path else {}
 
-    segments = bundle.get("segments") or []
     if not segments:
         raise SystemExit("No segments found in canonical bundle.")
 
@@ -85,10 +99,8 @@ def main() -> int:
     transcript_lines = build_transcript_lines(segments, speaker_mapping)
     report = build_report(speaker_stats, speaker_mapping, total_duration, roster)
 
-    out_dir = args.sync_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    prefix = bundle_path.stem.replace(".synced", "")
     mapping_path = out_dir / f"{prefix}.speaker_mapping.json"
     report_path = out_dir / f"{prefix}.speaker_report.json"
     transcript_path = out_dir / f"{prefix}.transcript.txt"
@@ -101,6 +113,22 @@ def main() -> int:
     print(f"Wrote report to {report_path}")
     print(f"Wrote transcript to {transcript_path}")
     return 0
+
+
+def load_segments_and_context(args: argparse.Namespace) -> Tuple[List[Dict[str, Any]], Path, str, Optional[Path]]:
+    base_dir = args.sync_dir.expanduser().resolve()
+    if args.bundle:
+        bundle_path = resolve_bundle_path(base_dir, args.bundle)
+        bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+        prefix = args.prefix or bundle_path.stem.replace(".synced", "")
+        return bundle.get("segments") or [], base_dir, prefix, None
+
+    method_dir, inferred_prefix = resolve_method_dir(base_dir, args.method)
+    vtt_path = resolve_vtt_path(method_dir, inferred_prefix, args.vtt)
+    segments = load_segments_from_vtt(vtt_path)
+    prefix = args.prefix or inferred_prefix
+    blank_roster = find_blank_roster(method_dir, prefix)
+    return segments, method_dir, prefix, blank_roster
 
 
 def load_roster(path: Path) -> Dict[str, str]:
@@ -135,6 +163,90 @@ def load_roster(path: Path) -> Dict[str, str]:
                 for alias in aliases:
                     roster[str(alias)] = canonical
     return roster
+
+
+def resolve_method_dir(base_dir: Path, method: Optional[str]) -> Tuple[Path, str]:
+    base_dir = base_dir.expanduser().resolve()
+    if method:
+        method_path = Path(method).expanduser()
+        if not method_path.is_absolute():
+            method_dir = (base_dir / method_path).resolve()
+        else:
+            method_dir = method_path.resolve()
+        if not method_dir.is_dir():
+            raise SystemExit(f"Method directory not found: {method_dir}")
+        return method_dir, method_dir.name
+
+    vtt_candidates = list(base_dir.glob("*.vtt"))
+    if len(vtt_candidates) == 1:
+        return base_dir, vtt_candidates[0].stem
+    if len(vtt_candidates) > 1:
+        raise SystemExit(
+            f"Multiple VTT files found in {base_dir}; specify --method or --vtt explicitly."
+        )
+
+    method_dirs = [
+        child
+        for child in base_dir.iterdir()
+        if child.is_dir() and (child / f"{child.name}.vtt").exists()
+    ]
+    if len(method_dirs) == 1:
+        return method_dirs[0], method_dirs[0].name
+    if not method_dirs:
+        raise SystemExit(
+            f"No method directories with VTT outputs found in {base_dir}. "
+            "Provide --method or point sync_dir to the desired method directory."
+        )
+    raise SystemExit("Multiple method directories detected; specify --method to disambiguate.")
+
+
+def resolve_vtt_path(method_dir: Path, method_prefix: str, explicit: Optional[Path]) -> Path:
+    if explicit:
+        vtt_path = explicit.expanduser().resolve()
+    else:
+        vtt_path = method_dir / f"{method_prefix}.vtt"
+        if not vtt_path.exists():
+            candidates = sorted(method_dir.glob("*.vtt"))
+            if len(candidates) == 1:
+                vtt_path = candidates[0]
+    if not vtt_path.exists():
+        raise SystemExit(f"WebVTT file not found: {vtt_path}")
+    return vtt_path
+
+
+def find_blank_roster(method_dir: Path, prefix: str) -> Optional[Path]:
+    candidate = method_dir / f"{prefix}.speakers.blank.json"
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def load_segments_from_vtt(path: Path) -> List[Dict[str, Any]]:
+    vtt = WebVTT().read(str(path))
+    segments: List[Dict[str, Any]] = []
+    for index, caption in enumerate(vtt):
+        merged_text = " ".join((caption.text or "").splitlines()).strip()
+        speaker, text = split_speaker_text(merged_text)
+        segments.append(
+            {
+                "id": f"seg_{index:06d}",
+                "start": float(caption.start_in_seconds or 0.0),
+                "end": float(caption.end_in_seconds or caption.start_in_seconds or 0.0),
+                "speaker_id": speaker,
+                "text": text,
+            }
+        )
+    return segments
+
+
+def split_speaker_text(text: str) -> Tuple[str, str]:
+    if not text:
+        return DEFAULT_UNKNOWN, ""
+    if ":" in text:
+        speaker, remainder = text.split(":", 1)
+        speaker = speaker.strip() or DEFAULT_UNKNOWN
+        return speaker, remainder.strip()
+    return DEFAULT_UNKNOWN, text.strip()
 
 
 def compute_speaker_stats(segments: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -285,11 +397,28 @@ def build_transcript_lines(
     mapping: Dict[str, str],
 ) -> List[str]:
     lines: List[str] = []
+    last_speaker: Optional[str] = None
+    buffer: List[str] = []
+
+    def flush_buffer(current_speaker: Optional[str]) -> None:
+        if current_speaker is None or not buffer:
+            return
+        merged_text = " ".join(buffer).strip()
+        if merged_text:
+            lines.append(f"{current_speaker}: {merged_text}")
+        buffer.clear()
+
     for segment in sorted(segments, key=lambda seg: seg.get("start", 0.0)):
         speaker = mapping.get(str(segment.get("speaker_id") or DEFAULT_UNKNOWN), DEFAULT_UNKNOWN)
         text = (segment.get("text") or "").strip()
-        timestamp = format_timestamp(float(segment.get("start", 0.0)))
-        lines.append(f"[{timestamp}] {speaker}: {text}")
+        if not text:
+            continue
+        if speaker != last_speaker:
+            flush_buffer(last_speaker)
+            last_speaker = speaker
+        buffer.append(text)
+
+    flush_buffer(last_speaker)
     return lines
 
 
@@ -322,15 +451,6 @@ def write_json(path: Path, payload: Any) -> None:
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
-
-
-def format_timestamp(seconds: float) -> str:
-    seconds = max(0.0, seconds)
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = seconds - (hours * 3600 + minutes * 60)
-    return f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

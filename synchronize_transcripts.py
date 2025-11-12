@@ -5,10 +5,13 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+from webvtt import Caption, WebVTT
 
 
 DEFAULT_UNKNOWN = "unknown_speaker"
@@ -36,6 +39,11 @@ def parse_args() -> argparse.Namespace:
         metavar=("NAME", "INPUT"),
         help="Define a method and its normalized transcript inputs. May be repeated.",
     )
+    parser.add_argument(
+        "--verbose-speakers",
+        action="store_true",
+        help="Include method/source namespaces in speaker IDs (matches legacy output).",
+    )
     return parser.parse_args()
 
 
@@ -56,7 +64,11 @@ def main() -> int:
             print(f"Warning: method '{method.name}' has no valid inputs; skipping.")
             continue
 
-        segments, words = aggregate_segments(bundles, method.name)
+        segments, words = aggregate_segments(
+            bundles,
+            method.name,
+            verbose_speakers=args.verbose_speakers,
+        )
         if not segments:
             print(f"Warning: method '{method.name}' produced no segments; skipping outputs.")
             continue
@@ -64,18 +76,31 @@ def main() -> int:
         timeline_start = min(seg["abs_start"] for seg in segments)
         normalized_segments = normalize_segments(segments, timeline_start)
         normalized_words = normalize_words(words, timeline_start)
+        speaker_stats = collect_speaker_stats(normalized_segments)
 
         whisper_payload = build_whisper_payload(method.name, normalized_segments, normalized_words, timeline_start)
-        diarization_payload = build_diarization_payload(normalized_segments, method.name, bundles)
-        vtt_text = build_vtt_text(normalized_segments)
+        diarization_payload = build_diarization_payload(normalized_segments, method.name)
+        speaker_index = build_speaker_index(
+            speaker_stats,
+            session_id=args.session_id,
+            method_name=method.name,
+        )
+        blank_mapping = build_blank_speaker_mapping(speaker_stats)
+        vtt_doc = build_vtt_document(normalized_segments)
 
         whisper_path = method_dir / f"{method.name}.whisper.json"
         diar_path = method_dir / f"{method.name}.diarization.json"
         vtt_path = method_dir / f"{method.name}.vtt"
+        speakers_path = method_dir / f"{method.name}.speakers.json"
+        speakers_blank_path = method_dir / f"{method.name}.speakers.blank.json"
+        speakers_csv_path = method_dir / f"{method.name}.speakers.csv"
 
         write_json(whisper_path, whisper_payload)
         write_json(diar_path, diarization_payload)
-        vtt_path.write_text(vtt_text, encoding="utf-8")
+        write_json(speakers_path, speaker_index)
+        write_json(speakers_blank_path, blank_mapping)
+        write_speaker_csv(speakers_csv_path, speaker_stats)
+        write_vtt_file(vtt_path, vtt_doc)
 
         print(f"Wrote method outputs to {method_dir}")
 
@@ -104,7 +129,12 @@ def load_bundle(path: Path) -> Dict[str, Any]:
     return data
 
 
-def aggregate_segments(bundles: Sequence[Dict[str, Any]], method_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def aggregate_segments(
+    bundles: Sequence[Dict[str, Any]],
+    method_name: str,
+    *,
+    verbose_speakers: bool,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     segments_out: List[Dict[str, Any]] = []
     words_out: List[Dict[str, Any]] = []
 
@@ -118,7 +148,7 @@ def aggregate_segments(bundles: Sequence[Dict[str, Any]], method_name: str) -> T
 
         for segment in segments:
             raw_speaker = str(segment.get("speaker_id") or DEFAULT_UNKNOWN)
-            namespaced_speaker = f"{method_source_id}__{raw_speaker}"
+            speaker_id = f"{method_source_id}__{raw_speaker}" if verbose_speakers else raw_speaker
             abs_start = offset + float(segment.get("start", 0.0))
             abs_end = offset + float(segment.get("end", segment.get("start", 0.0)))
             text = (segment.get("text") or "").strip()
@@ -128,7 +158,7 @@ def aggregate_segments(bundles: Sequence[Dict[str, Any]], method_name: str) -> T
                     "abs_start": abs_start,
                     "abs_end": abs_end,
                     "text": text,
-                    "speaker_id": namespaced_speaker,
+                    "speaker_id": speaker_id,
                     "raw_speaker": raw_speaker,
                     "source_id": source_id,
                     "source_path": source_path,
@@ -146,7 +176,7 @@ def aggregate_segments(bundles: Sequence[Dict[str, Any]], method_name: str) -> T
                     end_val = float(word.get("end", word.get("start", start_val)))
                     word_entry = dict(word)
                     word_entry["text"] = word_text
-                    word_entry["speaker_id"] = namespaced_speaker
+                    word_entry["speaker_id"] = speaker_id
                     word_entry["raw_speaker"] = word.get("speaker_id") or raw_speaker
                     word_entry["source_id"] = source_id
                     word_entry["source_path"] = source_path
@@ -158,7 +188,7 @@ def aggregate_segments(bundles: Sequence[Dict[str, Any]], method_name: str) -> T
                     words_out.append(
                         {
                             "text": text,
-                            "speaker_id": namespaced_speaker,
+                            "speaker_id": speaker_id,
                             "raw_speaker": raw_speaker,
                             "source_id": source_id,
                             "source_path": source_path,
@@ -170,7 +200,7 @@ def aggregate_segments(bundles: Sequence[Dict[str, Any]], method_name: str) -> T
                 words_out.append(
                     {
                         "text": text,
-                        "speaker_id": namespaced_speaker,
+                        "speaker_id": speaker_id,
                         "raw_speaker": raw_speaker,
                         "source_id": source_id,
                         "source_path": source_path,
@@ -254,7 +284,6 @@ def build_whisper_payload(
 def build_diarization_payload(
     segments: List[Dict[str, Any]],
     method_name: str,
-    bundles: Sequence[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     diarization: List[Dict[str, Any]] = []
     for segment in segments:
@@ -272,18 +301,107 @@ def build_diarization_payload(
     return diarization
 
 
-def build_vtt_text(segments: Iterable[Dict[str, Any]]) -> str:
-    lines = ["WEBVTT", ""]
-    for index, segment in enumerate(segments, start=1):
-        start_ts = format_timestamp(segment["start"])
-        end_ts = format_timestamp(segment["end"])
-        lines.append(str(index))
-        lines.append(f"{start_ts} --> {end_ts}")
-        speaker = segment["speaker_id"]
-        text = segment["text"]
-        lines.append(f"{speaker}: {text}")
-        lines.append("")
-    return "\n".join(lines)
+def collect_speaker_stats(segments: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    stats: Dict[str, Dict[str, Any]] = {}
+    for segment in segments:
+        speaker_id = str(segment.get("speaker_id") or DEFAULT_UNKNOWN)
+        entry = stats.setdefault(
+            speaker_id,
+            {
+                "speaker_id": speaker_id,
+                "raw_speakers": set(),
+                "source_ids": set(),
+                "source_paths": set(),
+                "segment_count": 0,
+                "total_duration": 0.0,
+            },
+        )
+        entry["raw_speakers"].add(str(segment.get("raw_speaker") or DEFAULT_UNKNOWN))
+        source_id = segment.get("source_id")
+        if source_id:
+            entry["source_ids"].add(str(source_id))
+        source_path = segment.get("source_path")
+        if source_path:
+            entry["source_paths"].add(str(source_path))
+        entry["segment_count"] += 1
+        duration = max(0.0, float(segment.get("end", 0.0)) - float(segment.get("start", 0.0)))
+        entry["total_duration"] += duration
+    return stats
+
+
+def build_speaker_index(
+    stats: Dict[str, Dict[str, Any]],
+    *,
+    session_id: str,
+    method_name: str,
+) -> Dict[str, Any]:
+    speakers = []
+    for speaker_id in sorted(stats):
+        entry = stats[speaker_id]
+        speakers.append(
+            {
+                "speaker_id": speaker_id,
+                "raw_speakers": sorted(entry["raw_speakers"]),
+                "source_ids": sorted(entry["source_ids"]),
+                "source_paths": sorted(entry["source_paths"]),
+                "segment_count": entry["segment_count"],
+                "total_duration": round(entry["total_duration"], 6),
+            }
+        )
+
+    return {
+        "session_id": session_id,
+        "method": method_name,
+        "speakers": speakers,
+    }
+
+
+def build_blank_speaker_mapping(stats: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
+    return {speaker_id: "" for speaker_id in sorted(stats)}
+
+
+def write_speaker_csv(path: Path, stats: Dict[str, Dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "speaker_id",
+        "raw_speakers",
+        "source_ids",
+        "source_paths",
+        "segment_count",
+        "total_duration",
+    ]
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        for speaker_id in sorted(stats):
+            entry = stats[speaker_id]
+            writer.writerow(
+                {
+                    "speaker_id": speaker_id,
+                    "raw_speakers": "; ".join(sorted(entry["raw_speakers"])),
+                    "source_ids": "; ".join(sorted(entry["source_ids"])),
+                    "source_paths": "; ".join(sorted(entry["source_paths"])),
+                    "segment_count": entry["segment_count"],
+                    "total_duration": f"{entry['total_duration']:.6f}",
+                }
+            )
+
+
+def build_vtt_document(segments: Iterable[Dict[str, Any]]) -> WebVTT:
+    vtt = WebVTT()
+    for segment in segments:
+        start_ts = format_timestamp(float(segment.get("start", 0.0)))
+        end_ts = format_timestamp(float(segment.get("end", 0.0)))
+        speaker = str(segment.get("speaker_id") or DEFAULT_UNKNOWN)
+        text = (segment.get("text") or "").strip()
+        caption_text = f"{speaker}: {text}" if text else f"{speaker}:"
+        vtt.captions.append(Caption(start=start_ts, end=end_ts, text=caption_text))
+    return vtt
+
+
+def write_vtt_file(path: Path, document: WebVTT) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(str(path))
 
 
 def write_json(path: Path, payload: Any) -> None:
