@@ -44,11 +44,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Include method/source namespaces in speaker IDs (matches legacy output).",
     )
+    parser.add_argument(
+        "--speaker-guesses",
+        type=Path,
+        help="Optional JSON mapping of raw speaker IDs to canonical suggestions used for blank speaker files.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    speaker_guesses = load_speaker_guesses(args.speaker_guesses) if args.speaker_guesses else {}
     methods = parse_methods(args.method)
     if not methods:
         raise SystemExit("No methods specified. Use --method NAME file1 file2 ...")
@@ -85,7 +91,7 @@ def main() -> int:
             session_id=args.session_id,
             method_name=method.name,
         )
-        blank_mapping = build_blank_speaker_mapping(speaker_stats)
+        blank_mapping = build_blank_speaker_mapping(speaker_stats, speaker_guesses)
         vtt_doc = build_vtt_document(normalized_segments)
 
         whisper_path = method_dir / f"{method.name}.whisper.json"
@@ -301,6 +307,24 @@ def build_diarization_payload(
     return diarization
 
 
+def load_speaker_guesses(path: Path) -> Dict[str, str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    guesses: Dict[str, str] = {}
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, str) and value:
+                guesses[str(key)] = value
+    elif isinstance(data, list):
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+            raw = entry.get("raw") or entry.get("speaker")
+            canonical = entry.get("canonical") or entry.get("name")
+            if raw and canonical:
+                guesses[str(raw)] = str(canonical)
+    return guesses
+
+
 def collect_speaker_stats(segments: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     stats: Dict[str, Dict[str, Any]] = {}
     for segment in segments:
@@ -356,8 +380,21 @@ def build_speaker_index(
     }
 
 
-def build_blank_speaker_mapping(stats: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
-    return {speaker_id: "" for speaker_id in sorted(stats)}
+def build_blank_speaker_mapping(
+    stats: Dict[str, Dict[str, Any]],
+    speaker_guesses: Dict[str, str],
+) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    for speaker_id in sorted(stats):
+        entry = stats[speaker_id]
+        canonical = speaker_guesses.get(speaker_id)
+        if not canonical:
+            for raw in sorted(entry["raw_speakers"]):
+                canonical = speaker_guesses.get(raw)
+                if canonical:
+                    break
+        mapping[speaker_id] = canonical or ""
+    return mapping
 
 
 def write_speaker_csv(path: Path, stats: Dict[str, Dict[str, Any]]) -> None:

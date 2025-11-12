@@ -8,6 +8,7 @@ import argparse
 import json
 import textwrap
 from collections import defaultdict
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -16,6 +17,7 @@ from webvtt import WebVTT
 
 DEFAULT_MIN_SPEAKER_FRACTION = 0.01
 DEFAULT_UNKNOWN = "unknown_speaker"
+MERGE_GAP_SECONDS = 3.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -227,11 +229,13 @@ def load_segments_from_vtt(path: Path) -> List[Dict[str, Any]]:
     for index, caption in enumerate(vtt):
         merged_text = " ".join((caption.text or "").splitlines()).strip()
         speaker, text = split_speaker_text(merged_text)
+        start_seconds = parse_vtt_timestamp(caption.start)
+        end_seconds = parse_vtt_timestamp(caption.end)
         segments.append(
             {
                 "id": f"seg_{index:06d}",
-                "start": float(caption.start_in_seconds or 0.0),
-                "end": float(caption.end_in_seconds or caption.start_in_seconds or 0.0),
+                "start": start_seconds,
+                "end": end_seconds if end_seconds >= start_seconds else start_seconds,
                 "speaker_id": speaker,
                 "text": text,
             }
@@ -247,6 +251,25 @@ def split_speaker_text(text: str) -> Tuple[str, str]:
         speaker = speaker.strip() or DEFAULT_UNKNOWN
         return speaker, remainder.strip()
     return DEFAULT_UNKNOWN, text.strip()
+
+
+def parse_vtt_timestamp(value: Optional[str]) -> float:
+    if not value:
+        return 0.0
+    sanitized = value.replace(",", ".")
+    parts = sanitized.split(":")
+    if len(parts) == 3:
+        hours, minutes, seconds = parts
+    elif len(parts) == 2:
+        hours = "0"
+        minutes, seconds = parts
+    else:
+        return 0.0
+    try:
+        total_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    except ValueError:
+        return 0.0
+    return max(0.0, total_seconds)
 
 
 def compute_speaker_stats(segments: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -397,28 +420,44 @@ def build_transcript_lines(
     mapping: Dict[str, str],
 ) -> List[str]:
     lines: List[str] = []
-    last_speaker: Optional[str] = None
-    buffer: List[str] = []
+    current: Optional[Dict[str, Any]] = None
 
-    def flush_buffer(current_speaker: Optional[str]) -> None:
-        if current_speaker is None or not buffer:
+    def flush_current() -> None:
+        nonlocal current
+        if not current or not current["texts"]:
+            current = None
             return
-        merged_text = " ".join(buffer).strip()
+        merged_text = " ".join(current["texts"]).strip()
         if merged_text:
-            lines.append(f"{current_speaker}: {merged_text}")
-        buffer.clear()
+            start_ts = format_timestamp_hundredths(current["start"])
+            end_ts = format_timestamp_hundredths(current["end"])
+            lines.append(f"[{start_ts} - {end_ts}] {current['speaker']}: {merged_text}")
+        current = None
 
     for segment in sorted(segments, key=lambda seg: seg.get("start", 0.0)):
         speaker = mapping.get(str(segment.get("speaker_id") or DEFAULT_UNKNOWN), DEFAULT_UNKNOWN)
         text = (segment.get("text") or "").strip()
         if not text:
             continue
-        if speaker != last_speaker:
-            flush_buffer(last_speaker)
-            last_speaker = speaker
-        buffer.append(text)
+        start = float(segment.get("start", 0.0))
+        end = float(segment.get("end", start))
+        if (
+            current
+            and speaker == current["speaker"]
+            and start <= current["end"] + MERGE_GAP_SECONDS
+        ):
+            current["end"] = max(current["end"], end)
+            current["texts"].append(text)
+        else:
+            flush_current()
+            current = {
+                "speaker": speaker,
+                "start": start,
+                "end": end,
+                "texts": [text],
+            }
 
-    flush_buffer(last_speaker)
+    flush_current()
     return lines
 
 
@@ -451,6 +490,15 @@ def write_json(path: Path, payload: Any) -> None:
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
+
+
+def format_timestamp_hundredths(seconds: float) -> str:
+    safe_seconds = Decimal(str(max(0.0, float(seconds))))
+    total_hundredths = int((safe_seconds * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    total_seconds, hundredths = divmod(total_hundredths, 100)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{hundredths:02d}"
 
 if __name__ == "__main__":
     raise SystemExit(main())

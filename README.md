@@ -37,10 +37,11 @@ These scripts form the current audio → transcript → cleaned output pipeline.
      - `method.speakers.blank.json` (pre-populated roster template with empty canonical names),
      - `method.speakers.csv` (speaker statistics for spreadsheet-friendly review).
     - Pass `--verbose-speakers` if you still need the legacy method/source namespaces inside `speaker_id`.
+    - Provide `--speaker-guesses path/to/roster.json` to auto-fill known canonical names inside the blank roster file.
    - Outputs are written under `<session_id>/<method_name>/…`, making it easy to compare different transcription methods side-by-side.
 
 5. **`clean_speakers.py`**
-   - (Optional) Runs on a chosen method bundle (typically the best-quality transcript) to apply roster mappings and interactively label speakers, producing a speaker mapping, report, and canonical transcript (now merged per speaker with no timestamps).
+   - (Optional) Runs on a chosen method bundle (typically the best-quality transcript) to apply roster mappings and interactively label speakers, producing a speaker mapping, report, and canonical transcript (speaker lines merge short pauses and show `[HH:MM:SS.pp - …] Speaker: text` ranges).
    - Point it at the session directory plus `--method <name>` (or directly at the method folder) to consume `<method>.vtt`; legacy `*.synced.json` bundles are still supported via `--bundle`.
    - If `<method>.speakers.blank.json` exists, it is automatically used as the roster template (you can still override with `--roster`).
 
@@ -81,6 +82,10 @@ Utility scripts that remain handy for specific workflows.
   with labelled cues.
 - **`parse_speakers_from_vtt.py`** – crawl directories of VTT files and report
   word counts per speaker.
+- **`process_zoom_sessions.py`** – batch helper that ingests Zoom transcript folders,
+  normalizes them, runs synchronization (optionally seeding speaker guesses with `--speaker-roster`),
+  pauses for roster edits, and launches `clean_speakers.py` once each session’s
+  `*.speakers.blank.json` is ready.
 - **`_old_stuff/`** – archival scripts kept for reference; new projects should
   prefer the modern pipeline described above.
 
