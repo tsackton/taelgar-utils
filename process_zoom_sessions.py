@@ -175,7 +175,7 @@ def process_zoom_session(
 
 def extract_session_number(name: str) -> Optional[str]:
     match = re.search(r"(\d+)", name)
-    return match.group(1) if match else None
+    return match.group(1).zfill(3) if match else None
 
 
 def select_zoom_vtt(zoom_dir: Path) -> Optional[Path]:

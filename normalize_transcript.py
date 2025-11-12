@@ -477,7 +477,11 @@ def parse_whisper_with_diarization(
     diarization = json.loads(diarization_path.read_text(encoding="utf-8"))
 
     words_data = transcript.get("words") or []
-    diar_entries = diarization or []
+
+    if not isinstance(diarization, list):
+        raise SystemExit(
+            "Diarization JSON must be a list of segments matching synchronize_transcripts.py output."
+        )
 
     words = [
         {
@@ -490,15 +494,35 @@ def parse_whisper_with_diarization(
     ]
     words.sort(key=lambda item: item["start"])
 
-    diar_segments = [
-        {
-            "speaker": str(entry.get("speaker") or DEFAULT_UNKNOWN_SPEAKER),
-            "start": float(entry.get("segment", {}).get("start", 0.0)),
-            "end": float(entry.get("segment", {}).get("end", 0.0)),
-        }
-        for entry in diar_entries
-        if isinstance(entry, dict) and isinstance(entry.get("segment"), dict)
-    ]
+    diar_segments: List[Dict[str, Any]] = []
+    for index, entry in enumerate(diarization):
+        if not isinstance(entry, dict):
+            raise SystemExit(
+                f"Diarization entry #{index} is not an object; expected synchronize_transcripts.py schema."
+            )
+        missing = [field for field in ("start", "end", "speaker", "source_id") if field not in entry]
+        if missing:
+            raise SystemExit(
+                f"Diarization entry #{index} missing required keys {missing}; expected synchronize_transcripts.py schema."
+            )
+        try:
+            start_val = float(entry["start"])
+            end_val = float(entry["end"])
+        except (TypeError, ValueError):
+            raise SystemExit(f"Diarization entry #{index} has invalid start/end values.")
+        speaker_label = str(entry.get("speaker") or DEFAULT_UNKNOWN_SPEAKER)
+        source_id = entry.get("source_id")
+        if source_id in (None, ""):
+            raise SystemExit(f"Diarization entry #{index} missing a valid source_id value.")
+
+        diar_segments.append(
+            {
+                "speaker": speaker_label,
+                "start": start_val,
+                "end": max(end_val, start_val),
+                "source_id": str(source_id),
+            }
+        )
     diar_segments.sort(key=lambda item: item["start"])
 
     segments: List[Dict[str, Any]] = []

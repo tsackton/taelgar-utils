@@ -66,9 +66,8 @@ Both option 2 and option 3 will likely share some audio preprocessing steps, and
    - Converts raw ElevenLabs JSON, Whisper+diarization JSON, plain-text logs, or WebVTT files into a normalized JSON bundle with segments, word-level detail (when available), speaker hints, and source metadata.
    - Supports offset alignment via `get_audio_offsets.py` outputs so each chunk knows its absolute session start time.
 
-4. **`run_transcript_pipeline.py` + `synchronize_transcripts.py`**
-   - `run_transcript_pipeline.py` reads a manifest to batch-normalize multiple transcripts and then aggregate them per method (e.g., ElevenLabs split, ElevenLabs merged, Whisper, VTT).
-   - `synchronize_transcripts.py` constructs method-specific bundles with session-relative timestamps and emits:
+4. **`synchronize_transcripts.py`**
+   - Constructs method-specific bundles with session-relative timestamps and emits:
      - `method.whisper.json` (L&A-compatible format with `method`, `duration`, `text`, and a `words` array),
      - `method.diarization.json` (namespaced speaker IDs per chunk),
      - `method.vtt` (speaker: text cues ready for review or speaker cleanup),
