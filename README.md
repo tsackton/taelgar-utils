@@ -49,6 +49,7 @@ These scripts form the current audio → transcript → cleaned output pipeline.
    - `session_pipeline/audio.py` – silence-aware chunking helper (now defaulting
      to 16 kHz mono PCM WAV output and rebalancing trailing chunks to avoid tiny
      leftovers).
+   - `get_audio_offsets.py` – compute per-chunk offsets from waveform alignment so normalized bundles can be aligned to the full session timeline.
    - `process_m4a_sessions.sh` – shell wrapper for batch transcoding and
      transcription runs.
 
@@ -82,6 +83,7 @@ Utility scripts that remain handy for specific workflows.
   with labelled cues.
 - **`parse_speakers_from_vtt.py`** – crawl directories of VTT files and report
   word counts per speaker.
+- **`replace_speaker_names.py`** – apply a finalized speaker mapping to a canonical bundle (and optional Whisper/diarization pair) to emit fully named JSON/VTT outputs.
 - **`process_zoom_sessions.py`** – batch helper that ingests Zoom transcript folders,
   normalizes them, runs synchronization (optionally seeding speaker guesses with `--speaker-roster`),
   pauses for roster edits, and launches `clean_speakers.py` once each session’s
