@@ -9,6 +9,45 @@ session audio/transcripts and keeping the Obsidian vault in sync.
 
 These scripts form the current audio → transcript → cleaned output pipeline.
 
+There are intended to be three ways to produce a standarized cleaned output, defined here as a raw transcript in a standard format with normalized speaker names (to the extent possible). 
+
+### Option 1: WebVTT from Zoom
+
+If you have a Zoom transcript, the process is simple, as the only requirement is to normalize speaker names and extract speaker information and diarization from the WebVTT output. 
+
+Run:
+```
+process_zoom_sessions.py --zoom-dir PATH/TO/ZOOM --sessions-root PATH/TO/OUTPUT --speaker-roster (optional json with known speaker mappings)
+```
+
+Note this code currently:
+(a) hard codes the campaign prefix, as a variable at the top of the script
+(b) assumes that session number can be identified from `re.search(r"(\d+)", name)`, which should generally work as long as there are no other numbers in the directory name
+
+Under the hood, this runs:
+- `normalize_transcript.py`
+- `synchronize_transcripts.py`
+- `clean_speakers.py`
+
+### Option 2: Diarized Audio
+
+If you have an audio recording and a diarization, this option is intended to allow easy processing using OpenAI whisper to transcribe the audio with word-level timestamps, and then map speakers using the diarization. Optionally this might allow transcribing multi-channel audio and then mapping channels to speakers via overlaps with diarizations. This will likely be developed with whisper only, but optionally could be extended to use ElevenLabs scribe-v2 or OpenAI gpt-4o-transcribe or other targets. 
+
+The main use case here is expected to be reprocessing audio with updated transcription backends, e.g. rerunning old Zoom sessions with better transcription, or reprocessing audio from option 3, below, without having to rerun diarization. 
+
+*This code does not exist in robust form yet*
+
+### Option 3: Raw Audio
+
+If you have an audio recording only, with no diarization, this is your path. This is for, e.g. voice notes from in person sessions and similar. This code will submit the audio recording ElevenLabs scribe-v2, get back a diarized output and a transcript, and then process the diarized transcript, optionally running through a classifier to assign names to diarized segments. 
+
+The key distinction here is that Option 2 assumes you have a high quality diarization with little or no need for extensive cleaning, while option 3 assumes the diarization is messy. 
+
+Both option 2 and option 3 will likely share some audio preprocessing steps, and both will handle splitting audio and merging with correct timestamps. 
+
+*This code does not exist in robust form yet*
+
+
 1. **Audio preparation** (outside Python)
    - Recordings are pre-cleaned with `ffmpeg` to 16 kHz mono, 16-bit PCM WAV.
    - Long sessions can optionally be normalised and denoised before entering the
@@ -52,6 +91,18 @@ These scripts form the current audio → transcript → cleaned output pipeline.
    - `get_audio_offsets.py` – compute per-chunk offsets from waveform alignment so normalized bundles can be aligned to the full session timeline.
    - `process_m4a_sessions.sh` – shell wrapper for batch transcoding and
      transcription runs.
+
+---
+
+## Session Note Generation
+
+This will be a pipeline to go from a raw transcript to a final session note. This will be designed to have a variety of flexible inputs and optional processing steps, and should be able to handle:
+- Full run: start from raw transcript, clean the transcript, split into scenes, summarize each scene, produce full session note
+- Cleaned start: as above, but starting from a cleaned transcript
+- Summary start: as above, but starting from a summary of each scene (e.g., from session without audio)
+- Gap filling: starting with a session note that has some pieces (e.g., maybe a narrative but nothing else) will fill in missing components per a template (good for, e.g. Cleenseau sessions where the input is a long blog post from a player).
+
+*None of this is written yet*
 
 ---
 
