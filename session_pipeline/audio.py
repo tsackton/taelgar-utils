@@ -34,7 +34,8 @@ def chunk_audio_file(
     destination_dir = Path(destination_dir).expanduser().resolve()
     destination_dir.mkdir(parents=True, exist_ok=True)
 
-    audio = AudioSegment.from_file(source_path)
+    with source_path.open("rb") as source_handle:
+        audio = AudioSegment.from_file(source_handle)
 
     silence_ranges = _detect_silences_ffmpeg(
         source_path,

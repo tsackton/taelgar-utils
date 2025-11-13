@@ -166,7 +166,8 @@ def _normalise_audio_in_memory(
     if output_path.exists() and not overwrite:
         raise AudioProcessingError(f"Output exists: {output_path}")
 
-    audio = AudioSegment.from_file(source_path)
+    with source_path.open("rb") as source_handle:
+        audio = AudioSegment.from_file(source_handle)
     change_in_dbfs = target_dbfs - audio.dBFS
     normalised = audio.apply_gain(change_in_dbfs)
     peak_dbfs = normalised.max_dBFS
