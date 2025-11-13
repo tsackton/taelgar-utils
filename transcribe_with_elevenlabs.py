@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 from elevenlabs import ElevenLabs
 from pydub import AudioSegment
 from session_pipeline.audio import chunk_audio_file
+from session_pipeline.audio_processing import AUDIO_PROFILES, AudioProcessingError, prepare_clean_audio
 
 
 AUDIO_EXTENSIONS = {
@@ -69,6 +70,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional path when transcribing a single file. Ignored when --input is a file-of-files.",
     )
+    parser.add_argument(
+        "--audio-profile",
+        choices=sorted(AUDIO_PROFILES.keys()),
+        default="voice-memo",
+        help="Audio preprocessing profile applied before transcription (default: voice-memo).",
+    )
+    parser.add_argument(
+        "--discard-audio",
+        action="store_true",
+        help="Write preprocessed audio to a temporary file and delete it after use.",
+    )
     return parser
 
 
@@ -96,10 +108,23 @@ def main(argv: list[str] | None = None) -> int:
 
     failures: List[Path] = []
     files_to_transcribe: List[Path] = []
+    cleanup_after_transcription: List[Path] = []
     warned_output_ignored = False
+
     for audio_file in audio_files:
+        clean_path: Path | None = None
+        cleanup_marker: Path | None = None
         try:
-            duration_seconds = get_audio_duration_seconds(audio_file)
+            clean_path, cleanup_marker = prepare_clean_audio(
+                audio_file,
+                profile=args.audio_profile,
+                discard=args.discard_audio,
+                sample_rate=16_000,
+                channels=1,
+                output_format="wav",
+                log_fn=lambda message: print(message),
+            )
+            duration_seconds = get_audio_duration_seconds(clean_path)
             if duration_seconds > CHUNK_MAX_SECONDS:
                 print(
                     f"Chunking {audio_file} ({duration_seconds/3600:.2f} hours) before transcription..."
@@ -113,27 +138,34 @@ def main(argv: list[str] | None = None) -> int:
                     warned_output_ignored = True
 
                 chunks = chunk_audio_file(
-                    audio_file,
-                    audio_file.parent,
+                    clean_path,
+                    clean_path.parent,
                     max_chunk_seconds=CHUNK_MAX_SECONDS,
-                    target_format="wav",
-                    target_frame_rate=16_000,
-                    target_channels=1,
-                    target_sample_width=2,
-                    target_bitrate=None,
-                    chunk_basename=audio_file.stem,
-                    normalise=False,
+                    chunk_basename=clean_path.stem,
                 )
                 chunk_paths = [Path(chunk["path"]) for chunk in chunks]
                 files_to_transcribe.extend(chunk_paths)
+                if cleanup_marker:
+                    cleanup_marker.unlink(missing_ok=True)
             else:
-                files_to_transcribe.append(audio_file)
+                files_to_transcribe.append(clean_path)
+                if cleanup_marker:
+                    cleanup_after_transcription.append(clean_path.resolve())
+        except AudioProcessingError as exc:
+            failures.append(audio_file)
+            print(f"Failed to preprocess {audio_file}: {exc}", file=sys.stderr)
+            if cleanup_marker and cleanup_marker.exists():
+                cleanup_marker.unlink(missing_ok=True)
         except Exception as exc:
             failures.append(audio_file)
             print(f"Failed to prepare {audio_file}: {exc}", file=sys.stderr)
+            if cleanup_marker and cleanup_marker.exists():
+                cleanup_marker.unlink(missing_ok=True)
 
     if args.output and len(files_to_transcribe) > 1:
         print("Warning: --output ignored when processing multiple files.", file=sys.stderr)
+
+    cleanup_targets = {path.resolve() for path in cleanup_after_transcription}
 
     for audio_file in files_to_transcribe:
         try:
@@ -161,6 +193,10 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             failures.append(audio_file)
             print(f"Failed to transcribe {audio_file}: {exc}", file=sys.stderr)
+        finally:
+            resolved = audio_file.resolve()
+            if resolved in cleanup_targets and resolved.exists():
+                resolved.unlink(missing_ok=True)
 
     if failures:
         print(f"{len(failures)} file(s) failed.", file=sys.stderr)

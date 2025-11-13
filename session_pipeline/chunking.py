@@ -19,16 +19,9 @@ def prepare_audio_chunks(
     manifest_path: Path,
     reuse_existing: bool = True,
     max_chunk_seconds: Optional[float] = 900.0,
-    target_format: str = "wav",
-    target_frame_rate: Optional[int] = 16_000,
-    target_channels: Optional[int] = 1,
-    target_sample_width: Optional[int] = 2,
-    target_bitrate: Optional[str] = None,
     chunk_basename: Optional[str] = None,
-    min_silence_len: int = 1000,
+    min_silence_len: int = 500,
     silence_thresh: int = -40,
-    keep_silence: int = 500,
-    normalise: bool = True,
 ) -> List[ChunkEntry]:
     """
     Ensure ``audio_path`` is split into chunks and tracked via ``manifest_path``.
@@ -51,16 +44,9 @@ def prepare_audio_chunks(
         audio_path,
         chunks_dir,
         max_chunk_seconds=max_chunk_seconds,
-        target_format=target_format,
-        target_frame_rate=target_frame_rate,
-        target_channels=target_channels,
-        target_sample_width=target_sample_width,
-        target_bitrate=target_bitrate,
         chunk_basename=chunk_basename,
         min_silence_len=min_silence_len,
         silence_thresh=silence_thresh,
-        keep_silence=keep_silence,
-        normalise=normalise,
     )
 
     normalized_entries: List[ChunkEntry] = []

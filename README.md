@@ -59,11 +59,14 @@ Both option 2 and option 3 will likely share some audio preprocessing steps, and
 *This code does not exist in robust form yet*
 
 
-1. **Audio preparation** (outside Python)
-   - Recordings are pre-cleaned with `ffmpeg` to 16 kHz mono, 16-bit PCM WAV.
-   - Long sessions can optionally be normalised and denoised before entering the
-     Python pipeline.
-   - Use `process_m4a_sessions.sh` to clean iPhone voice memos specifically. 
+1. **Audio preparation**
+   - Run `preprocess_audio.py PATH/TO/audio-or-dir` to standardize sources.
+   - Profiles:
+     - `passthrough` – convert/containerize only.
+     - `normalize-only` – light in-memory gain ride to −10 dBFS.
+     - `zoom-audio` – band-limit + gentle adaptive loudness/compression (default for Option 2).
+     - `voice-memo` – adds RNNoise denoise plus stronger compression (default for Option 3).
+   - Outputs 16 kHz mono, 16-bit PCM WAV by default; override with `--output-format`, `--sample-rate`, etc.
 
 2. **`transcribe_with_elevenlabs.py`**
    - Accepts a single WAV file or a file-of-paths list.
@@ -99,12 +102,11 @@ Both option 2 and option 3 will likely share some audio preprocessing steps, and
    - If `<method>.speakers.blank.json` exists, it is automatically used as the roster template (you can still override with `--roster`).
 
 6. **Supporting modules & runners**
-   - `session_pipeline/audio.py` – silence-aware chunking helper (now defaulting
-     to 16 kHz mono PCM WAV output and rebalancing trailing chunks to avoid tiny
-     leftovers).
+   - `preprocess_audio.py` – CLI for applying the shared audio profiles to files or directories.
+   - `session_pipeline/audio_processing.py` – profile definitions + ffmpeg/pydub helpers (also used by the `transcribe_with_*` scripts).
+   - `session_pipeline/audio.py` – silence-aware chunking helper (always exports
+     16 kHz mono PCM WAV and rebalances trailing chunks to avoid tiny leftovers).
    - `get_audio_offsets.py` – compute per-chunk offsets from waveform alignment so normalized bundles can be aligned to the full session timeline.
-   - `process_m4a_sessions.sh` – shell wrapper for batch transcoding and
-     transcription runs.
 
 ---
 

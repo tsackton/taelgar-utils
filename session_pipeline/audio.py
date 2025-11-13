@@ -10,28 +10,21 @@ def chunk_audio_file(
     destination_dir: Path,
     *,
     max_chunk_seconds: Optional[float] = 900,
-    target_format: str = "wav",
-    target_frame_rate: Optional[int] = 16_000,
-    target_channels: Optional[int] = 1,
-    target_sample_width: Optional[int] = 2,
-    target_bitrate: Optional[str] = None,
     chunk_basename: Optional[str] = None,
-    min_silence_len: int = 1000,
+    min_silence_len: int = 500,
     silence_thresh: int = -40,
-    keep_silence: int = 500,
-    normalise: bool = True,
 ) -> List[Dict[str, object]]:
     """
-    Split ``source_path`` into audio chunks using silence detection and size limits.
+    Split ``source_path`` into audio chunks using silence midpoints and size limits.
 
-    The logic follows ``split_clean_audio.py`` closely:
-        1. Optionally normalise the audio to a stable level.
-        2. Use FFmpeg ``silencedetect`` to find long silent spans (in seconds).
-        3. Split on those silences, retaining a small buffer of context.
-        4. Recombine segments until ``max_chunk_seconds`` would be exceeded.
-        5. Export each chunk in the requested format (defaults to 16 kHz mono PCM WAV).
+    The steps are:
+        1. Use FFmpeg ``silencedetect`` to find silence intervals (in seconds).
+        2. Convert each silence to an exact midpoint (ms) and treat those as boundaries.
+        3. Merge adjacent pieces until ``max_chunk_seconds`` would be exceeded.
+        4. Export each chunk as 16 kHz mono PCM WAV.
 
-    Returns metadata dictionaries describing each chunk.
+    Because the boundaries are midpoints, the exported chunks cover the source audio
+    exactly—no samples are trimmed or duplicated.
     """
 
     source_path = Path(source_path).expanduser().resolve()
@@ -42,8 +35,6 @@ def chunk_audio_file(
     destination_dir.mkdir(parents=True, exist_ok=True)
 
     audio = AudioSegment.from_file(source_path)
-    if normalise:
-        audio = _normalise_audio(audio)
 
     silence_ranges = _detect_silences_ffmpeg(
         source_path,
@@ -51,7 +42,7 @@ def chunk_audio_file(
         min_silence_len=min_silence_len,
     )
 
-    initial_segments = _split_audio_on_silence(audio, silence_ranges, keep_silence=keep_silence)
+    initial_segments = _split_audio_on_silence(audio, silence_ranges)
 
     if max_chunk_seconds is None or max_chunk_seconds <= 0:
         max_chunk_ms = len(audio)
@@ -64,18 +55,12 @@ def chunk_audio_file(
     base_name = chunk_basename or source_path.stem
     for index, segment in enumerate(combined_segments):
         start_ms, end_ms, chunk_audio = segment
-        chunk_filename = destination_dir / f"{base_name}_chunk_{index:03d}.{target_format}"
-        export_kwargs = {}
-        if target_format in {"mp3", "ogg"} and target_bitrate:
-            export_kwargs["bitrate"] = target_bitrate
-        if target_frame_rate is not None:
-            chunk_audio = chunk_audio.set_frame_rate(target_frame_rate)
-        if target_channels is not None:
-            chunk_audio = chunk_audio.set_channels(target_channels)
-        if target_sample_width is not None:
-            chunk_audio = chunk_audio.set_sample_width(target_sample_width)
-
-        chunk_audio.export(chunk_filename, format=target_format, **export_kwargs)
+        chunk_filename = destination_dir / f"{base_name}_chunk_{index:03d}.wav"
+        chunk_audio = (
+            chunk_audio.set_frame_rate(16_000).set_channels(1).set_sample_width(2)
+        )
+        export_handle = chunk_audio.export(chunk_filename, format="wav")
+        export_handle.close()
 
         chunks.append(
             {
@@ -83,8 +68,8 @@ def chunk_audio_file(
                 "start_ms": start_ms,
                 "end_ms": end_ms,
                 "path": chunk_filename,
-                "format": target_format,
-                "bitrate": target_bitrate,
+                "format": "wav",
+                "bitrate": None,
                 "frame_rate": chunk_audio.frame_rate,
                 "channels": chunk_audio.channels,
                 "sample_width": chunk_audio.sample_width,
@@ -95,20 +80,6 @@ def chunk_audio_file(
         raise RuntimeError("No audio chunks were produced; check the source file.")
 
     return chunks
-
-
-def _normalise_audio(audio: AudioSegment, target_dbfs: float = -10.0, headroom: float = 1.0) -> AudioSegment:
-    """Return ``audio`` normalised towards ``target_dbfs`` without clipping."""
-
-    change_in_dbfs = target_dbfs - audio.dBFS
-    normalised = audio.apply_gain(change_in_dbfs)
-    peak_dbfs = normalised.max_dBFS
-    if peak_dbfs > (-headroom):
-        clipping_gain = (-headroom) - peak_dbfs
-        normalised = normalised.apply_gain(clipping_gain)
-    return normalised
-
-
 def _detect_silences_ffmpeg(
     source_path: Path,
     *,
@@ -164,13 +135,11 @@ def _detect_silences_ffmpeg(
 def _split_audio_on_silence(
     audio: AudioSegment,
     silence_ranges: List[Dict[str, float]],
-    *,
-    keep_silence: int,
 ) -> List[List[object]]:
     """Split audio at silence midpoints without trimming any content."""
 
     length_ms = len(audio)
-    boundaries = _build_split_boundaries(length_ms, silence_ranges, keep_silence)
+    boundaries = _build_split_boundaries(length_ms, silence_ranges)
     segments: List[List[object]] = []
 
     for start_ms, end_ms in zip(boundaries, boundaries[1:]):
@@ -186,20 +155,47 @@ def _split_audio_on_silence(
 def _build_split_boundaries(
     length_ms: int,
     silence_ranges: List[Dict[str, float]],
-    keep_silence: int,
 ) -> List[int]:
     boundaries = [0, length_ms]
     for silence in silence_ranges:
-        start_ms = max(0, int(silence["start"] * 1000) - keep_silence)
-        end_ms = min(length_ms, int(silence["end"] * 1000) + keep_silence)
+        start_ms = max(0, int(round(silence["start"] * 1000)))
+        end_ms = min(length_ms, int(round(silence["end"] * 1000)))
         if end_ms <= start_ms:
             continue
-        midpoint = (start_ms + end_ms) // 2
+        midpoint = int(round((start_ms + end_ms) / 2))
         if 0 < midpoint < length_ms:
             boundaries.append(midpoint)
 
     boundaries = sorted(set(boundaries))
     return boundaries
+
+
+def _split_overlong_segments(segments: List[List[object]], max_length_ms: int) -> List[List[object]]:
+    """
+    Ensure no single candidate segment exceeds ``max_length_ms`` by slicing it directly.
+    """
+
+    if max_length_ms <= 0:
+        return segments
+
+    normalized: List[List[object]] = []
+    for start_ms, end_ms, audio in segments:
+        segment_len = len(audio)
+        if segment_len <= max_length_ms:
+            normalized.append([start_ms, end_ms, audio])
+            continue
+
+        offset = 0
+        while offset < segment_len:
+            slice_audio = audio[offset : offset + max_length_ms]
+            slice_start = start_ms + offset
+            slice_end = slice_start + len(slice_audio)
+            if len(slice_audio) == 0:
+                break
+            normalized.append([slice_start, slice_end, slice_audio])
+            offset += len(slice_audio)
+
+    return normalized
 
 
 def _combine_segments(segments: List[List[object]], max_length_ms: int) -> List[List[object]]:
@@ -210,10 +206,11 @@ def _combine_segments(segments: List[List[object]], max_length_ms: int) -> List[
     if not segments:
         return []
 
+    normalized_segments = _split_overlong_segments(segments, max_length_ms)
     combined: List[List[object]] = []
-    current_start, current_end, current_audio = segments[0]
+    current_start, current_end, current_audio = normalized_segments[0]
 
-    for start_ms, end_ms, segment_audio in segments[1:]:
+    for start_ms, end_ms, segment_audio in normalized_segments[1:]:
         if len(current_audio) + len(segment_audio) <= max_length_ms:
             current_audio += segment_audio
             current_end = end_ms

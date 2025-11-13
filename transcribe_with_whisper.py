@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from session_pipeline.audio_processing import AUDIO_PROFILES, AudioProcessingError, prepare_clean_audio
 from session_pipeline.chunking import prepare_audio_chunks
 from session_pipeline.io_utils import write_json
 
@@ -50,38 +51,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum chunk length in seconds (default: 900s / 15 minutes).",
     )
     parser.add_argument(
-        "--chunk-format",
-        choices=["wav", "mp3", "ogg"],
-        default="wav",
-        help="Export format for chunked audio (default: wav).",
-    )
-    parser.add_argument(
-        "--chunk-bitrate",
-        help="Optional bitrate (e.g., 192k) when exporting compressed formats.",
-    )
-    parser.add_argument(
-        "--sample-rate",
-        type=int,
-        default=16_000,
-        help="Target sample rate for chunks (default: 16_000 Hz; use 0 to keep original).",
-    )
-    parser.add_argument(
-        "--channels",
-        type=int,
-        default=1,
-        help="Target channel count for chunks (default: mono; use 0 to keep original).",
-    )
-    parser.add_argument(
         "--min-silence-ms",
         type=int,
-        default=1000,
-        help="Minimum silence length (ms) to trigger a split (default: 1000).",
-    )
-    parser.add_argument(
-        "--keep-silence-ms",
-        type=int,
         default=500,
-        help="Silence padding (ms) retained around each split (default: 500).",
+        help="Minimum silence length (ms) to trigger a split (default: 500).",
     )
     parser.add_argument(
         "--silence-threshold",
@@ -93,6 +66,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--chunk-dir",
         type=Path,
         help="Optional explicit directory for chunked audio (defaults to <method>/chunks).",
+    )
+    parser.add_argument(
+        "--audio-profile",
+        choices=sorted(AUDIO_PROFILES.keys()),
+        default="zoom-audio",
+        help="Audio preprocessing profile applied before chunking (default: zoom-audio).",
+    )
+    parser.add_argument(
+        "--discard-audio",
+        action="store_true",
+        help="Write preprocessed audio to a temporary file that is deleted after chunking.",
     )
     parser.add_argument(
         "--force-rechunk",
@@ -141,24 +125,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     method_dir.mkdir(parents=True, exist_ok=True)
     transcripts_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Preparing audio chunks from %s", audio_path)
+    try:
+        clean_audio_path, cleanup_path = prepare_clean_audio(
+            audio_path,
+            profile=args.audio_profile,
+            discard=args.discard_audio,
+            sample_rate=16_000,
+            channels=1,
+            output_format="wav",
+            log_fn=lambda message: logger.info(message),
+        )
+    except AudioProcessingError as exc:
+        parser.error(f"Failed to preprocess audio: {exc}")
+
+    logger.info("Preparing audio chunks from %s", clean_audio_path)
 
     chunk_entries = prepare_audio_chunks(
-        audio_path,
+        clean_audio_path,
         chunks_dir,
         manifest_path=manifest_path,
         reuse_existing=not args.force_rechunk,
         max_chunk_seconds=args.max_chunk_seconds,
-        target_format=args.chunk_format,
-        target_frame_rate=_optional_positive(args.sample_rate),
-        target_channels=_optional_positive(args.channels),
-        target_sample_width=2,
-        target_bitrate=args.chunk_bitrate,
         chunk_basename=f"{args.session_id}-{args.method}",
         min_silence_len=args.min_silence_ms,
         silence_thresh=args.silence_threshold,
-        keep_silence=args.keep_silence_ms,
-        normalise=True,
     )
 
     if not chunk_entries:
@@ -211,6 +201,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "Wrote %d chunk transcript(s) to %s", len(transcription_results), transcripts_dir
     )
     logger.info("Wrote merged transcript to %s", combined_path)
+
+    if cleanup_path and cleanup_path.exists():
+        cleanup_path.unlink(missing_ok=True)
     return 0
 
 
@@ -355,14 +348,6 @@ def _build_openai_client(api_key_override: str | None) -> OpenAI:
     if not api_key:
         raise SystemExit("OpenAI API key not found. Set OPEN_API_TAELGAR or pass --api-key.")
     return OpenAI(api_key=api_key)
-
-
-def _optional_positive(value: int) -> Optional[int]:
-    """Return ``value`` if positive; otherwise return None."""
-
-    if value and value > 0:
-        return value
-    return None
 
 
 if __name__ == "__main__":
