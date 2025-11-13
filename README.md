@@ -31,11 +31,22 @@ Under the hood, this runs:
 
 ### Option 2: Diarized Audio
 
-If you have an audio recording and a diarization, this option is intended to allow easy processing using OpenAI whisper to transcribe the audio with word-level timestamps, and then map speakers using the diarization. Optionally this might allow transcribing multi-channel audio and then mapping channels to speakers via overlaps with diarizations. This will likely be developed with whisper only, but optionally could be extended to use ElevenLabs scribe-v2 or OpenAI gpt-4o-transcribe or other targets. 
+When you already have a good diarization track (Zoom, ElevenLabs, pyannote, etc.), use `transcribe_with_whisper.py` to re-transcribe the raw audio and keep the diarization you trust. The runner:
 
-The main use case here is expected to be reprocessing audio with updated transcription backends, e.g. rerunning old Zoom sessions with better transcription, or reprocessing audio from option 3, below, without having to rerun diarization. 
+```
+transcribe_with_whisper.py \
+  --session-id dufr-000 \
+  --method whisper-raw \
+  --out-dir /path/to/sessions \
+  PATH/TO/audio.wav
+```
 
-*This code does not exist in robust form yet*
+What it does:
+- Chunks the source audio with `session_pipeline.chunking.prepare_audio_chunks` (silence-aware splits, no trimming, manifests saved beside the session).
+- Submits each chunk to OpenAI Whisper/GPT for transcription (parallel-safe, per-chunk JSON logged immediately).
+- Produces a merged `method.whisper.json` ready for `normalize_transcript.py --input-format whisper_diarization --diarization YOUR_FILE.json` so the existing normalize → synchronize → clean_speakers flow works unchanged.
+
+This path is ideal for rerunning old sessions with better ASR backends while keeping diarization quality high.
 
 ### Option 3: Raw Audio
 
@@ -61,6 +72,10 @@ Both option 2 and option 3 will likely share some audio preprocessing steps, and
      format.
    - Uploads each chunk to the ElevenLabs Speech-to-Text API with diarization
      enabled by default and stores the raw JSON response beside the audio.
+
+   **`transcribe_with_whisper.py`** (Option 2 companion)
+   - Mirrors the chunking pipeline but targets OpenAI Whisper/GPT models.
+   - Writes every per-chunk response immediately and produces a merged `method.whisper.json` so Option 2 sessions drop directly into `normalize_transcript.py`.
 
 3. **`normalize_transcript.py`**
    - Converts raw ElevenLabs JSON, Whisper+diarization JSON, plain-text logs, or WebVTT files into a normalized JSON bundle with segments, word-level detail (when available), speaker hints, and source metadata.
@@ -95,13 +110,21 @@ Both option 2 and option 3 will likely share some audio preprocessing steps, and
 
 ## Session Note Generation
 
-This will be a pipeline to go from a raw transcript to a final session note. This will be designed to have a variety of flexible inputs and optional processing steps, and should be able to handle:
-- Full run: start from raw transcript, clean the transcript, split into scenes, summarize each scene, produce full session note
-- Cleaned start: as above, but starting from a cleaned transcript
-- Summary start: as above, but starting from a summary of each scene (e.g., from session without audio)
-- Gap filling: starting with a session note that has some pieces (e.g., maybe a narrative but nothing else) will fill in missing components per a template (good for, e.g. Cleenseau sessions where the input is a long blog post from a player).
+Work is in progress to convert transcripts into structured session notes. Current + planned stages:
 
-*None of this is written yet*
+1. **Raw transcript → cleaned transcript (`clean_transcript.py`)**  
+   - Splits `[start - end] Speaker: text` transcripts into GPT-sized chunks.  
+   - Applies high-precision cleaning (typos, glossary, speaker disambiguation) with structured outputs and full raw-response logging.  
+   - Includes knobs for retries, reasoning effort, chunk-testing (`--first-chunk-only`), glossary/few-shot injection, plus `--no-llm`/`--mistakes` for deterministic find/replace runs when you just need the known names fixed.  
+   - Pair with `compare_transcript.py` and `find_proper_nouns.py` to surface actual word changes and grow the mistakes list.
+
+2. **Cleaned transcript → scenes → bullets (planned)**  
+   - Detect scene boundaries (timestamp gaps + speaker shifts).  
+   - Summarize each scene into bullet lists with structured outputs, tagging NPCs/locations/loot.
+
+3. **Bullets → final session note (planned)**  
+   - Map bullet summaries into the Obsidian session-note template (synopsis, scene recap, NPCs, hooks, loot).  
+   - Support alternate entry points: cleaned transcript start, summary start, gap-filling from partial notes (e.g., Cleenseau blog posts).
 
 ---
 
@@ -134,6 +157,9 @@ Utility scripts that remain handy for specific workflows.
 - **`parse_speakers_from_vtt.py`** – crawl directories of VTT files and report
   word counts per speaker.
 - **`replace_speaker_names.py`** – apply a finalized speaker mapping to a canonical bundle (and optional Whisper/diarization pair) to emit fully named JSON/VTT outputs.
+- **`clean_transcript.py`** – chunk + clean canonical transcripts via GPT (typo fixes, glossary enforcement, structured logging, first-chunk-only + `--no-llm` modes for fast iterations or deterministic find/replace runs).
+- **`compare_transcript.py`** – compare two transcripts line-by-line, warn on speaker/timestamp drift, and report word-level `old -> new` substitutions.
+- **`find_proper_nouns.py`** – scan transcripts and list candidate proper nouns (single or multi-word) with counts to seed `mistakes.json` and glossary updates.
 - **`process_zoom_sessions.py`** – batch helper that ingests Zoom transcript folders,
   normalizes them, runs synchronization (optionally seeding speaker guesses with `--speaker-roster`),
   pauses for roster edits, and launches `clean_speakers.py` once each session’s
@@ -143,3 +169,25 @@ Utility scripts that remain handy for specific workflows.
 
 See `requirements.txt` for Python dependencies. System-level tools such as
 FFmpeg are expected to be installed separately when working with audio.
+
+---
+
+## Work Plan
+
+Short-term priorities for the remaining pipeline pieces:
+
+1. **Option 3 – Raw Audio w/ Messy Diarization**
+   - Wire up ElevenLabs scribe-v2 / GPT-4o diarization for single-track recordings.
+   - Share chunk manifests with Option 2 so both paths feed the same normalize/sync scripts.
+   - Build converters that reshape each diarization flavor into the schema `normalize_transcript.py` expects.
+   - Deliver an orchestration script (audio prep → diarization/transcription → normalize → synchronize → clean_speakers).
+
+2. **Cleaned Transcript → Scenes → Bullets**
+   - Investigate timestamp gap + speaker-change heuristics to split scenes.
+   - Define structured prompts that summarize each scene (bullets + tagged NPCs/locations/loot) and persist outputs similar to `clean_transcript.py`.
+   - Allow re-running individual scenes to iterate on glossary/mistake dictionaries.
+
+3. **Bullets → Session Notes**
+   - Map bullet summaries into the Obsidian session-note template (synopsis, scene recap, NPCs, hooks, loot, tags).
+   - Support alternate starting points (cleaned transcript, player summaries, partial notes) and gap-filling for Cleenseau-style blog posts.
+   - Reuse the raw-response logging pattern so we can refine prompts and build a shared `mistakes.json` for future passes.
