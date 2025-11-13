@@ -75,13 +75,13 @@ High-level milestones:
 
 ### B1. Preprocess / quality assessment (`preprocess_raw_transcript.py`)
 
-- [ ] Decide the input format for `preprocess_raw_transcript.py` (normalized JSON vs `[start - end] Speaker: text`).
-- [ ] Define the output JSON schema (proper_noun_candidates, unknown_speaker_count, basic stats, optional quality_score).
-- [ ] Reuse or wrap `find_proper_nouns.py` logic to populate `proper_noun_candidates` in the preprocess output.
-- [ ] Add a counter for unknown speaker lines and store `unknown_speaker_count` plus a handful of example lines.
+- [x] Decide the input format for `preprocess_raw_transcript.py` (normalized JSON vs `[start - end] Speaker: text`).
+- [X] Define the output JSON schema (proper_noun_candidates, unknown_speaker_count, basic stats, optional quality_score).
+- [X] Reuse or wrap `find_proper_nouns.py` logic to populate `proper_noun_candidates` in the preprocess output.
+- [X] Add a counter for unknown speaker lines and store `unknown_speaker_count` plus a handful of example lines.
 - [ ] Implement an optional LLM call that classifies overall text quality (e.g. “rough”, “okay”, “already cleaned”).
-- [ ] Add a `--no-llm` flag to skip quality classification.
-- [ ] Save preprocess reports as `<session>.preprocess.json` alongside the transcript.
+- [X] Add a `--no-llm` flag to skip quality classification.
+- [X] Save preprocess reports as `<session>.preprocess.json` alongside the transcript.
 - [ ] Document how to run `preprocess_raw_transcript.py` and interpret its output in the README.
 
 ### B2. LLM-based cleaner (`clean_transcript_llm.py`)
