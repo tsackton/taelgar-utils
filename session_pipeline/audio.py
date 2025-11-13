@@ -167,30 +167,39 @@ def _split_audio_on_silence(
     *,
     keep_silence: int,
 ) -> List[List[object]]:
-    """
-    Split ``audio`` into segments around detected silences while keeping context.
-    """
+    """Split audio at silence midpoints without trimming any content."""
 
+    length_ms = len(audio)
+    boundaries = _build_split_boundaries(length_ms, silence_ranges, keep_silence)
     segments: List[List[object]] = []
-    previous_end_ms = 0
 
-    for silence in silence_ranges:
-        start_ms = int(silence["start"] * 1000)
-        start_ms = max(0, start_ms - keep_silence)
-        if start_ms > previous_end_ms:
-            chunk = audio[previous_end_ms:start_ms]
-            if len(chunk) > 0:
-                segments.append([previous_end_ms, start_ms, chunk])
-        end_ms = int(silence["end"] * 1000)
-        end_ms = min(len(audio), end_ms + keep_silence)
-        previous_end_ms = end_ms
-
-    if previous_end_ms < len(audio):
-        chunk = audio[previous_end_ms:]
+    for start_ms, end_ms in zip(boundaries, boundaries[1:]):
+        if end_ms <= start_ms:
+            continue
+        chunk = audio[start_ms:end_ms]
         if len(chunk) > 0:
-            segments.append([previous_end_ms, previous_end_ms + len(chunk), chunk])
+            segments.append([start_ms, end_ms, chunk])
 
     return segments
+
+
+def _build_split_boundaries(
+    length_ms: int,
+    silence_ranges: List[Dict[str, float]],
+    keep_silence: int,
+) -> List[int]:
+    boundaries = [0, length_ms]
+    for silence in silence_ranges:
+        start_ms = max(0, int(silence["start"] * 1000) - keep_silence)
+        end_ms = min(length_ms, int(silence["end"] * 1000) + keep_silence)
+        if end_ms <= start_ms:
+            continue
+        midpoint = (start_ms + end_ms) // 2
+        if 0 < midpoint < length_ms:
+            boundaries.append(midpoint)
+
+    boundaries = sorted(set(boundaries))
+    return boundaries
 
 
 def _combine_segments(segments: List[List[object]], max_length_ms: int) -> List[List[object]]:

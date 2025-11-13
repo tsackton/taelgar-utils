@@ -13,15 +13,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from session_pipeline.chunking import prepare_audio_chunks
 from session_pipeline.io_utils import write_json
-from session_pipeline.transcription import transcribe_audio_chunks
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -102,12 +103,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--api-key",
         help="Optional OpenAI API key override (defaults to OPEN_API_TAELGAR or OPENAI_API_KEY in the environment).",
     )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=8,
+        help="Maximum concurrent transcription requests (default: 2).",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Logging level (e.g., DEBUG, INFO).",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    logging.basicConfig(
+        level=getattr(logging, args.log_level.upper(), logging.INFO),
+        format="%(levelname)s %(name)s - %(message)s",
+    )
+    logger = logging.getLogger("transcribe_with_whisper")
 
     audio_path = args.audio_path.expanduser().resolve()
     if not audio_path.exists():
@@ -122,6 +140,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     method_dir.mkdir(parents=True, exist_ok=True)
     transcripts_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Preparing audio chunks from %s", audio_path)
 
     chunk_entries = prepare_audio_chunks(
         audio_path,
@@ -146,37 +166,51 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     client = _build_openai_client(args.api_key)
 
-    print(f"[info] Transcribing {len(chunk_entries)} chunk(s) with model {args.model}...")
-    results = transcribe_audio_chunks(
-        client=client,
-        chunks=chunk_entries,
-        model=args.model,
-        response_format="verbose_json",
-        timestamp_granularities=["word"],
+    logger.info(
+        "Transcribing %d chunk(s) with model %s using %d worker(s)...",
+        len(chunk_entries),
+        args.model,
+        max(1, args.max_workers),
     )
 
-    if not results:
-        parser.error("Transcription produced no results.")
+    transcription_results: List[Dict[str, Any]] = []
+    errors: List[Tuple[int, BaseException]] = []
 
-    chunk_transcript_paths: List[Path] = []
-    for item in results:
-        chunk = item["chunk"]
-        transcript = item["transcript"]
-        chunk_path = Path(chunk["path"])
-        transcript_path = transcripts_dir / f"{chunk_path.stem}.whisper.json"
-        write_json(transcript_path, transcript)
-        chunk_transcript_paths.append(transcript_path)
+    with ThreadPoolExecutor(max_workers=max(1, args.max_workers)) as executor:
+        future_map = {
+            executor.submit(transcribe_chunk, client, chunk, args.model): chunk
+            for chunk in chunk_entries
+        }
+        for future in as_completed(future_map):
+            chunk = future_map[future]
+            chunk_path = Path(chunk["path"])
+            try:
+                transcript = future.result()
+                out_path = transcripts_dir / f"{chunk_path.stem}.whisper.json"
+                write_json(out_path, transcript)
+                transcription_results.append({"chunk": chunk, "transcript": transcript})
+                logger.info("Wrote chunk transcript %s", out_path)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                errors.append((chunk.get("index"), exc))
+                logger.error("Chunk %s failed: %s", chunk.get("index"), exc)
+
+    if errors:
+        raise SystemExit(f"{len(errors)} chunk(s) failed; see logs for details.")
+
+    transcription_results.sort(key=lambda item: (item["chunk"]["start_ms"], item["chunk"]["index"]))
 
     merged_payload = combine_chunk_transcripts(
-        results,
+        transcription_results,
         session_id=args.session_id,
         method=args.method,
         manifest_path=manifest_path,
     )
     write_json(combined_path, merged_payload)
 
-    print(f"[info] Wrote {len(chunk_transcript_paths)} chunk transcript(s) to {transcripts_dir}")
-    print(f"[info] Wrote merged transcript to {combined_path}")
+    logger.info(
+        "Wrote %d chunk transcript(s) to %s", len(transcription_results), transcripts_dir
+    )
+    logger.info("Wrote merged transcript to %s", combined_path)
     return 0
 
 
@@ -278,6 +312,39 @@ def combine_chunk_transcripts(
         },
     }
     return combined_payload
+
+
+def transcribe_chunk(client: OpenAI, chunk: Dict[str, Any], model: str) -> Dict[str, Any]:
+    """
+    Transcribe a single chunk using the OpenAI client and return the verbose JSON payload.
+    """
+
+    chunk_path = Path(chunk["path"])
+    with chunk_path.open("rb") as audio_file:
+        response = client.audio.transcriptions.create(
+            model=model,
+            file=audio_file,
+            response_format="verbose_json",
+            timestamp_granularities=["word"],
+        )
+
+    return _normalise_response(response)
+
+
+def _normalise_response(response: Any) -> Dict[str, Any]:
+    """Ensure the OpenAI response is a standard dictionary."""
+
+    if isinstance(response, dict):
+        return response
+    if hasattr(response, "to_dict"):
+        return response.to_dict()  # type: ignore[attr-defined]
+    if hasattr(response, "model_dump"):
+        return response.model_dump()  # type: ignore[attr-defined]
+    if isinstance(response, (bytes, bytearray)):
+        response = response.decode("utf-8")
+    if isinstance(response, str):
+        return json.loads(response)
+    return json.loads(json.dumps(response, default=str))
 
 
 def _build_openai_client(api_key_override: str | None) -> OpenAI:
