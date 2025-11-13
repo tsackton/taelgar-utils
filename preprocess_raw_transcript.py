@@ -30,8 +30,14 @@ except ImportError:
 LINE_RE = re.compile(r"^\[(?P<start>[0-9:\.]+)\s*-\s*(?P<end>[0-9:\.]+)\]\s*(?P<speaker>[^:]+):\s*(?P<text>.*)$")
 WORD_RE = re.compile(r"[A-Za-z][A-Za-z'\-]+")
 SENTENCE_SPLIT_RE = re.compile(r"[.!?]+")
-UNKNOWN_SPEAKER_RE = re.compile(r"^unknown\b", re.IGNORECASE)
+UNKNOWN_SPEAKER_RE = re.compile(r"^unknown(?:\b|[_\s-])", re.IGNORECASE)
 FILLERS = {"uh", "um", "erm", "hmm", "like", "kinda", "sorta", "youknow", "yknow", "y'know"}
+QUALITY_MIN_ENTRY_WORDS = 4
+QUALITY_MIN_SENTENCE_WORDS = 6
+PUNCTUATION_CHARS = set(".?!,;:-")
+DEFAULT_EXAMPLE_LIMIT = 3
+EXAMPLE_WINDOW_WORDS = 50
+MAX_PUNCT_GAP_THRESHOLD = 80
 
 
 _NLP: Language | None = None
@@ -51,8 +57,68 @@ def get_nlp() -> Language:
     return _NLP
 
 
-def format_entry(entry: Utterance) -> str:
-    return f"[{entry.start} - {entry.end}] {entry.speaker}: {entry.text}"
+def normalize_token(token: str) -> str:
+    return re.sub(r"[^\w]", "", token).lower()
+
+
+def snippet_around_word(entry: Utterance, word: str, window: int = EXAMPLE_WINDOW_WORDS) -> str:
+    tokens = entry.text.split()
+    if not tokens:
+        return entry.text.strip()
+    target = normalize_token(word)
+    positions = [idx for idx, token in enumerate(tokens) if normalize_token(token) == target]
+    if not positions:
+        start = 0
+        end = min(len(tokens), window)
+    else:
+        idx = positions[0]
+        half = window // 2
+        start = max(0, idx - half)
+        end = min(len(tokens), idx + half + 1)
+    snippet = " ".join(tokens[start:end])
+    return snippet.strip()
+
+
+def build_candidate_examples(
+    word: str,
+    example_indices: Sequence[int],
+    utterances: Sequence[Utterance],
+    *,
+    verbose: bool,
+    limit: int = DEFAULT_EXAMPLE_LIMIT,
+) -> List[str]:
+    examples: List[str] = []
+    seen: set[str] = set()
+    max_examples = float("inf") if verbose else limit
+    for idx in example_indices:
+        if idx < 0 or idx >= len(utterances):
+            continue
+        entry = utterances[idx]
+        snippet = snippet_around_word(entry, word)
+        formatted = f"[{entry.start} - {entry.end}] {entry.speaker}: {snippet}"
+        if formatted in seen:
+            continue
+        seen.add(formatted)
+        examples.append(formatted)
+        if len(examples) >= max_examples:
+            break
+    return examples
+
+
+def attach_candidate_examples(
+    candidates: Dict[str, Dict[str, object]],
+    example_map: Dict[str, List[int]],
+    utterances: Sequence[Utterance],
+    *,
+    verbose: bool,
+) -> None:
+    for word, data in candidates.items():
+        indices = example_map.get(word, [])
+        if not indices:
+            continue
+        example_lines = build_candidate_examples(word, indices, utterances, verbose=verbose)
+        if example_lines:
+            data["examples"] = example_lines
 
 
 @dataclass
@@ -167,12 +233,6 @@ def analyze_proper_nouns(
             "count": count,
             "zipf": round(score, 3),
         }
-        if count >= 3:
-            candidates[word]["example_lines"] = [
-                format_entry(utterances[idx])
-                for idx in examples.get(word, [])[:3]
-                if 0 <= idx < len(utterances)
-            ]
     return candidates, examples
 
 
@@ -213,7 +273,10 @@ def compute_token_noise(
     total_tokens = 0
     noisy_tokens = 0
     for entry in utterances:
-        for token in tokenize(entry.text):
+        tokens_in_entry = tokenize(entry.text)
+        if len(tokens_in_entry) < QUALITY_MIN_ENTRY_WORDS:
+            continue
+        for token in tokens_in_entry:
             total_tokens += 1
             lower = token.lower()
             if lower in known_tokens_lower:
@@ -229,18 +292,74 @@ def compute_token_noise(
     }
 
 
-def split_sentences(utterances: Sequence[Utterance]) -> List[str]:
-    sentences: List[str] = []
+def max_tokens_without_punctuation(utterances: Sequence[Utterance]) -> int:
+    longest = 0
+    current = 0
+    for entry in utterances:
+        tokens = entry.text.split()
+        if len(tokens) < QUALITY_MIN_ENTRY_WORDS:
+            continue
+        for token in tokens:
+            if any(ch in PUNCTUATION_CHARS for ch in token):
+                longest = max(longest, current)
+                current = 0
+            else:
+                current += 1
+    longest = max(longest, current)
+    return longest
+
+
+def split_sentences(utterances: Sequence[Utterance]) -> List[Tuple[str, int]]:
+    sentences: List[Tuple[str, int]] = []
     for entry in utterances:
         raw = entry.text.strip()
         if not raw:
             continue
         parts = [segment.strip() for segment in SENTENCE_SPLIT_RE.split(raw) if segment.strip()]
-        sentences.extend(parts or [raw])
+        if not parts:
+            words = tokenize(raw)
+            if words:
+                sentences.append((raw, len(words)))
+            continue
+        for part in parts:
+            words = tokenize(part)
+            if not words:
+                continue
+            sentences.append((part, len(words)))
     return sentences
 
 
-def analyze_sentence_structure(sentences: Sequence[str]) -> Dict[str, object]:
+def analyze_sentence_structure(sentences_with_len: Sequence[Tuple[str, int]]) -> Dict[str, object]:
+    if not sentences_with_len:
+        return {
+            "sentence_count": 0,
+            "avg_sentence_length": 0.0,
+            "fragment_ratio": 0.0,
+            "verbless_ratio": 0.0,
+            "comma_density": 0.0,
+            "non_terminal_ratio": 0.0,
+        }
+    sentences = [sentence for sentence, _ in sentences_with_len]
+    lengths = [length for _, length in sentences_with_len]
+    fragment_count = sum(1 for length in lengths if length < QUALITY_MIN_SENTENCE_WORDS)
+    long_sentences = [
+        sentence for sentence, length in sentences_with_len if length >= QUALITY_MIN_SENTENCE_WORDS
+    ]
+    if long_sentences:
+        verbless = sum(1 for sentence in long_sentences if not sentence_has_verb(sentence))
+        verbless_ratio = verbless / len(long_sentences)
+    else:
+        verbless_ratio = 0.0
+    comma_count = sum(sentence.count(",") for sentence in sentences)
+    non_terminal = sum(1 for sentence in sentences if not sentence.endswith((".", "!", "?")))
+    return {
+        "sentence_count": len(sentences),
+        "avg_sentence_length": statistics.mean(lengths),
+        "fragment_ratio": fragment_count / len(sentences),
+        "verbless_ratio": verbless_ratio,
+        "comma_density": comma_count / len(sentences),
+        "non_terminal_ratio": non_terminal / len(sentences),
+    }
     if not sentences:
         return {
             "sentence_count": 0,
@@ -457,6 +576,7 @@ def rate_quality(
     verbless_ratio: float,
     suspicious_bigram_count: int,
     cleanliness_scores: Optional[Sequence[float]] = None,
+    max_punct_gap: int = 0,
 ) -> Tuple[str, str]:
     issues = 0
     notes: List[str] = []
@@ -479,6 +599,9 @@ def rate_quality(
             notes.append(f"Transcript clean score low ({avg_clean:.2f})")
         elif avg_clean < 0.6:
             notes.append(f"Transcript clean score moderate ({avg_clean:.2f})")
+    if max_punct_gap > MAX_PUNCT_GAP_THRESHOLD:
+        issues += 1
+        notes.append(f"Long stretches without punctuation ({max_punct_gap} tokens)")
 
     if issues >= 3:
         return "rough", "; ".join(notes)
@@ -526,6 +649,7 @@ def preprocess_transcript(
     session_glossary_path: Path,
     min_proper_count: int,
     proper_zipf_threshold: float,
+    verbose_examples: bool = False,
 ) -> SessionArtifacts:
     utterances = parse_transcript(transcript_path)
     if not utterances:
@@ -546,8 +670,15 @@ def preprocess_transcript(
         min_proper_count,
         proper_zipf_threshold,
     )
+    attach_candidate_examples(
+        proper_candidates,
+        candidate_examples,
+        utterances,
+        verbose=verbose_examples,
+    )
     mistake_hits = detect_known_mistake_usage(utterances, known_text)
     token_noise = compute_token_noise(utterances, known_tokens_lower)
+    max_gap = max_tokens_without_punctuation(utterances)
     sentences = split_sentences(utterances)
     sentence_metrics = analyze_sentence_structure(sentences)
     candidate_lower = {word.lower() for word in proper_candidates}
@@ -578,6 +709,7 @@ def preprocess_transcript(
         verbless_ratio=sentence_metrics["verbless_ratio"],
         suspicious_bigram_count=len(bigrams),
         cleanliness_scores=[s["score"] for s in sample_scores],
+        max_punct_gap=max_gap,
     )
     session_glossary_terms = detect_session_glossary_terms(glossary_terms, utterances)
 
@@ -600,7 +732,7 @@ def preprocess_transcript(
             "unknown_speaker_count": unknown_count,
             "unknown_examples": unknown_examples,
         },
-        "token_stats": token_noise,
+        "token_stats": {**token_noise, "max_tokens_without_punct": max_gap},
         "sentence_metrics": sentence_metrics,
         "quality": {
             "grade": quality_grade,
@@ -649,13 +781,60 @@ def derive_default_paths(transcript: Path) -> Tuple[Path, Path, Path]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Analyze a raw transcript and export QC + session artifacts.")
     parser.add_argument("transcript", type=Path, help="Path to `[start - end] Speaker: text` transcript")
-    parser.add_argument("--known-mistakes", type=Path, required=True, help="JSON of known replacements")
-    parser.add_argument("--glossary", type=Path, required=True, help="Plain-text glossary (one canonical term per line)")
-    parser.add_argument("--report-path", type=Path, help="Override preprocess report output path")
-    parser.add_argument("--session-mistakes-path", type=Path, help="Override session mistakes output path")
-    parser.add_argument("--session-glossary-path", type=Path, help="Override session glossary output path")
-    parser.add_argument("--min-proper-count", type=int, default=2, help="Minimum count for proper noun candidates")
-    parser.add_argument("--proper-zipf-threshold", type=float, default=4.0, help="ZIPF ceiling for proper noun candidates")
+    parser.add_argument(
+        "-k",
+        "--known",
+        "--known-mistakes",
+        dest="known_mistakes",
+        type=Path,
+        required=True,
+        help="JSON of known replacements",
+    )
+    parser.add_argument(
+        "-g",
+        "--glossary",
+        type=Path,
+        required=True,
+        help="Plain-text glossary (one canonical term per line)",
+    )
+    parser.add_argument("-r", "--report", dest="report_path", type=Path, help="Override preprocess report output path")
+    parser.add_argument(
+        "-m",
+        "--session-mistakes",
+        dest="session_mistakes_path",
+        type=Path,
+        help="Override session mistakes output path",
+    )
+    parser.add_argument(
+        "-s",
+        "--session-glossary",
+        dest="session_glossary_path",
+        type=Path,
+        help="Override session glossary output path",
+    )
+    parser.add_argument(
+        "-c",
+        "--min-count",
+        dest="min_proper_count",
+        type=int,
+        default=2,
+        help="Minimum count for proper noun candidates",
+    )
+    parser.add_argument(
+        "-z",
+        "--zipf",
+        dest="proper_zipf_threshold",
+        type=float,
+        default=4.0,
+        help="ZIPF ceiling for proper noun candidates",
+    )
+    parser.add_argument(
+        "-V",
+        "--verbose-report",
+        action="store_true",
+        dest="verbose_report",
+        help="Include full example lists for every proper noun candidate",
+    )
     args = parser.parse_args()
 
     report_path, session_mistakes_path, session_glossary_path = derive_default_paths(args.transcript)
@@ -675,6 +854,7 @@ def main() -> None:
         session_glossary_path=session_glossary_path,
         min_proper_count=args.min_proper_count,
         proper_zipf_threshold=args.proper_zipf_threshold,
+        verbose_examples=args.verbose_report,
     )
 
     print(f"Wrote report → {report_path}")
