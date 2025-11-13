@@ -38,6 +38,7 @@ class PreprocessRawTranscriptTests(unittest.TestCase):
 
             self.assertEqual(result.report["metadata"]["total_lines"], 6)
             self.assertIn("Cailus", result.report["proper_noun_candidates"])
+            self.assertIn("examples", result.report["proper_noun_candidates"]["Cailus"])
 
             text_entries = result.session_mistakes
             self.assertEqual(text_entries["glaces"], "glances")

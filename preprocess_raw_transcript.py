@@ -401,7 +401,7 @@ def _build_word_spans(utterances: Sequence[Utterance]) -> List[Dict[str, object]
     total = 0
     for entry in utterances:
         words = WORD_RE.findall(entry.text)
-        if not words:
+        if len(words) < QUALITY_MIN_ENTRY_WORDS:
             continue
         start = total
         total += len(words)
