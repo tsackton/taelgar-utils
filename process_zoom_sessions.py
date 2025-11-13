@@ -8,9 +8,13 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+
+from pydub import AudioSegment
+from webvtt import Caption, WebVTT
 
 from session_pipeline.runner_utils import move_file, prompt_for_roster_edit, run_cli
+from session_pipeline.time_utils import format_timestamp, parse_vtt_timestamp
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -18,8 +22,9 @@ NORMALIZE_SCRIPT = REPO_ROOT / "normalize_transcript.py"
 SYNC_SCRIPT = REPO_ROOT / "synchronize_transcripts.py"
 CLEAN_SCRIPT = REPO_ROOT / "clean_speakers.py"
 ZOOM_VTT_PATTERN = "GMT*.transcript.vtt"
-SESSION_PREFIX = "dufr-"
+DEFAULT_SESSION_PREFIX = "dufr-"
 METHOD_PREFIX = "zoom-session-"
+AUDIO_EXTENSIONS = [".mp4", ".m4a", ".m4v", ".mov", ".wav", ".mp3"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,6 +62,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print the actions without executing.",
     )
+    parser.add_argument(
+        "--session-prefix",
+        default=DEFAULT_SESSION_PREFIX,
+        help=f"Prefix used when building session IDs (default: {DEFAULT_SESSION_PREFIX!r}).",
+    )
+    parser.add_argument(
+        "--skip-merge",
+        action="store_true",
+        help="If multiple Zoom transcripts exist, skip automatic merging (session will be skipped).",
+    )
     return parser.parse_args()
 
 
@@ -76,6 +91,8 @@ def main() -> int:
             sessions_root=sessions_root,
             python=args.python,
             speaker_roster=args.speaker_roster,
+            session_prefix=args.session_prefix,
+            skip_merge=args.skip_merge,
             dry_run=args.dry_run,
         )
 
@@ -101,6 +118,8 @@ def process_zoom_session(
     python: Path,
     speaker_roster: Optional[Path],
     *,
+    session_prefix: str,
+    skip_merge: bool,
     dry_run: bool,
 ) -> None:
     session_number = extract_session_number(zoom_dir.name)
@@ -108,12 +127,12 @@ def process_zoom_session(
         print(f"[skip] Could not determine session number from '{zoom_dir}'.")
         return
 
-    vtt_path = select_zoom_vtt(zoom_dir)
+    vtt_path = prepare_zoom_vtt(zoom_dir, skip_merge=skip_merge)
     if not vtt_path:
-        print(f"[skip] {zoom_dir}: missing or multiple Zoom transcripts.")
+        print(f"[skip] {zoom_dir}: missing usable Zoom transcript.")
         return
 
-    session_id = f"{SESSION_PREFIX}{session_number}"
+    session_id = f"{session_prefix}{session_number}"
     method_name = f"{METHOD_PREFIX}{session_number}"
     session_dir = sessions_root / session_id
     method_dir = session_dir / method_name
@@ -178,11 +197,107 @@ def extract_session_number(name: str) -> Optional[str]:
     return match.group(1).zfill(3) if match else None
 
 
-def select_zoom_vtt(zoom_dir: Path) -> Optional[Path]:
-    candidates = [path for path in zoom_dir.glob(ZOOM_VTT_PATTERN) if path.is_file()]
-    if len(candidates) != 1:
+def prepare_zoom_vtt(zoom_dir: Path, *, skip_merge: bool) -> Optional[Path]:
+    vtt_files = sorted(path for path in zoom_dir.glob(ZOOM_VTT_PATTERN) if path.is_file())
+    if not vtt_files:
         return None
-    return candidates[0]
+    if len(vtt_files) == 1:
+        return vtt_files[0]
+
+    if skip_merge:
+        print(
+            f"[warn] Found {len(vtt_files)} Zoom transcripts in {zoom_dir}; "
+            "skipping automatic merge per --skip-merge."
+        )
+        return None
+
+    entries = build_chunk_entries(vtt_files)
+    if not entries:
+        return None
+
+    merged_path = zoom_dir / "merged.transcript.vtt"
+    merge_vtt_entries(entries, merged_path)
+
+    order_summary = ", ".join(
+        f"{entry['path'].name} ({entry['duration']:.1f}s)" for entry in entries
+    )
+    print(f"[info] Merged Zoom transcripts into {merged_path.name}: {order_summary}")
+    return merged_path
+
+
+def build_chunk_entries(vtt_files: List[Path]) -> List[Dict[str, Any]]:
+    entries: List[Dict[str, Any]] = []
+    for vtt in vtt_files:
+        audio_match = find_matching_audio(vtt)
+        duration = None
+        if audio_match:
+            duration = get_audio_duration_seconds(audio_match)
+        if duration is None:
+            duration = estimate_vtt_duration_seconds(vtt)
+        entries.append(
+            {
+                "path": vtt,
+                "duration": duration,
+            }
+        )
+
+    if not entries:
+        return []
+
+    entries.sort(key=lambda item: (-item["duration"], item["path"].name))
+    offset = 0.0
+    for entry in entries:
+        entry["offset"] = offset
+        offset += entry["duration"]
+    return entries
+
+
+def find_matching_audio(vtt_path: Path) -> Optional[Path]:
+    name = vtt_path.name
+    if name.endswith(".transcript.vtt"):
+        base = name[: -len(".transcript.vtt")]
+    else:
+        base = vtt_path.stem
+    for ext in AUDIO_EXTENSIONS:
+        candidate = vtt_path.with_name(base + ext)
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def get_audio_duration_seconds(audio_path: Path) -> Optional[float]:
+    try:
+        audio = AudioSegment.from_file(audio_path)
+        return len(audio) / 1000.0
+    except Exception as exc:  # pragma: no cover - best-effort logging
+        print(f"[warn] Failed to inspect {audio_path}: {exc}")
+        return None
+
+
+def estimate_vtt_duration_seconds(vtt_path: Path) -> float:
+    vtt = WebVTT().read(str(vtt_path))
+    max_end = 0.0
+    for caption in vtt:
+        max_end = max(max_end, parse_vtt_timestamp(caption.end))
+    return max_end
+
+
+def merge_vtt_entries(entries: List[Dict[str, Any]], output_path: Path) -> None:
+    merged = WebVTT()
+    for entry in entries:
+        offset = entry["offset"]
+        src_vtt = WebVTT().read(str(entry["path"]))
+        for caption in src_vtt:
+            start_seconds = parse_vtt_timestamp(caption.start) + offset
+            end_seconds = parse_vtt_timestamp(caption.end) + offset
+            merged.captions.append(
+                Caption(
+                    start=format_timestamp(start_seconds),
+                    end=format_timestamp(end_seconds),
+                    text=caption.text,
+                )
+            )
+    merged.save(str(output_path))
 
 
 if __name__ == "__main__":
