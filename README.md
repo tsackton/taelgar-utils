@@ -115,8 +115,8 @@ Work is in progress to convert transcripts into structured session notes. Curren
 1. **Raw transcript → cleaned transcript (`clean_transcript.py`)**  
    - Splits `[start - end] Speaker: text` transcripts into GPT-sized chunks.  
    - Applies high-precision cleaning (typos, glossary, speaker disambiguation) with structured outputs and full raw-response logging.  
-   - Includes knobs for retries, reasoning effort, chunk-testing (`--first-chunk-only`), glossary/few-shot injection, plus `--no-llm`/`--mistakes` for deterministic find/replace runs when you just need the known names fixed.  
-   - Pair with `compare_transcript.py` and `find_proper_nouns.py` to surface actual word changes and grow the mistakes list.
+   - Includes knobs for retries, reasoning effort, chunk-testing (`--first-chunk-only`), glossary/few-shot injection, plus `--no-llm`/`--mistakes` for deterministic find/replace runs when you just need the known names fixed. Use `find_proper_nouns.py --known existing.json --json-output new.json` to bootstrap mistakes lists, then merge libraries with `merge_mistakes.py`.
+   - Pair with `compare_transcript.py` to inspect exactly which words changed between versions.
 
 2. **Cleaned transcript → scenes → bullets (planned)**  
    - Detect scene boundaries (timestamp gaps + speaker shifts).  
@@ -159,6 +159,8 @@ Utility scripts that remain handy for specific workflows.
 - **`replace_speaker_names.py`** – apply a finalized speaker mapping to a canonical bundle (and optional Whisper/diarization pair) to emit fully named JSON/VTT outputs.
 - **`clean_transcript.py`** – chunk + clean canonical transcripts via GPT (typo fixes, glossary enforcement, structured logging, first-chunk-only + `--no-llm` modes for fast iterations or deterministic find/replace runs).
 - **`compare_transcript.py`** – compare two transcripts line-by-line, warn on speaker/timestamp drift, and report word-level `old -> new` substitutions.
+- **`find_proper_nouns.py`** – scan transcripts, look up ZIPF frequencies (via `wordfreq`), and generate a low-frequency candidate list (plus ready-to-edit `mistakes.json` skeleton) for deterministic cleanup passes.
+- **`merge_mistakes.py`** – merge multiple mistakes JSON files, warning on conflicts and skipping blank replacements (outputs a flat map unless speaker overrides are present).
 - **`find_proper_nouns.py`** – scan transcripts and list candidate proper nouns (single or multi-word) with counts to seed `mistakes.json` and glossary updates.
 - **`process_zoom_sessions.py`** – batch helper that ingests Zoom transcript folders,
   normalizes them, runs synchronization (optionally seeding speaker guesses with `--speaker-roster`),

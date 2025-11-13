@@ -367,6 +367,10 @@ def main():
     if not args.input.exists():
         logger.error("Input file not found"); sys.exit(1)
 
+    if args.no_llm and not args.mistakes:
+        logger.error("--no-llm requires --mistakes so there is something to replace.")
+        sys.exit(1)
+
     raw_text = args.input.read_text(encoding="utf-8").splitlines(True)
     original_lines = [l.rstrip("\n") for l in raw_text]
     utts = parse_transcript_lines(original_lines)
@@ -446,7 +450,11 @@ def main():
         for p in written_paths:
             cleaned_lines.extend(p.read_text(encoding="utf-8").splitlines())
 
-    out_path = base.parent / f"{base.name}-cleaned-transcript.txt"
+    out_path = base.parent / f"{base.name}.cleaned-transcript.txt"
+    counter = 1
+    while out_path.exists():
+        out_path = base.parent / f"{base.name}.cleaned-transcript-{counter:02d}.txt"
+        counter += 1
     with out_path.open("w", encoding="utf-8") as f:
         for line in cleaned_lines:
             f.write(line + "\n")
