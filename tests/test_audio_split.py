@@ -13,24 +13,26 @@ try:
 except ImportError:
     chunk_audio_file = None  # type: ignore
 
+DATA_ROOT = Path(__file__).resolve().parent / "data"
+SAMPLE_AUDIO = DATA_ROOT / "audio" / "audio-test.m4a"
+
 
 class ChunkAudioFileTests(unittest.TestCase):
     def test_chunks_cover_full_audio_length(self) -> None:
         if AudioSegment is None or chunk_audio_file is None:
             self.skipTest("pydub is not installed, skipping audio regression test.")
 
-        source = Path("test_data/audio-test.m4a").expanduser().resolve()
-        if not source.exists():
-            self.skipTest(f"Test audio not found at {source}")
+        if not SAMPLE_AUDIO.exists():
+            self.skipTest(f"Test audio not found at {SAMPLE_AUDIO}")
 
-        audio = AudioSegment.from_file(source)
+        audio = AudioSegment.from_file(SAMPLE_AUDIO)
         expected_length = len(audio)
         max_chunk_seconds = 300.0  # keep the test quick while forcing multiple splits
         max_chunk_ms = int(max_chunk_seconds * 1000)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             chunks = chunk_audio_file(
-                source,
+                SAMPLE_AUDIO,
                 Path(tmpdir),
                 max_chunk_seconds=max_chunk_seconds,
                 min_silence_len=500,

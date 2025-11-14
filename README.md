@@ -110,23 +110,36 @@ Both option 2 and option 3 will likely share some audio preprocessing steps, and
 
 ---
 
-## Session Note Generation
+## Libraries
 
-Work is in progress to convert transcripts into structured session notes. Current + planned stages:
+- **`session_pipeline/`** – home for the reusable pipeline primitives that the
+  runner scripts import. `audio_processing.py` defines the shared preprocessing
+  profiles, `audio.py` and `chunking.py` handle silence-aware segmentation,
+  `transcription.py` encapsulates chunk fan-out + result collation, and
+  modules such as `io_utils.py`, `offsets.py`, `segments.py`, `time_utils.py`,
+  and `runner_utils.py` keep file-system, timestamp, and manifest logic in one
+  place.
+- **`taelgar_lib/`** – small collection of shared Obsidian helpers. `ObsNote`
+  wraps vault Markdown metadata, `TaelgarDate` keeps the in-world calendar
+  consistent, and `WikiLinkReplacer` plus friends provide wikilink
+  normalization that the vault/export scripts rely on.
 
-1. **Raw transcript → cleaned transcript (`clean_transcript.py`)**  
-   - Splits `[start - end] Speaker: text` transcripts into GPT-sized chunks.  
-   - Applies high-precision cleaning (typos, glossary, speaker disambiguation) with structured outputs and full raw-response logging.  
-   - Includes knobs for retries, reasoning effort, chunk-testing (`--first-chunk-only`), glossary/few-shot injection, plus `--no-llm`/`--mistakes` for deterministic find/replace runs when you just need the known names fixed. Use `find_proper_nouns.py --known existing.json --json-output new.json` to bootstrap mistakes lists, then merge libraries with `merge_mistakes.py`.
-   - Pair with `compare_transcript.py` to inspect exactly which words changed between versions.
+---
 
-2. **Cleaned transcript → scenes → bullets (planned)**  
-   - Detect scene boundaries (timestamp gaps + speaker shifts).  
-   - Summarize each scene into bullet lists with structured outputs, tagging NPCs/locations/loot.
+## Taelgar Corpus
 
-3. **Bullets → final session note (planned)**  
-   - Map bullet summaries into the Obsidian session-note template (synopsis, scene recap, NPCs, hooks, loot).  
-   - Support alternate entry points: cleaned transcript start, summary start, gap-filling from partial notes (e.g., Cleenseau blog posts).
+`taelgar_corpus/` stores the frozen indexes that power downstream searches:
+
+- `transcripts_index.json` – manifest of transcript files with IDs, hashes, and
+  relative vault paths for deduped lookups.
+- `vault_index.json` – lighter-weight index of Obsidian notes that ties
+  canonical IDs to their on-disk location.
+- `lexicon.json` and `stage0_tokens.tsv` – vocabulary exports that feed the
+  LLM- and search-facing tooling.
+
+Run `generate_corpus.py` whenever new transcripts land; it walks the vault,
+regenerates the indexes above, and keeps the artifacts in sync with the latest
+session outputs.
 
 ---
 
@@ -144,9 +157,6 @@ Scripts used to curate and publish the campaign Obsidian vault.
   vault for publication.
 - **`website/build_mkdocs_site.py`** – orchestration script that triggers an
   Obsidian templater export and then builds the MkDocs site.
-- **`taelgar_lib/`** – shared library containing `ObsNote`, `TaelgarDate`,
-  wiki-link conversion utilities, and other helpers consumed by the scripts
-  above.
 
 ---
 
@@ -158,18 +168,6 @@ Utility scripts that remain handy for specific workflows.
   with labelled cues.
 - **`parse_speakers_from_vtt.py`** – crawl directories of VTT files and report
   word counts per speaker.
-- **`replace_speaker_names.py`** – apply a finalized speaker mapping to a canonical bundle (and optional Whisper/diarization pair) to emit fully named JSON/VTT outputs.
-- **`clean_transcript.py`** – chunk + clean canonical transcripts via GPT (typo fixes, glossary enforcement, structured logging, first-chunk-only + `--no-llm` modes for fast iterations or deterministic find/replace runs).
-- **`compare_transcript.py`** – compare two transcripts line-by-line, warn on speaker/timestamp drift, and report word-level `old -> new` substitutions.
-- **`find_proper_nouns.py`** – scan transcripts, look up ZIPF frequencies (via `wordfreq`), and generate a low-frequency candidate list (plus ready-to-edit `mistakes.json` skeleton) for deterministic cleanup passes.
-- **`merge_mistakes.py`** – merge multiple mistakes JSON files, warning on conflicts and skipping blank replacements (outputs a flat map unless speaker overrides are present).
-- **`find_proper_nouns.py`** – scan transcripts and list candidate proper nouns (single or multi-word) with counts to seed `mistakes.json` and glossary updates.
-- **`process_zoom_sessions.py`** – batch helper that ingests Zoom transcript folders,
-  normalizes them, runs synchronization (optionally seeding speaker guesses with `--speaker-roster`),
-  pauses for roster edits, and launches `clean_speakers.py` once each session’s
-  `*.speakers.blank.json` is ready.
-- **`_old_stuff/`** – archival scripts kept for reference; new projects should
-  prefer the modern pipeline described above.
 
 See `requirements.txt` for Python dependencies. System-level tools such as
 FFmpeg are expected to be installed separately when working with audio.
@@ -188,7 +186,7 @@ Short-term priorities for the remaining pipeline pieces:
 
 2. **Cleaned Transcript → Scenes → Bullets**
    - Investigate timestamp gap + speaker-change heuristics to split scenes.
-   - Define structured prompts that summarize each scene (bullets + tagged NPCs/locations/loot) and persist outputs similar to `clean_transcript.py`.
+   - Define structured prompts that summarize each scene (bullets + tagged NPCs/locations/loot) and persist fully logged outputs for traceability.
    - Allow re-running individual scenes to iterate on glossary/mistake dictionaries.
 
 3. **Bullets → Session Notes**
