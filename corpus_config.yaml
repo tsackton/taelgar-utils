@@ -1,0 +1,17 @@
+vault_root: "/Users/tim/Library/Mobile Documents/iCloud~md~obsidian/Documents/Taelgar"
+transcript_root: /Users/tim/Documents/RPGs/sessions/mawar
+corpus_state_root: /Users/tim/RPGs/taelgar-utils/taelgar_corpus
+
+canonical_tags:
+  - person
+  - place
+  - organization
+  - item
+  - deity
+  - species
+  - event
+  - holiday
+  - culture
+
+transcript_globs:
+  - "**/*transcript.txt"
