@@ -57,6 +57,12 @@ class CorpusConfig:
     corpus_state_root: Path
     canonical_tags: List[str]
     transcript_globs: List[str]
+    token_min_doc_count: int = 1
+    token_long_length: int = 10
+    token_short_max_zipf: float = 2.5
+    token_long_max_zipf: float = 3.3
+    bigram_max_doc_count: int = 20
+    bigram_min_component_zipf: float = 2.0
 
     @classmethod
     def from_yaml(cls, path: Path) -> "CorpusConfig":
@@ -75,6 +81,12 @@ class CorpusConfig:
             corpus_state_root=resolve_path(data["corpus_state_root"]),
             canonical_tags=[str(tag).lower() for tag in data["canonical_tags"]],
             transcript_globs=[str(g) for g in data.get("transcript_globs", ["**/*.txt"])],
+            token_min_doc_count=int(data.get("token_min_doc_count", 1)),
+            token_long_length=int(data.get("token_long_length", 10)),
+            token_short_max_zipf=float(data.get("token_short_max_zipf", 2.5)),
+            token_long_max_zipf=float(data.get("token_long_max_zipf", 3.3)),
+            bigram_max_doc_count=int(data.get("bigram_max_doc_count", 20)),
+            bigram_min_component_zipf=float(data.get("bigram_min_component_zipf", 2.0)),
         )
 
 
@@ -104,6 +116,13 @@ class TranscriptTask:
 
 
 @dataclass
+class SegmentTokens:
+    text: str
+    tokens: List[str]
+    lower_tokens: List[str]
+
+
+@dataclass
 class TranscriptCounts:
     tokens: Dict[str, Count]
     bigrams: Dict[Tuple[str, str], Count]
@@ -121,6 +140,8 @@ SLUG_RE = re.compile(r"[^a-z0-9]+")
 TIMESTAMP_LINE_RE = re.compile(r"^\s*\[[^]]+\]\s*[^:]+:\s*(?P<text>.*)$")
 WORD_RE = re.compile(r"[A-Za-z0-9'-]+")
 COMMON_WORD_ZIPF = 3.5
+CONTEXT_SIDE_TARGET = 15
+CONTEXT_MAX_WORDS = 50
 
 
 # ---------------------------------------------------------------------------
@@ -140,22 +161,22 @@ def slugify_path(rel_path: Path) -> str:
     return f"{slug}_{digest}" if slug else digest
 
 
-def extract_transcript_text(raw_text: str) -> str:
+def extract_transcript_segments(raw_text: str) -> List[str]:
     """
-    Extract just the spoken text from `[timestamp] Speaker: text` transcripts.
-    Returns the original text if no structured lines were found.
+    Extract the text portion of `[timestamp] Speaker: text` transcripts.
+    If no structured lines are found, return the full text as a single segment.
     """
-    lines = raw_text.splitlines()
-    extracted: List[str] = []
-    for line in lines:
+    segments: List[str] = []
+    for line in raw_text.splitlines():
         match = TIMESTAMP_LINE_RE.match(line)
         if match:
             text = match.group("text").strip()
             if text:
-                extracted.append(text)
-    if extracted:
-        return "\n".join(extracted)
-    return raw_text
+                segments.append(text)
+    if segments:
+        return segments
+    cleaned = raw_text.strip()
+    return [cleaned] if cleaned else []
 
 
 def extract_h1_title(path: Path) -> str | None:
@@ -236,6 +257,76 @@ def is_common_word(token: str) -> bool:
     return zipf_frequency(token, "en") >= COMMON_WORD_ZIPF
 
 
+def prepare_segments(raw_text: str) -> List[SegmentTokens]:
+    segments: List[SegmentTokens] = []
+    for text in extract_transcript_segments(raw_text):
+        tokens = [m.group(0) for m in WORD_RE.finditer(text)]
+        lower_tokens = [tok.lower() for tok in tokens]
+        segments.append(SegmentTokens(text=text, tokens=tokens, lower_tokens=lower_tokens))
+    return segments
+
+
+def collect_neighbor_tokens(segments: List[SegmentTokens], idx: int, limit: int, before: bool) -> List[str]:
+    collected: List[str] = []
+    cursor = idx - 1 if before else idx + 1
+    while 0 <= cursor < len(segments) and len(collected) < limit:
+        seg_tokens = segments[cursor].tokens
+        if before:
+            take = seg_tokens[-(limit - len(collected)):]
+            collected = take + collected
+        else:
+            collected.extend(seg_tokens[:limit - len(collected)])
+        cursor = cursor - 1 if before else cursor + 1
+    return collected
+
+
+def build_segment_context(segments: List[SegmentTokens], seg_idx: int, token_idx: int, span_len: int) -> str:
+    if not (0 <= seg_idx < len(segments)):
+        return ""
+    segment = segments[seg_idx]
+    words = segment.tokens
+    n_words = len(words)
+    if n_words == 0:
+        return segment.text.strip()
+
+    center_tokens = words[token_idx:token_idx + span_len] or [words[token_idx]]
+
+    before_tokens = words[max(0, token_idx - CONTEXT_SIDE_TARGET):token_idx]
+    before_tokens = before_tokens[-CONTEXT_SIDE_TARGET:]
+    if len(before_tokens) < CONTEXT_SIDE_TARGET:
+        needed = CONTEXT_SIDE_TARGET - len(before_tokens)
+        extra = collect_neighbor_tokens(segments, seg_idx, needed, before=True)
+        before_tokens = extra + before_tokens
+        before_tokens = before_tokens[-CONTEXT_SIDE_TARGET:]
+
+    after_tokens = words[token_idx + span_len:min(n_words, token_idx + span_len + CONTEXT_SIDE_TARGET)]
+    after_tokens = after_tokens[:CONTEXT_SIDE_TARGET]
+    if len(after_tokens) < CONTEXT_SIDE_TARGET:
+        needed = CONTEXT_SIDE_TARGET - len(after_tokens)
+        extra = collect_neighbor_tokens(segments, seg_idx, needed, before=False)
+        after_tokens = after_tokens + extra
+        after_tokens = after_tokens[:CONTEXT_SIDE_TARGET]
+
+    before_len = len(before_tokens)
+    after_len = len(after_tokens)
+    total_len = before_len + len(center_tokens) + after_len
+    if total_len > CONTEXT_MAX_WORDS:
+        overflow = total_len - CONTEXT_MAX_WORDS
+        while overflow > 0 and (before_len > 0 or after_len > 0):
+            if before_len >= after_len and before_len > 0:
+                before_len -= 1
+            elif after_len > 0:
+                after_len -= 1
+            overflow -= 1
+        snippet = before_tokens[-before_len:] + center_tokens + after_tokens[:after_len]
+    else:
+        snippet = before_tokens + center_tokens + after_tokens
+
+    if not snippet:
+        return segment.text.strip()
+    return " ".join(snippet).strip()
+
+
 # ---------------------------------------------------------------------------
 # Helpers: IO & hashing
 # ---------------------------------------------------------------------------
@@ -281,48 +372,64 @@ def merge_counts(dest: Dict[Any, Count], source: Dict[Any, Count], multiplier: i
             dest.pop(key, None)
 
 
-def tally_transcript(task: TranscriptTask) -> TranscriptCounts:
+def tally_transcript(task: TranscriptTask) -> Tuple[TranscriptCounts, Dict[str, str], Dict[Tuple[str, str], str]]:
     raw_text = task.path.read_text(encoding="utf-8", errors="ignore")
-    parsed_text = extract_transcript_text(raw_text)
-    tokens = tokenize_text(parsed_text)
+    segments = prepare_segments(raw_text)
 
     token_counts: Dict[str, Count] = {}
     bigram_counts: Dict[Tuple[str, str], Count] = {}
+    token_examples: Dict[str, str] = {}
+    bigram_examples: Dict[Tuple[str, str], str] = {}
+
     seen_tokens: set[str] = set()
     seen_bigrams: set[Tuple[str, str]] = set()
 
-    for i, tok in enumerate(tokens):
-        if tok not in token_counts:
-            token_counts[tok] = Count()
-        token_counts[tok].total += 1
-        if tok not in seen_tokens:
-            token_counts[tok].docs += 1
-            seen_tokens.add(tok)
+    for seg_idx, segment in enumerate(segments):
+        lowers = segment.lower_tokens
+        if not lowers:
+            continue
+        for i, tok in enumerate(lowers):
+            if tok not in token_counts:
+                token_counts[tok] = Count()
+            token_counts[tok].total += 1
+            if tok not in seen_tokens:
+                token_counts[tok].docs += 1
+                seen_tokens.add(tok)
+            if tok not in token_examples:
+                token_examples[tok] = build_segment_context(segments, seg_idx, i, 1)
 
-        if i > 0:
-            bigram = (tokens[i - 1], tok)
-            if bigram not in bigram_counts:
-                bigram_counts[bigram] = Count()
-            bigram_counts[bigram].total += 1
-            if bigram not in seen_bigrams:
-                bigram_counts[bigram].docs += 1
-                seen_bigrams.add(bigram)
+            if i > 0:
+                bigram = (lowers[i - 1], tok)
+                if bigram not in bigram_counts:
+                    bigram_counts[bigram] = Count()
+                bigram_counts[bigram].total += 1
+                if bigram not in seen_bigrams:
+                    bigram_counts[bigram].docs += 1
+                    seen_bigrams.add(bigram)
+                if bigram not in bigram_examples:
+                    bigram_examples[bigram] = build_segment_context(segments, seg_idx, i - 1, 2)
 
-    return TranscriptCounts(tokens=token_counts, bigrams=bigram_counts)
+    return TranscriptCounts(tokens=token_counts, bigrams=bigram_counts), token_examples, bigram_examples
 
 
-def scan_transcripts(tasks: List[TranscriptTask]) -> Tuple[Dict[str, Count], Dict[Tuple[str, str], Count], Dict[str, TranscriptCounts]]:
+def scan_transcripts(tasks: List[TranscriptTask]) -> Tuple[Dict[str, Count], Dict[Tuple[str, str], Count], Dict[str, TranscriptCounts], Dict[str, str], Dict[Tuple[str, str], str]]:
     aggregate_tokens: Dict[str, Count] = {}
     aggregate_bigrams: Dict[Tuple[str, str], Count] = {}
     per_transcript: Dict[str, TranscriptCounts] = {}
+    token_examples: Dict[str, str] = {}
+    bigram_examples: Dict[Tuple[str, str], str] = {}
 
     for task in tasks:
-        counts = tally_transcript(task)
+        counts, token_ctx, bigram_ctx = tally_transcript(task)
         per_transcript[task.transcript_id] = counts
         merge_counts(aggregate_tokens, counts.tokens, 1)
         merge_counts(aggregate_bigrams, counts.bigrams, 1)
+        for token, ctx in token_ctx.items():
+            token_examples.setdefault(token, ctx)
+        for bigram, ctx in bigram_ctx.items():
+            bigram_examples.setdefault(bigram, ctx)
 
-    return aggregate_tokens, aggregate_bigrams, per_transcript
+    return aggregate_tokens, aggregate_bigrams, per_transcript, token_examples, bigram_examples
 
 
 # ---------------------------------------------------------------------------
@@ -583,12 +690,6 @@ def entry_to_task(cfg: CorpusConfig, entry: Dict[str, Any]) -> TranscriptTask:
         file_hash=file_hash,
         added_at=added_at,
     )
-
-
-def tokenize_text(text: str) -> List[str]:
-    return [m.group(0).lower() for m in WORD_RE.finditer(text)]
-
-
 def list_transcripts(cfg: CorpusConfig) -> List[Path]:
     paths: List[Path] = []
     for pattern in cfg.transcript_globs:
@@ -667,115 +768,102 @@ def save_transcripts_index(cfg: CorpusConfig, entries: List[Dict[str, Any]]) -> 
 # Candidate generation → candidates/stage0_global.tsv
 # ---------------------------------------------------------------------------
 
+def token_zipf_limit(cfg: CorpusConfig, token: str) -> float:
+    if len(token) >= cfg.token_long_length:
+        return cfg.token_long_max_zipf
+    return cfg.token_short_max_zipf
+
+
 def generate_token_candidates(
+    cfg: CorpusConfig,
     token_stats: Dict[str, Count],
     lexicon_tokens: set[str],
-    writer: csv.writer,
-    min_doc_count: int = 1,
-    max_doc_count: int = 50,
-    max_zipf: float = 2.5,
-    min_docs_for_english: int = 2,
-) -> None:
-    """
-    Heuristic:
-      - tokens that appear in at least `min_doc_count` docs but not too many
-      - relatively rare in English (zipf < max_zipf)
-      - not in lexicon_tokens
-    """
+    token_examples: Dict[str, str],
+) -> Tuple[List[List[str]], set[str]]:
+    rows: List[List[str]] = []
+    included_tokens: set[str] = set()
+
     for token, c in sorted(token_stats.items(), key=lambda kv: (kv[1].docs, kv[1].total)):
         if token in lexicon_tokens:
             continue
-        if c.docs < min_doc_count or c.docs > max_doc_count:
+        if token.isdigit():
+            continue
+        if c.docs < cfg.token_min_doc_count:
             continue
 
         z = zipf_frequency(token, "en")
-        if z > 0 and c.docs < max(min_docs_for_english, min_doc_count):
-            continue
-        # 0 means 'unknown' in wordfreq; we keep these – lexicon should filter the meaningful ones
-        if z > max_zipf:
-            continue
-        if z > 0 and token.isalpha() and len(token) <= 3:
+        limit = token_zipf_limit(cfg, token)
+        if z > 0 and z > limit:
             continue
 
-        writer.writerow([
-            "token",        # kind
-            token,          # surface_form
-            1,              # n_tokens
-            c.total,        # total_count
-            c.docs,         # doc_count
+        context = token_examples.get(token, "")
+        rows.append([
+            token,
+            "1",
+            str(c.total),
+            str(c.docs),
             f"{z:.3f}",
-            "",
+            context,
         ])
+        included_tokens.add(token)
+
+    return rows, included_tokens
 
 
 def generate_bigram_candidates(
+    cfg: CorpusConfig,
     bigram_stats: Dict[Tuple[str, str], Count],
     lexicon_phrases: set[str],
-    writer: csv.writer,
-    min_doc_count: int = 1,
-    max_doc_count: int = 40,
-    max_zipf_sum: float = 7.5,
-    rare_word_zipf: float = 2.5,
-) -> None:
-    """
-    Heuristic:
-      - bigrams that are rare-ish (doc_count between bounds)
-      - combined "English-ness" not too high (z1+z2 <= max_zipf_sum)
-      - skip if bigram matches a known lexicon phrase
-    """
+    token_candidates: set[str],
+    bigram_examples: Dict[Tuple[str, str], str],
+) -> List[List[str]]:
+    rows: List[List[str]] = []
+
     for (t1, t2), c in sorted(bigram_stats.items(), key=lambda kv: (kv[1].docs, kv[1].total)):
-        if c.docs < min_doc_count or c.docs > max_doc_count:
+        if c.docs == 0 or c.docs > cfg.bigram_max_doc_count:
             continue
 
         phrase = f"{t1} {t2}"
         if phrase in lexicon_phrases:
             continue
 
-        z1 = zipf_frequency(t1, "en")
-        z2 = zipf_frequency(t2, "en")
-        rareish = (
-            z1 == 0 or z2 == 0 or
-            z1 <= rare_word_zipf or z2 <= rare_word_zipf
-        )
-
-        # if both words are super common and the sum is high, this is probably fine English
-        if not rareish and (z1 + z2) > max_zipf_sum:
+        if t1 in token_candidates or t2 in token_candidates:
             continue
 
-        writer.writerow([
-            "bigram",
+        z1 = zipf_frequency(t1, "en")
+        z2 = zipf_frequency(t2, "en")
+        if z1 < cfg.bigram_min_component_zipf or z2 < cfg.bigram_min_component_zipf:
+            continue
+
+        context = bigram_examples.get((t1, t2), "")
+        rows.append([
             phrase,
-            2,
-            c.total,
-            c.docs,
-            "",
+            "2",
+            str(c.total),
+            str(c.docs),
             f"{(z1 + z2):.3f}",
+            context,
         ])
 
+    return rows
 
-def write_stage0_global_candidates(
-    cfg: CorpusConfig,
-    token_stats: Dict[str, Count],
-    bigram_stats: Dict[Tuple[str, str], Count],
-    lexicon_tokens: set[str],
-    lexicon_phrases: set[str],
-) -> None:
-    out_path = cfg.corpus_state_root / "candidates" / "stage0_global.tsv"
+
+def write_token_candidates_file(cfg: CorpusConfig, rows: List[List[str]]) -> None:
+    out_path = cfg.corpus_state_root / "candidates" / "stage0_tokens.tsv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-
     with out_path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f, delimiter="\t")
-        w.writerow([
-            "kind",
-            "surface_form",
-            "n_tokens",
-            "total_count",
-            "doc_count",
-            "zipf",
-            "zipf_sum",
-        ])
-        generate_token_candidates(token_stats, lexicon_tokens, w)
-        generate_bigram_candidates(bigram_stats, lexicon_phrases, w)
+        w.writerow(["surface_form", "n_tokens", "total_count", "doc_count", "zipf", "context"])
+        w.writerows(rows)
+
+
+def write_bigram_candidates_file(cfg: CorpusConfig, rows: List[List[str]]) -> None:
+    out_path = cfg.corpus_state_root / "candidates" / "stage0_bigrams.tsv"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f, delimiter="\t")
+        w.writerow(["surface_form", "n_tokens", "total_count", "doc_count", "zipf_sum", "context"])
+        w.writerows(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -846,8 +934,10 @@ def main() -> None:
     task_token_stats: Dict[str, Count] = {}
     task_bigram_stats: Dict[Tuple[str, str], Count] = {}
     task_counts: Dict[str, TranscriptCounts] = {}
+    token_examples: Dict[str, str] = {}
+    bigram_examples: Dict[Tuple[str, str], str] = {}
     if effective_tasks:
-        task_token_stats, task_bigram_stats, task_counts = scan_transcripts(effective_tasks)
+        task_token_stats, task_bigram_stats, task_counts, token_examples, bigram_examples = scan_transcripts(effective_tasks)
 
     stats_updated = False
     if plan.mode != "force_one":
@@ -889,8 +979,12 @@ def main() -> None:
         print("No transcripts required processing for candidates.")
     else:
         print(f"Prepared {processed} transcripts for candidate generation.")
-        write_stage0_global_candidates(cfg, task_token_stats, task_bigram_stats, lexicon_tokens, lexicon_phrases)
-        print(f"Wrote candidate list to {cfg.corpus_state_root / 'candidates' / 'stage0_global.tsv'}")
+        token_rows, token_candidate_set = generate_token_candidates(cfg, task_token_stats, lexicon_tokens, token_examples)
+        bigram_rows = generate_bigram_candidates(cfg, task_bigram_stats, lexicon_phrases, token_candidate_set, bigram_examples)
+        write_token_candidates_file(cfg, token_rows)
+        print(f"Wrote token candidates to {cfg.corpus_state_root / 'candidates' / 'stage0_tokens.tsv'}")
+        if bigram_rows:
+            print("Bigram candidates computed but not written (feature temporarily disabled).")
 
 
 if __name__ == "__main__":

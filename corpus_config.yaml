@@ -1,5 +1,5 @@
 vault_root: "/Users/tim/Library/Mobile Documents/iCloud~md~obsidian/Documents/Taelgar"
-transcript_root: /Users/tim/Documents/RPGs/sessions/mawar
+transcript_root: /Users/tim/Documents/RPGs/sessions
 corpus_state_root: /Users/tim/RPGs/taelgar-utils/taelgar_corpus
 
 canonical_tags:
@@ -15,3 +15,10 @@ canonical_tags:
 
 transcript_globs:
   - "**/*transcript.txt"
+
+token_min_doc_count: 3
+token_long_length: 7
+token_short_max_zipf: 2.5
+token_long_max_zipf: 2.0
+bigram_max_doc_count: 20
+bigram_min_component_zipf: 2.5

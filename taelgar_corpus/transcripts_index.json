@@ -1,20 +1,776 @@
 [
   {
-    "id": "mawar_002_zoom_session_002_zoom_session_002_transcript_txt_3e9ba487",
-    "path": "mawar-002/zoom-session-002/zoom-session-002.transcript.txt",
+    "id": "chasm_chasm_000_whisper_run3_whisper_run3_transcript_cleaned_transcript_txt_aeeaffc2",
+    "path": "chasm/chasm-000/whisper-run3/whisper-run3.transcript-cleaned-transcript.txt",
+    "hash": "ce6ef8f853c3950ade33f37f6713cae4a2bb602f9eb6fd6c2483a28be85d9a32",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "chasm_chasm_000_whisper_run3_whisper_run3_transcript_txt_5c21aa2f",
+    "path": "chasm/chasm-000/whisper-run3/whisper-run3.transcript.txt",
+    "hash": "bdf42342320dfee0529b6349680233a1b631887a597d1c9b1ed1e35c91a748ea",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "chasm_chasm_000_zoom_session_000_zoom_session_000_transcript_txt_b205f7be",
+    "path": "chasm/chasm-000/zoom-session-000/zoom-session-000.transcript.txt",
+    "hash": "acad11113f7c3835e23801a8c524d8ed8b0e03f72b4915dbeede9dec41811f5a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_003_zoom_session_003_zoom_session_003_transcript_txt_675d678d",
+    "path": "dunmar/dufr-003/zoom-session-003/zoom-session-003.transcript.txt",
+    "hash": "3db021a759a8fd1bad5ced8282ef2a0d4ccb04201572375775f81e19b980ef43",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_004_zoom_session_004_zoom_session_004_transcript_txt_ce644b43",
+    "path": "dunmar/dufr-004/zoom-session-004/zoom-session-004.transcript.txt",
+    "hash": "252ee073424611a2b3273e4133732d547b4931dff53b51abfd12a44ceb6b1175",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_005_zoom_session_005_zoom_session_005_transcript_txt_ee240a15",
+    "path": "dunmar/dufr-005/zoom-session-005/zoom-session-005.transcript.txt",
+    "hash": "cd2e8810b81f3e88b8186e538a221d1be86c5cb51b1e69a0e127d8ae3de347ec",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_006_zoom_session_006_zoom_session_006_transcript_txt_61787027",
+    "path": "dunmar/dufr-006/zoom-session-006/zoom-session-006.transcript.txt",
+    "hash": "fd44fbfdd0d83c182ba97410c4c69ee30da6adf592c6ade2e713f014c5e1720e",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_007_zoom_session_007_zoom_session_007_transcript_txt_a08a954c",
+    "path": "dunmar/dufr-007/zoom-session-007/zoom-session-007.transcript.txt",
+    "hash": "985e203c5daa0a1a2502d7121c9f22dd705e1d144ff6a948ee018b53fe23fb7b",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_008_zoom_session_008_zoom_session_008_transcript_txt_a347fb75",
+    "path": "dunmar/dufr-008/zoom-session-008/zoom-session-008.transcript.txt",
+    "hash": "92edb84ffcbcf3c3636aa7f6a4612cffabce8aa143023f7f905c48dc0c566285",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_009_zoom_session_009_zoom_session_009_transcript_txt_bb742084",
+    "path": "dunmar/dufr-009/zoom-session-009/zoom-session-009.transcript.txt",
+    "hash": "c34d0cc2ab6744cc598f0ebe1486a45d185e5a84500a45a71d216ff684ffce9d",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_010_zoom_session_010_zoom_session_010_transcript_txt_6e35f06f",
+    "path": "dunmar/dufr-010/zoom-session-010/zoom-session-010.transcript.txt",
+    "hash": "8ae9cce58739ecb625c1ede1046ec5e0c6f798764c3c20d96867cffcb968b72d",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_011_zoom_session_011_zoom_session_011_transcript_txt_a337e8da",
+    "path": "dunmar/dufr-011/zoom-session-011/zoom-session-011.transcript.txt",
+    "hash": "377060121ceed4473e70bebcbefecb443865d528d413da126edc0c2ffc26842e",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_012_zoom_session_012_zoom_session_012_transcript_txt_2246556f",
+    "path": "dunmar/dufr-012/zoom-session-012/zoom-session-012.transcript.txt",
+    "hash": "2cd78e0c961a511a6e10beb4be05033ea4ac78b0b9861c5c163aecf0b734f101",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_013_zoom_session_013_zoom_session_013_transcript_txt_8f2977d7",
+    "path": "dunmar/dufr-013/zoom-session-013/zoom-session-013.transcript.txt",
+    "hash": "1285e555d2c35ca600b365cb31a44b64002ea314d7b95b75486a3cb94430601d",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_014_zoom_session_014_zoom_session_014_transcript_txt_ef71a768",
+    "path": "dunmar/dufr-014/zoom-session-014/zoom-session-014.transcript.txt",
+    "hash": "d79ac1ecf73506d305e5081a6ce2eb70e4817162153a3518eed7dd820051e82f",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_015_zoom_session_015_zoom_session_015_transcript_txt_b73e7254",
+    "path": "dunmar/dufr-015/zoom-session-015/zoom-session-015.transcript.txt",
+    "hash": "e1a3ef042ec84fa03cc4d56802f984925867fe6a0d79c5bf996d959a75b0f7c8",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_016_zoom_session_016_zoom_session_016_transcript_txt_414690dd",
+    "path": "dunmar/dufr-016/zoom-session-016/zoom-session-016.transcript.txt",
+    "hash": "2aee0dd1dca6c73b7c07a61985b31b5c12f79ed0f8cf06c556b9696ec335fa3e",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_017_zoom_session_017_zoom_session_017_transcript_txt_e80e1ec7",
+    "path": "dunmar/dufr-017/zoom-session-017/zoom-session-017.transcript.txt",
+    "hash": "85adb6580100a78a1bafccec18857e617495ded21ae22cf9a96d95b23c4a64bf",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_018_zoom_session_018_zoom_session_018_transcript_txt_81645530",
+    "path": "dunmar/dufr-018/zoom-session-018/zoom-session-018.transcript.txt",
+    "hash": "4975a8c719f4fde22a39e32a4e0540dd01af5843b322317527b28092f25535f8",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_019_zoom_session_019_zoom_session_019_transcript_txt_1bafc051",
+    "path": "dunmar/dufr-019/zoom-session-019/zoom-session-019.transcript.txt",
+    "hash": "b327c6c560f07c8ec12a079e77879c70a6eb152b095dd42fad9197652d1a9b49",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_020_zoom_session_020_zoom_session_020_transcript_txt_ebea80ef",
+    "path": "dunmar/dufr-020/zoom-session-020/zoom-session-020.transcript.txt",
+    "hash": "69058552c0dbfd4f0c8d87b2eeb31d0fadb6e168563fa6ec3342d4e7e8cd2211",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_021_zoom_session_021_zoom_session_021_transcript_txt_de714465",
+    "path": "dunmar/dufr-021/zoom-session-021/zoom-session-021.transcript.txt",
+    "hash": "ece6fe0985d43f776952c5a02b14be9826bb0be4d1bb5a1cc767c2d085cb8713",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_022_zoom_session_022_zoom_session_022_transcript_txt_066c8a47",
+    "path": "dunmar/dufr-022/zoom-session-022/zoom-session-022.transcript.txt",
+    "hash": "bef3934cf942cc10a3cbf9e4419e1436a428fe195b742a64b274dc269285a9bc",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_023_zoom_session_023_zoom_session_023_transcript_txt_28af7f72",
+    "path": "dunmar/dufr-023/zoom-session-023/zoom-session-023.transcript.txt",
+    "hash": "f862007caf221beff827794d2e634db1ca84929823e51d72003612e2953ee09f",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_024_zoom_session_024_zoom_session_024_transcript_txt_ef23f6e8",
+    "path": "dunmar/dufr-024/zoom-session-024/zoom-session-024.transcript.txt",
+    "hash": "8fbe328fdcfd62b99b4c88f34a8bffeeefd83bdf442b5f65d7af6d5eb4ec57dd",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_025_zoom_session_025_zoom_session_025_transcript_txt_9ff02fbf",
+    "path": "dunmar/dufr-025/zoom-session-025/zoom-session-025.transcript.txt",
+    "hash": "a91c0e57a1d66a8e4096155f2f61add2a069464bee1558d3339d30a2b851dc25",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_026_zoom_session_026_zoom_session_026_transcript_txt_2ce24dff",
+    "path": "dunmar/dufr-026/zoom-session-026/zoom-session-026.transcript.txt",
+    "hash": "570fc2f893c154601f072245fe1c5eae77239aae9ca68bccf04ce5baa97a8b99",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_027_zoom_session_027_zoom_session_027_transcript_txt_baa5b5a4",
+    "path": "dunmar/dufr-027/zoom-session-027/zoom-session-027.transcript.txt",
+    "hash": "9f60d16291d7024f65be6f66edd9ca57ce9fafd2ab8f1ad1bb561ab8bab023f5",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_028_zoom_session_028_zoom_session_028_transcript_txt_c93308ee",
+    "path": "dunmar/dufr-028/zoom-session-028/zoom-session-028.transcript.txt",
+    "hash": "38a4a26fe84436eec7163accfa8686f54957ecd7c52e58b06dfc1061a1588411",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_029_zoom_session_029_zoom_session_029_transcript_txt_b2fb884d",
+    "path": "dunmar/dufr-029/zoom-session-029/zoom-session-029.transcript.txt",
+    "hash": "8e7bd80bc8c8ca1694749bba0cc5358e6c177852da95d8363362d3ebf24906cb",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_030_zoom_session_030_zoom_session_030_transcript_txt_b6e41528",
+    "path": "dunmar/dufr-030/zoom-session-030/zoom-session-030.transcript.txt",
+    "hash": "2c55973ea9c25303386fb198f89b89638cf7e0c22383c160303beb4a15702a8a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_031_zoom_session_031_zoom_session_031_transcript_txt_716cc64e",
+    "path": "dunmar/dufr-031/zoom-session-031/zoom-session-031.transcript.txt",
+    "hash": "c0701f4bfdafef647fb9a3fa8afbc935003f5662b0073579ead79fa209216978",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_033_zoom_session_033_zoom_session_033_transcript_txt_d08e972a",
+    "path": "dunmar/dufr-033/zoom-session-033/zoom-session-033.transcript.txt",
+    "hash": "1ef74376261a8acb568febe76518e3598d4445175a792d6e7c1bdf3ecea33ff3",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_034_zoom_session_034_zoom_session_034_transcript_txt_08377c20",
+    "path": "dunmar/dufr-034/zoom-session-034/zoom-session-034.transcript.txt",
+    "hash": "316d7276f0141b92823b1db8c97209c64e4e72b6b517f617999e41f8cc345d9a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_035_zoom_session_035_zoom_session_035_transcript_txt_46bdf6bf",
+    "path": "dunmar/dufr-035/zoom-session-035/zoom-session-035.transcript.txt",
+    "hash": "1a977f3be7a0e772a2a29826bf8c72e1283e1adca70a4371eaf210d39fbf17df",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_036_zoom_session_036_zoom_session_036_transcript_txt_0fa24fb9",
+    "path": "dunmar/dufr-036/zoom-session-036/zoom-session-036.transcript.txt",
+    "hash": "698802209e095b76608fc57411e80c75cb5353b405ffcf27ccbc4c8793fb89f8",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_037_zoom_session_037_zoom_session_037_transcript_txt_134f0b65",
+    "path": "dunmar/dufr-037/zoom-session-037/zoom-session-037.transcript.txt",
+    "hash": "ac569262ed701ca9795d5f9be8e4bf61d236a0949923b8b008f8755dbeaa6692",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_038_zoom_session_038_zoom_session_038_transcript_txt_ff1eefe3",
+    "path": "dunmar/dufr-038/zoom-session-038/zoom-session-038.transcript.txt",
+    "hash": "36934be734987edf97b8b175f54ac7c156981d1b1e0bb52d7f1956d507d3cfa6",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_039_zoom_session_039_zoom_session_039_transcript_txt_e8e14e67",
+    "path": "dunmar/dufr-039/zoom-session-039/zoom-session-039.transcript.txt",
+    "hash": "3d3ca3b06639a71d5c5f04e47bb340b981cd69bb840066a118cca60d56593750",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_040_zoom_session_040_zoom_session_040_transcript_txt_7dd56227",
+    "path": "dunmar/dufr-040/zoom-session-040/zoom-session-040.transcript.txt",
+    "hash": "5aff8600fa6f0a8c334267e11d1b949cf9dad266dc2cc22404c19d8a6789db72",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_041_zoom_session_041_zoom_session_041_transcript_txt_322c7e26",
+    "path": "dunmar/dufr-041/zoom-session-041/zoom-session-041.transcript.txt",
+    "hash": "206e6b165ce4f3044faaef437a33ad811681cd7a381e2ba59d2419418948f750",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_042_zoom_session_042_zoom_session_042_transcript_txt_564d5db2",
+    "path": "dunmar/dufr-042/zoom-session-042/zoom-session-042.transcript.txt",
+    "hash": "089e1285b10a4d16a5603726c30727d9e0b234ef5ba4e52e8545fe92b2a760eb",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_043_zoom_session_043_zoom_session_043_transcript_txt_019dc820",
+    "path": "dunmar/dufr-043/zoom-session-043/zoom-session-043.transcript.txt",
+    "hash": "edfa46afaf27bd328b0cad5bf14549389ce7c042163ad6b90d6da778c98427b5",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_044_zoom_session_044_zoom_session_044_transcript_txt_a1f066f2",
+    "path": "dunmar/dufr-044/zoom-session-044/zoom-session-044.transcript.txt",
+    "hash": "678841175ed66ef1b098046c14b69df895f5f7ba988f2ddb7333a8fde4764f4e",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_045_zoom_session_045_zoom_session_045_transcript_txt_2cdf5892",
+    "path": "dunmar/dufr-045/zoom-session-045/zoom-session-045.transcript.txt",
+    "hash": "b04aba4f4f5a41fc9629b6221e9eb35bea04e3f7caee932f5c25d4b2f7c78e2a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_046_zoom_session_046_zoom_session_046_transcript_txt_ef3b88c7",
+    "path": "dunmar/dufr-046/zoom-session-046/zoom-session-046.transcript.txt",
+    "hash": "1b991abf7d7b96c4cd820d75dfa2f0f38d67be4f30fd1022ff59b819306dda64",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_047_zoom_session_047_zoom_session_047_transcript_txt_5c07370d",
+    "path": "dunmar/dufr-047/zoom-session-047/zoom-session-047.transcript.txt",
+    "hash": "d6983124bfc8ed4c483fe44eef1f8c2cdaf6ccf2611bd291ad3607985c5f6eac",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_048_zoom_session_048_zoom_session_048_transcript_txt_dd9e97f8",
+    "path": "dunmar/dufr-048/zoom-session-048/zoom-session-048.transcript.txt",
+    "hash": "72e79ccdcfd1498779eb101221c972d33cf37950be4405805e77251abc256f2a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_049_zoom_session_049_zoom_session_049_transcript_txt_021c8880",
+    "path": "dunmar/dufr-049/zoom-session-049/zoom-session-049.transcript.txt",
+    "hash": "18ff72336711f5e45f771271faab2ec24ee420cbcde6efdd7b4da86201399e1e",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_053_zoom_session_053_zoom_session_053_transcript_txt_caf0b006",
+    "path": "dunmar/dufr-053/zoom-session-053/zoom-session-053.transcript.txt",
+    "hash": "b2d6951468865af0124fa7ef4ede30970ee01634e14b9f5a63462c3783436bcb",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_054_zoom_session_054_zoom_session_054_transcript_txt_b0b95fe3",
+    "path": "dunmar/dufr-054/zoom-session-054/zoom-session-054.transcript.txt",
+    "hash": "23d97710d956c89bf40aceeb8d962d8240c27e5e1a5bf0ff56f4b44da183723a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_055_zoom_session_055_zoom_session_055_transcript_txt_1b77a1ea",
+    "path": "dunmar/dufr-055/zoom-session-055/zoom-session-055.transcript.txt",
+    "hash": "3f9cc4a3663261852355243144a1c11889866237d3cb5959003d3ca913cba789",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_056_zoom_session_056_zoom_session_056_transcript_txt_aee19fd5",
+    "path": "dunmar/dufr-056/zoom-session-056/zoom-session-056.transcript.txt",
+    "hash": "f753c350f1f153e89f8705f3fedab7561c0a7b38203fd99a347ee23c1900efaa",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_057_zoom_session_057_zoom_session_057_transcript_txt_4a82c13f",
+    "path": "dunmar/dufr-057/zoom-session-057/zoom-session-057.transcript.txt",
+    "hash": "b1abfe7a1894d8a882b60bbcd52d5f1e7b17f1737269b80685ee4d6687bafa90",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_058_zoom_session_058_zoom_session_058_transcript_txt_046e9a80",
+    "path": "dunmar/dufr-058/zoom-session-058/zoom-session-058.transcript.txt",
+    "hash": "a24a7e84d222136b9319193249df0c944a9727a7e105facd413ddc005a0f4ab4",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_059_zoom_session_059_zoom_session_059_transcript_txt_976753a4",
+    "path": "dunmar/dufr-059/zoom-session-059/zoom-session-059.transcript.txt",
+    "hash": "617a5d086cdedd4366e46d78b178f64b7109fc5ab05bd9e7ae7dc3255512f97c",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_060_zoom_session_060_zoom_session_060_transcript_txt_d85e0c4e",
+    "path": "dunmar/dufr-060/zoom-session-060/zoom-session-060.transcript.txt",
+    "hash": "d964e1faed00ab92bc2b123b0d2ab94b73f416cd709de314dba2d9af8249a194",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_061_zoom_session_061_zoom_session_061_transcript_txt_38e6169d",
+    "path": "dunmar/dufr-061/zoom-session-061/zoom-session-061.transcript.txt",
+    "hash": "d6f6074b7b8650eb31dfcaaec01b101c529ea3c85da40d4a1ffe52154df9aea1",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_062_zoom_session_062_zoom_session_062_transcript_txt_e513d315",
+    "path": "dunmar/dufr-062/zoom-session-062/zoom-session-062.transcript.txt",
+    "hash": "b6bd64287a0a4d71a6cb57e5ca9e5dc7180162a1f085ccd6ffd7aeb7f9578f40",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_063_zoom_session_063_zoom_session_063_transcript_txt_186d04fe",
+    "path": "dunmar/dufr-063/zoom-session-063/zoom-session-063.transcript.txt",
+    "hash": "a189565b2613a062af89072ffd6980726022d1d21af16928845dabdd8430adf1",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_064_zoom_session_064_zoom_session_064_transcript_txt_0dedddf7",
+    "path": "dunmar/dufr-064/zoom-session-064/zoom-session-064.transcript.txt",
+    "hash": "b97c304a58326cd968a313517af5a45f18490e5f56e749c206da0da83e5ab89b",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_065_zoom_session_065_zoom_session_065_transcript_txt_4a7021bf",
+    "path": "dunmar/dufr-065/zoom-session-065/zoom-session-065.transcript.txt",
+    "hash": "d6d8cf8efc32675e70a2147b776e20ab992c6b180d9c64442a2895597eff9619",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_066_zoom_session_066_zoom_session_066_transcript_txt_96cf81df",
+    "path": "dunmar/dufr-066/zoom-session-066/zoom-session-066.transcript.txt",
+    "hash": "2e84f2f83b04f5e7818508a6fb35a875db347c953e4e82ee2b6e4a613bc97679",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_067_zoom_session_067_zoom_session_067_transcript_txt_39c5199b",
+    "path": "dunmar/dufr-067/zoom-session-067/zoom-session-067.transcript.txt",
+    "hash": "e11b73c4f4a53a21a44175da3576e1e83b3081273ef61fd895f6a1365a65fa57",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_068_zoom_session_068_zoom_session_068_transcript_txt_f3cd465a",
+    "path": "dunmar/dufr-068/zoom-session-068/zoom-session-068.transcript.txt",
+    "hash": "5377c8fa9a4e361ec00822cdf2c163b713f1bccc668c743aeb7e3bcea329449a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_069_zoom_session_069_zoom_session_069_transcript_txt_28f3c598",
+    "path": "dunmar/dufr-069/zoom-session-069/zoom-session-069.transcript.txt",
+    "hash": "1b6b462c11ae4ac932214384d1878b13761dfade04cd5efe3656a90ef04781cc",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_070_zoom_session_070_zoom_session_070_transcript_txt_d80447a7",
+    "path": "dunmar/dufr-070/zoom-session-070/zoom-session-070.transcript.txt",
+    "hash": "442faf5b7b457d8d69f865db66903bbe0bfb7a2355402413863d8e03de1c13c9",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_071_zoom_session_071_zoom_session_071_transcript_txt_506f00c5",
+    "path": "dunmar/dufr-071/zoom-session-071/zoom-session-071.transcript.txt",
+    "hash": "8f09f3972136fe95ceaf4f5825a47e2d36d8b6b1513370c306f37cf238f34d82",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_072_zoom_session_072_zoom_session_072_transcript_txt_9c6d8b52",
+    "path": "dunmar/dufr-072/zoom-session-072/zoom-session-072.transcript.txt",
+    "hash": "66974640ae68883a8a9c66fa3e4066cec163df6ee4a040f6c8a09fc94d111755",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_073_zoom_session_073_zoom_session_073_transcript_txt_b02a3d6a",
+    "path": "dunmar/dufr-073/zoom-session-073/zoom-session-073.transcript.txt",
+    "hash": "7d61341bdebc9e408886b482658f09b8824f0a142b66949b98b161ebcca5036d",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_074_zoom_session_074_zoom_session_074_transcript_txt_38ef9870",
+    "path": "dunmar/dufr-074/zoom-session-074/zoom-session-074.transcript.txt",
+    "hash": "dc9b53b92d4d95c4560f170c6fddc975251f763e04a5eadbd30d8fe276eeacda",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_075_zoom_session_075_zoom_session_075_transcript_txt_0068ec2c",
+    "path": "dunmar/dufr-075/zoom-session-075/zoom-session-075.transcript.txt",
+    "hash": "75d251a698bb3be91979aec2b5d4002882953ae21fbba071beb5b99e2e2fb3b9",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_076_zoom_session_076_zoom_session_076_transcript_txt_5d2b326f",
+    "path": "dunmar/dufr-076/zoom-session-076/zoom-session-076.transcript.txt",
+    "hash": "b42ef133c57adc3b011ab565a9872993671b0bf719902014fe5df3ee4686c0f8",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_077_zoom_session_077_zoom_session_077_transcript_txt_85dcc16d",
+    "path": "dunmar/dufr-077/zoom-session-077/zoom-session-077.transcript.txt",
+    "hash": "0d10a7f6c808bb2e53ec677c4a9390a433eb5c04930093b98ea61623060b3103",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_078_zoom_session_078_zoom_session_078_transcript_txt_92b560a6",
+    "path": "dunmar/dufr-078/zoom-session-078/zoom-session-078.transcript.txt",
+    "hash": "e333c720db2b65851c67b5d124202633715eb106c580eb9c3f768f7805d9c442",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_079_zoom_session_079_zoom_session_079_transcript_txt_e4ca11a5",
+    "path": "dunmar/dufr-079/zoom-session-079/zoom-session-079.transcript.txt",
+    "hash": "c20d989a45ad9e461a06a3592df992a612e8be93756fa67b39159dd1fe58449a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_082_zoom_session_082_zoom_session_082_transcript_txt_8a2f30b0",
+    "path": "dunmar/dufr-082/zoom-session-082/zoom-session-082.transcript.txt",
+    "hash": "5af7881c5f4268164bcde928523442a23661bb0444023f21d416326c6c030176",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_083_zoom_session_083_zoom_session_083_transcript_txt_beae3266",
+    "path": "dunmar/dufr-083/zoom-session-083/zoom-session-083.transcript.txt",
+    "hash": "f2706814d157ad2dee20fe28f51306ecd4bee6604f3b38bda9399061e06f56cd",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_084_zoom_session_084_zoom_session_084_transcript_txt_e90235f7",
+    "path": "dunmar/dufr-084/zoom-session-084/zoom-session-084.transcript.txt",
+    "hash": "56e3139d1f365261f12ae4cddeaa642918a9dc96f708f6888b9463ce351d3639",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_085_zoom_session_085_zoom_session_085_transcript_txt_b75de047",
+    "path": "dunmar/dufr-085/zoom-session-085/zoom-session-085.transcript.txt",
+    "hash": "24ad06542a521c2982db9f6c9fe94da669902e897fed5fe012eef07843236705",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_086_zoom_session_086_zoom_session_086_transcript_txt_c950d3a0",
+    "path": "dunmar/dufr-086/zoom-session-086/zoom-session-086.transcript.txt",
+    "hash": "574a93fbd769e2e6bef6e968e93f460b09b589aebd3ba6482c7993e9bcb994e6",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_087_zoom_session_087_zoom_session_087_transcript_txt_4e2d3da3",
+    "path": "dunmar/dufr-087/zoom-session-087/zoom-session-087.transcript.txt",
+    "hash": "a3bc80e976b6489fc3875402849a31d59504db24157394eb37ca188cec92e529",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_088_zoom_session_088_zoom_session_088_transcript_txt_82ef34cb",
+    "path": "dunmar/dufr-088/zoom-session-088/zoom-session-088.transcript.txt",
+    "hash": "5942cea4f35e8d6fb59d96fff9c834adfebab1069156d7f45f95d1d53006db4b",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_089_zoom_session_089_zoom_session_089_transcript_txt_75d41e58",
+    "path": "dunmar/dufr-089/zoom-session-089/zoom-session-089.transcript.txt",
+    "hash": "3e8b6944bbb75ade9580d4d4a3c592fbab3fa9991d743ee56bc52b901a28db34",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_090_zoom_session_090_zoom_session_090_transcript_txt_b2232f41",
+    "path": "dunmar/dufr-090/zoom-session-090/zoom-session-090.transcript.txt",
+    "hash": "e5998db7fa0f8f94041aef0a7541e5a2e7e1d41dae9d8c8b3844dba70651f1b6",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_091_zoom_session_091_zoom_session_091_transcript_txt_92906614",
+    "path": "dunmar/dufr-091/zoom-session-091/zoom-session-091.transcript.txt",
+    "hash": "425e1c50356b3f7a8b89b9af061670cf5bba9f8803408272960e504b4b85caec",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_092_zoom_session_092_zoom_session_092_transcript_txt_048452a0",
+    "path": "dunmar/dufr-092/zoom-session-092/zoom-session-092.transcript.txt",
+    "hash": "7e90d855097311f9102bfbf103fb46a12b8600f1aa7739384acb8b0ad3ce4b8d",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_093_zoom_session_093_zoom_session_093_transcript_txt_3caeff6c",
+    "path": "dunmar/dufr-093/zoom-session-093/zoom-session-093.transcript.txt",
+    "hash": "d00eea0ab52197746ea2abe97bd99d741be09e12db784b6b192154ebace64b2a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_094_zoom_session_094_zoom_session_094_transcript_txt_a8625178",
+    "path": "dunmar/dufr-094/zoom-session-094/zoom-session-094.transcript.txt",
+    "hash": "3d3d185bec394b86582fa384403280c6324d2bf77972cc54a387f8455ad6b47a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_095_zoom_session_095_zoom_session_095_transcript_txt_c6c9b851",
+    "path": "dunmar/dufr-095/zoom-session-095/zoom-session-095.transcript.txt",
+    "hash": "cc2880992fe344b33a5b4b693193269940e101f30d5b2cd60106803585f1be3c",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_097_zoom_session_097_zoom_session_097_transcript_txt_8dc29c30",
+    "path": "dunmar/dufr-097/zoom-session-097/zoom-session-097.transcript.txt",
+    "hash": "093af58ed57ad717970001fbb97fc2200ea17cd6e19ce70c872092920c9be97a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_098_zoom_session_098_zoom_session_098_transcript_txt_53245d70",
+    "path": "dunmar/dufr-098/zoom-session-098/zoom-session-098.transcript.txt",
+    "hash": "3b65945d0d9bbd2e0e238eff7148c817176ac928764b70bd3003ceae93e42d77",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_099_zoom_session_099_zoom_session_099_transcript_txt_5b126a0a",
+    "path": "dunmar/dufr-099/zoom-session-099/zoom-session-099.transcript.txt",
+    "hash": "e2cbd0ebee9e9a05b0e8b1f493041660879b4e06dff3c33203c545e0cce8876a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_100_zoom_session_100_zoom_session_100_transcript_txt_4447651b",
+    "path": "dunmar/dufr-100/zoom-session-100/zoom-session-100.transcript.txt",
+    "hash": "96b2dd80bbd35f9f44f665ea1276d753f63224c1aec132677c63456d755f2426",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_101_zoom_session_101_zoom_session_101_transcript_txt_9502564d",
+    "path": "dunmar/dufr-101/zoom-session-101/zoom-session-101.transcript.txt",
+    "hash": "24b10a893d7890361c86c874a0123fff4277949a0b19b3e9079ff1b6bfe8ff7d",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_102_zoom_session_102_zoom_session_102_transcript_txt_32e93581",
+    "path": "dunmar/dufr-102/zoom-session-102/zoom-session-102.transcript.txt",
+    "hash": "3014681d59526827a841d227d16829b1a8698d3848304c587483e4077a8fc849",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_103_zoom_session_103_zoom_session_103_transcript_txt_3dedf54d",
+    "path": "dunmar/dufr-103/zoom-session-103/zoom-session-103.transcript.txt",
+    "hash": "0e68f20de0105737b0278ed11bd5fad866027415bbd1cbed9f22104a245abcb2",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_104_zoom_session_104_zoom_session_104_transcript_txt_d544d18e",
+    "path": "dunmar/dufr-104/zoom-session-104/zoom-session-104.transcript.txt",
+    "hash": "f314c6affccef60bf1f35c60db8ca2542a9b9d72d798f19bcb2d50f088f1b4c0",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_105_zoom_session_105_zoom_session_105_transcript_txt_271afab6",
+    "path": "dunmar/dufr-105/zoom-session-105/zoom-session-105.transcript.txt",
+    "hash": "9e4528a4a78515744c4936142eff5dbd442ec1c29ba58b209bc7a4fa7b2b654d",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_106_zoom_session_106_zoom_session_106_transcript_txt_10b68a83",
+    "path": "dunmar/dufr-106/zoom-session-106/zoom-session-106.transcript.txt",
+    "hash": "4210ccb4ba1416b4256402f08387cca2beff5cfa1fc24b8898505ac93779d163",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_111_zoom_session_111_zoom_session_111_transcript_txt_a4420de7",
+    "path": "dunmar/dufr-111/zoom-session-111/zoom-session-111.transcript.txt",
+    "hash": "9adcbf4d27792c603c64e694a3593d247957755675a30d54dcf6ffb721be0e8a",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_112_zoom_session_112_zoom_session_112_transcript_txt_13f23547",
+    "path": "dunmar/dufr-112/zoom-session-112/zoom-session-112.transcript.txt",
+    "hash": "2ee9f096c7b8bbc4c9ae9a2469d74458375f649857c90249ceb5ba640ba45b44",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_113_zoom_session_113_zoom_session_113_transcript_txt_cd39caf7",
+    "path": "dunmar/dufr-113/zoom-session-113/zoom-session-113.transcript.txt",
+    "hash": "b1afa9e97e019b5659409e8dbbdbbb2f9d5701d3eb4841b37bdc95ea636e3800",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_114_zoom_session_114_zoom_session_114_transcript_txt_185ee4d5",
+    "path": "dunmar/dufr-114/zoom-session-114/zoom-session-114.transcript.txt",
+    "hash": "0fa85beb95f41f33581177c229f3b0d0f930f159f612d28d27fc20f7203fc3c2",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_115_zoom_session_115_zoom_session_115_transcript_txt_6b237fd8",
+    "path": "dunmar/dufr-115/zoom-session-115/zoom-session-115.transcript.txt",
+    "hash": "43e36c7a9bac3a34437da0e36b506e5d312009004046c1099444defd2a94da3c",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_116_zoom_session_116_zoom_session_116_transcript_txt_c77ea97f",
+    "path": "dunmar/dufr-116/zoom-session-116/zoom-session-116.transcript.txt",
+    "hash": "cca6355b60b6f1e3e510ee5b1b195a7cc8231952edfa63d91281ca8a4b7c615e",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_117_zoom_session_117_zoom_session_117_transcript_txt_f843d9f2",
+    "path": "dunmar/dufr-117/zoom-session-117/zoom-session-117.transcript.txt",
+    "hash": "0638481f24afc8a861740633a6e8b90c56313b389d94653628488e1a696ea8a1",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_118_zoom_session_118_zoom_session_118_transcript_txt_16163d83",
+    "path": "dunmar/dufr-118/zoom-session-118/zoom-session-118.transcript.txt",
+    "hash": "7920073c8b432c014b50cb582fa6cd4cb37affd270ecbaf9f1356b0412c73db9",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_119_zoom_session_119_zoom_session_119_transcript_txt_dfbfa4f1",
+    "path": "dunmar/dufr-119/zoom-session-119/zoom-session-119.transcript.txt",
+    "hash": "d275bd7733466f8a6c9d773b8b307a12e5e8351adf8db23d4d74083f0e415f17",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_120_zoom_session_120_zoom_session_120_transcript_txt_41ed5791",
+    "path": "dunmar/dufr-120/zoom-session-120/zoom-session-120.transcript.txt",
+    "hash": "9bfaff6b3255f4b0c2117cca80b51458f17af44cad5202d1c91216879d80942c",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_121_zoom_session_121_zoom_session_121_transcript_txt_380cc7f0",
+    "path": "dunmar/dufr-121/zoom-session-121/zoom-session-121.transcript.txt",
+    "hash": "cece2b4f50e65db24d3259d902ee38e37175cc31f9ab0e3307144297432967f9",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_122_zoom_session_122_zoom_session_122_transcript_txt_e4bc14cd",
+    "path": "dunmar/dufr-122/zoom-session-122/zoom-session-122.transcript.txt",
+    "hash": "3fc293b741cccdbf3981627228c1734236ddcff25c33c99d4c0abf09121b56c9",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_123_zoom_session_123_zoom_session_123_transcript_txt_ee6a7b83",
+    "path": "dunmar/dufr-123/zoom-session-123/zoom-session-123.transcript.txt",
+    "hash": "08e6c3a7a4ea23efd4c5c66fcebf2e342fbc6ea38a8f6634f81a38a9cb94a055",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_124_zoom_session_124_zoom_session_124_transcript_txt_8bed4401",
+    "path": "dunmar/dufr-124/zoom-session-124/zoom-session-124.transcript.txt",
+    "hash": "cea8b768fa31e87c01ce2182d2d298bca1479df461a1420396f025262a0fc6dc",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_125_zoom_session_125_zoom_session_125_transcript_txt_312a4f54",
+    "path": "dunmar/dufr-125/zoom-session-125/zoom-session-125.transcript.txt",
+    "hash": "9878ec959867755b323d9707a378b2d3bb820ac623573b5dea8c1623a1c1c1bb",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_126_zoom_session_126_zoom_session_126_transcript_txt_44df6270",
+    "path": "dunmar/dufr-126/zoom-session-126/zoom-session-126.transcript.txt",
+    "hash": "1f7f04cb4d3c7b1224e61df28d1d8d5e5d4972099f224ab2540e3d6a60cbb9b4",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_127_zoom_session_127_zoom_session_127_transcript_txt_bbf8ada4",
+    "path": "dunmar/dufr-127/zoom-session-127/zoom-session-127.transcript.txt",
+    "hash": "116c16f1b0d8a685dbc8bafab9395013e38c38d05697b0d672a29526dce08fa5",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_128_zoom_session_128_zoom_session_128_transcript_txt_af5971c8",
+    "path": "dunmar/dufr-128/zoom-session-128/zoom-session-128.transcript.txt",
+    "hash": "06941849f45fee52d36858f00ae4f23a7a46314f08bc74439d009f673439f7c4",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_129_zoom_session_129_zoom_session_129_transcript_txt_72bf79a5",
+    "path": "dunmar/dufr-129/zoom-session-129/zoom-session-129.transcript.txt",
+    "hash": "bddf27780cc650020cc71c21fb3d8237e862fd9070d52c0549d10b37b31b072c",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_130_zoom_session_130_zoom_session_130_transcript_txt_cd3ae90a",
+    "path": "dunmar/dufr-130/zoom-session-130/zoom-session-130.transcript.txt",
+    "hash": "30ef0d917f516b01f0cb00475aa5b8b410e33d5a057e57d19403c30693c37b2f",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_131_zoom_session_131_zoom_session_131_transcript_txt_152b59d1",
+    "path": "dunmar/dufr-131/zoom-session-131/zoom-session-131.transcript.txt",
+    "hash": "a143bc6a5453072431a29adf40eacd29c17ef304f967c90e045c0f3ae8fff4ca",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_132_zoom_session_132_zoom_session_132_transcript_txt_d9a49373",
+    "path": "dunmar/dufr-132/zoom-session-132/zoom-session-132.transcript.txt",
+    "hash": "7f4a4d8a87d4d3a17170a5a663eacfa4712ef67c77da1013b01403a37b5c3b6f",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_133_zoom_session_133_zoom_session_133_transcript_txt_6cfbaea0",
+    "path": "dunmar/dufr-133/zoom-session-133/zoom-session-133.transcript.txt",
+    "hash": "f125197e83a0d94d1e81351208abe7ceb1683171e03df8ed1fbc122ab3bb1fc3",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_134_testing_transcript_chunks_zoom_session_134_transcript_zoom_session_134_transcript_cleaned_transcript_txt_6c7c5634",
+    "path": "dunmar/dufr-134/_testing/transcript-chunks/zoom-session-134.transcript/zoom-session-134.transcript-cleaned-transcript.txt",
+    "hash": "cabc35da5b85a9b6c5453a941389f56875cbf39a1ac811728deabdfb68a111ef",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_134_testing_zoom_session_134_cleaned_transcript_txt_c47a3f7c",
+    "path": "dunmar/dufr-134/_testing/zoom-session-134.cleaned-transcript.txt",
+    "hash": "45a94bf70b85f9e90e0851eb55e03d185082113a0d49107bc9cb2bee4dec81e8",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "dunmar_dufr_134_zoom_session_134_zoom_session_134_transcript_txt_9bfe6d54",
+    "path": "dunmar/dufr-134/zoom-session-134/zoom-session-134.transcript.txt",
+    "hash": "ca87fe4d76f7bb9de37195e1c8482b386730065fcdf4a7a182e94a8bcdf1f6a6",
+    "added_at": "2025-11-13T23:29:37.911470"
+  },
+  {
+    "id": "mawar_mawar_002_zoom_session_002_zoom_session_002_transcript_txt_2e91abde",
+    "path": "mawar/mawar-002/zoom-session-002/zoom-session-002.transcript.txt",
     "hash": "7bab4c15aeed85153203f724dbe9a7894104237e03cbc993cebc3e80a14b07e4",
-    "added_at": "2025-11-12T18:24:44.227367"
+    "added_at": "2025-11-13T23:29:37.911470"
   },
   {
-    "id": "mawar_003_zoom_session_003_zoom_session_003_transcript_txt_754d0888",
-    "path": "mawar-003/zoom-session-003/zoom-session-003.transcript.txt",
+    "id": "mawar_mawar_003_zoom_session_003_zoom_session_003_transcript_txt_83f514e3",
+    "path": "mawar/mawar-003/zoom-session-003/zoom-session-003.transcript.txt",
     "hash": "9e9ede343c22d8d67bdfac583c9135b89b633d28f1c67f61efe5a808d8b74dcf",
-    "added_at": "2025-11-12T18:25:38.409502"
+    "added_at": "2025-11-13T23:29:37.911470"
   },
   {
-    "id": "mawar_004_zoom_session_004_zoom_session_004_transcript_txt_343da5f2",
-    "path": "mawar-004/zoom-session-004/zoom-session-004.transcript.txt",
+    "id": "mawar_mawar_004_zoom_session_004_zoom_session_004_transcript_txt_15cefa49",
+    "path": "mawar/mawar-004/zoom-session-004/zoom-session-004.transcript.txt",
     "hash": "f108ae369bbb46aea64eefd3f9edf3a7021ff11d9a3a40b772535d398e7db5a3",
-    "added_at": "2025-11-12T18:26:23.364867"
+    "added_at": "2025-11-13T23:29:37.911470"
   }
 ]

@@ -73,6 +73,21 @@ High-level milestones:
 
 ## M2 – Raw Transcript → Clean Transcript
 
+Notes - so after a day of fiddling, it seems like the corpus generation is just too tricky, and fundamentally this is a task for AI, and really actually the better thinking models. ChatGPT does it incredibly well, albeit in pieces and requiring copying-pasting. It isn't going to be perfect - but it is so much better than anything else. 
+
+So I think the best strategy is actually going to be doing the deterministic cleaning AFTER chatGPT. 
+
+So we need a three-part approach:
+(1) split into segments for chatGPT, and just copy-paste into new segments
+(2) interactive session to replace tagged words and various other things, and also generate list of possible errors and replacements for consistency; likely benefits from a corpus. 
+(3) final cleaning to do last replacements
+
+Need to figure out how to optimize...
+
+- [ ] Reorganize raw -> clean based on insights so far. 
+
+
+
 ### B1. Preprocess / quality assessment (`preprocess_raw_transcript.py`)
 
 - [x] Decide the input format for `preprocess_raw_transcript.py` (normalized JSON vs `[start - end] Speaker: text`).
@@ -110,9 +125,9 @@ High-level milestones:
 
 ### B4. Obsidian glossary integration
 
-- [ ] Decide which Obsidian notes should feed into a “session glossary” (e.g. NPCs, places, items).
-- [ ] Write `export_session_glossary.py` that reads those notes and outputs a `glossary.json` of canonical spellings.
-- [ ] Add an optional step in `preprocess_raw_transcript.py` to generate or consume `glossary.json`.
+- [X] Decide which Obsidian notes should feed into a “session glossary” (e.g. NPCs, places, items).
+- [X] Write `export_session_glossary.py` that reads those notes and outputs a `glossary.json` of canonical spellings.
+- [X] Add an optional step in `preprocess_raw_transcript.py` to generate or consume `glossary.json`.
 - [ ] Update LLM cleaning prompts to include glossary examples where relevant.
 
 ---
