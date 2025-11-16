@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, MutableMapping, Optional, Sequence, Tuple
 
+import soundfile as sf
 import yaml
 
 from session_pipeline.audio_processing import (
@@ -643,12 +644,21 @@ def export_clips(
             output_format=config.clip_format,
             log_fn=log_debug if VERBOSE else None,
         )
+        clean_duration = get_audio_duration_seconds(clean_path)
         try:
             for clip in source_clips:
+                start = clamp_time(clip.start, clean_duration)
+                end = clamp_time(clip.end, clean_duration)
+                if end - start < config.min_clip_seconds:
+                    log_debug(
+                        f"[skip] {clip.session_id} {clip.speaker} segment "
+                        f"{clip.start:.2f}-{clip.end:.2f}s shrunk below min duration after clamping."
+                    )
+                    continue
                 speaker_slug = slugify(clip.speaker)
                 session_slug = slugify(clip.session_id)
-                start_ms = int(round(clip.start * 1000))
-                end_ms = int(round(clip.end * 1000))
+                start_ms = int(round(start * 1000))
+                end_ms = int(round(end * 1000))
                 filename = f"{session_slug}_{start_ms:010d}_{end_ms:010d}.wav"
                 clip_dir = config.clips_dir / speaker_slug / session_slug
                 clip_dir.mkdir(parents=True, exist_ok=True)
@@ -658,12 +668,12 @@ def export_clips(
                     print(f"[skip] clip exists: {destination}")
                     continue
                 log_info(
-                    f"Writing clip {destination} ({clip.session_id} {clip.speaker} {clip.start:.2f}-{clip.end:.2f}s)"
+                    f"Writing clip {destination} ({clip.session_id} {clip.speaker} {start:.2f}-{end:.2f}s)"
                 )
                 extract_clean_clip(
                     clean_path,
-                    clip.start,
-                    clip.end,
+                    start,
+                    end,
                     destination,
                 )
 
@@ -672,9 +682,9 @@ def export_clips(
                         "speaker": clip.speaker,
                         "speaker_slug": speaker_slug,
                         "session_id": clip.session_id,
-                        "start": clip.start,
-                        "end": clip.end,
-                        "duration": clip.duration,
+                        "start": start,
+                        "end": end,
+                        "duration": end - start,
                         "segment_index": clip.segment_index,
                         "source_audio": str(clip.source_audio),
                         "diarization": str(clip.diarization_path),
@@ -688,6 +698,24 @@ def export_clips(
                 except OSError:
                     pass
     return entries
+
+
+def get_audio_duration_seconds(path: Path) -> float:
+    try:
+        with sf.SoundFile(path) as handle:
+            frames = len(handle)
+            samplerate = handle.samplerate or 1
+    except RuntimeError:
+        return 0.0
+    if samplerate <= 0:
+        return 0.0
+    return frames / float(samplerate)
+
+
+def clamp_time(value: float, max_duration: float) -> float:
+    if max_duration <= 0:
+        return max(0.0, value)
+    return min(max(0.0, value), max_duration)
 
 
 def extract_clean_clip(

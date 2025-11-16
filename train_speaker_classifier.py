@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,17 @@ import joblib
 import librosa
 import numpy as np
 import torch
+from dotenv import load_dotenv
+try:  # optional dependency for speechbrain
+    import torchaudio  # type: ignore
+except Exception:  # pragma: no cover - optional import
+    torchaudio = None
+else:  # pragma: no cover - ensure API compatibility
+    if not hasattr(torchaudio, "list_audio_backends"):
+        def _list_audio_backends_stub() -> list[str]:
+            return []
+
+        torchaudio.list_audio_backends = _list_audio_backends_stub  # type: ignore[attr-defined]
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.pipeline import Pipeline
@@ -22,6 +34,8 @@ from sklearn.preprocessing import LabelEncoder, Normalizer, StandardScaler
 from sklearn.svm import LinearSVC, SVC
 from tqdm import tqdm
 from transformers import AutoFeatureExtractor, AutoModel
+
+load_dotenv()
 
 
 DEFAULT_TEST_FRACTION = 0.15
@@ -136,11 +150,26 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Fallback to clip-level stratified splits instead of session-based splits.",
     )
+    parser.add_argument(
+        "--hf-token",
+        help="Optional Hugging Face token for accessing gated models (e.g., pyannote/embedding).",
+    )
     return parser.parse_args(argv)
+
+
+def resolve_hf_token(cli_token: Optional[str]) -> Optional[str]:
+    if cli_token:
+        return cli_token
+    for var in ("PYANNO", "PYANNOTE_TOKEN", "HF_TOKEN", "HUGGINGFACE_TOKEN", "HUGGINGFACEHUB_API_TOKEN"):
+        value = os.getenv(var)
+        if value:
+            return value
+    return None
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
+    args.hf_token = resolve_hf_token(args.hf_token)
     manifest_path = args.manifest.expanduser().resolve()
     if not manifest_path.is_file():
         raise SystemExit(f"Manifest not found: {manifest_path}")
@@ -212,12 +241,14 @@ class FeatureExtractor:
         wav2vec2_model: Optional[str],
         ecapa_model: Optional[str],
         pyannote_model: Optional[str],
+        hf_token: Optional[str],
         device: str,
     ):
         self.feature_type = feature_type
         self.sample_rate = sample_rate
         self.n_mfcc = n_mfcc
         self.device = torch.device(device)
+        self.hf_token = hf_token
         self.wav2vec2_model_name = wav2vec2_model or DEFAULT_W2V_MODEL
         self.wav2vec2_extractor = None
         self.wav2vec2_model = None
@@ -244,29 +275,37 @@ class FeatureExtractor:
             wav2vec2_model=args.wav2vec2_model,
             ecapa_model=args.ecapa_model,
             pyannote_model=args.pyannote_model,
+            hf_token=args.hf_token,
             device=args.device,
         )
 
     def compute(self, audio_path: Path) -> np.ndarray:
+        waveform, sr = librosa.load(audio_path, sr=self.sample_rate, mono=True)
+        return self.compute_from_waveform(waveform, sr)
+
+    def compute_from_waveform(self, waveform: np.ndarray, sample_rate: int) -> np.ndarray:
+        if sample_rate != self.sample_rate:
+            waveform = librosa.resample(waveform, orig_sr=sample_rate, target_sr=self.sample_rate)
+        waveform = np.asarray(waveform, dtype=np.float32)
         if self.feature_type == "wav2vec2":
-            return self._compute_wav2vec2(audio_path)
+            return self._compute_wav2vec2_from_waveform(waveform)
         if self.feature_type == "ecapa":
-            return self._compute_ecapa(audio_path)
+            return self._compute_ecapa_from_waveform(waveform)
         if self.feature_type == "pyannote":
-            return self._compute_pyannote(audio_path)
-        return self._compute_mfcc(audio_path)
+            return self._compute_pyannote_from_waveform(waveform)
+        return self._compute_mfcc_from_waveform(waveform)
 
     def _init_wav2vec2(self) -> None:
-        self.wav2vec2_extractor = AutoFeatureExtractor.from_pretrained(self.wav2vec2_model_name)
-        self.wav2vec2_model = AutoModel.from_pretrained(self.wav2vec2_model_name)
+        extra = {"token": self.hf_token} if self.hf_token else {}
+        self.wav2vec2_extractor = AutoFeatureExtractor.from_pretrained(self.wav2vec2_model_name, **extra)
+        self.wav2vec2_model = AutoModel.from_pretrained(self.wav2vec2_model_name, **extra)
         self.wav2vec2_model.to(self.device)
         self.wav2vec2_model.eval()
 
-    def _compute_mfcc(self, audio_path: Path) -> np.ndarray:
-        audio, sr = librosa.load(audio_path, sr=self.sample_rate, mono=True)
+    def _compute_mfcc_from_waveform(self, audio: np.ndarray) -> np.ndarray:
         if audio.size == 0:
             raise ValueError("empty audio")
-        mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=self.n_mfcc)
+        mfcc = librosa.feature.mfcc(y=audio, sr=self.sample_rate, n_mfcc=self.n_mfcc)
         delta = librosa.feature.delta(mfcc)
         delta2 = librosa.feature.delta(mfcc, order=2)
         stats = []
@@ -275,10 +314,9 @@ class FeatureExtractor:
             stats.append(feature.std(axis=1))
         return np.concatenate(stats).astype(np.float32)
 
-    def _compute_wav2vec2(self, audio_path: Path) -> np.ndarray:
+    def _compute_wav2vec2_from_waveform(self, audio: np.ndarray) -> np.ndarray:
         if self.wav2vec2_model is None or self.wav2vec2_extractor is None:
             self._init_wav2vec2()
-        audio, _ = librosa.load(audio_path, sr=self.sample_rate, mono=True)
         if audio.size == 0:
             raise ValueError("empty audio")
         inputs = self.wav2vec2_extractor(
@@ -300,10 +338,9 @@ class FeatureExtractor:
             run_opts={"device": self.device.type},
         )
 
-    def _compute_ecapa(self, audio_path: Path) -> np.ndarray:
+    def _compute_ecapa_from_waveform(self, audio: np.ndarray) -> np.ndarray:
         if self.ecapa_classifier is None:
             self._init_ecapa()
-        audio, _ = librosa.load(audio_path, sr=self.sample_rate, mono=True)
         if audio.size == 0:
             raise ValueError("empty audio")
         signal = torch.from_numpy(audio).float().unsqueeze(0)
@@ -313,16 +350,17 @@ class FeatureExtractor:
     def _init_pyannote(self) -> None:
         from pyannote.audio import Inference, Model
 
-        model = Model.from_pretrained(self.pyannote_model_name)
-        self.pyannote_inference = Inference(model, window="whole", device=self.device.type)
+        kwargs = {"token": self.hf_token} if self.hf_token else {}
+        model = Model.from_pretrained(self.pyannote_model_name, **kwargs)
+        self.pyannote_inference = Inference(model, window="whole", device=self.device)
 
-    def _compute_pyannote(self, audio_path: Path) -> np.ndarray:
+    def _compute_pyannote_from_waveform(self, audio: np.ndarray) -> np.ndarray:
         if self.pyannote_inference is None:
             self._init_pyannote()
-        audio, _ = librosa.load(audio_path, sr=self.sample_rate, mono=True)
         if audio.size == 0:
             raise ValueError("empty audio")
-        embedding = self.pyannote_inference(audio)
+        waveform = torch.from_numpy(audio).unsqueeze(0)
+        embedding = self.pyannote_inference({"waveform": waveform, "sample_rate": self.sample_rate})
         if isinstance(embedding, torch.Tensor):
             embedding = embedding.cpu().numpy()
         return np.asarray(embedding, dtype=np.float32)
@@ -579,14 +617,15 @@ def stratified_clip_splits(
     }
     return splits, label_encoder
 
-
 def build_model(classifier_type: str) -> Pipeline:
     if classifier_type == "linear-svm":
-        classifier = LinearSVC(class_weight="balanced")
+        classifier = LinearSVC(
+            class_weight="balanced",
+            C=0.5             # maybe expose as a param later
+        )
         return Pipeline(
             [
-                ("scaler", StandardScaler()),
-                ("normalizer", Normalizer(norm="l2")),
+                ("normalizer", Normalizer(norm="l2")),  # L2 only
                 ("classifier", classifier),
             ]
         )
@@ -594,29 +633,17 @@ def build_model(classifier_type: str) -> Pipeline:
         classifier = LogisticRegression(
             class_weight="balanced",
             max_iter=1000,
-            multi_class="auto",
+            multi_class="multinomial",
+            solver="lbfgs",
+            C=0.3
         )
         return Pipeline(
             [
-                ("scaler", StandardScaler()),
-                ("normalizer", Normalizer(norm="l2")),
+                ("normalizer", Normalizer(norm="l2")),  # no StandardScaler
                 ("classifier", classifier),
             ]
         )
-    if classifier_type == "rbf-svm":
-        classifier = SVC(
-            kernel="rbf",
-            probability=True,
-            class_weight="balanced",
-            gamma="scale",
-        )
-        return Pipeline(
-            [
-                ("scaler", StandardScaler()),
-                ("normalizer", Normalizer(norm="l2")),
-                ("classifier", classifier),
-            ]
-        )
+
     raise ValueError(f"Unknown classifier type: {classifier_type}")
 
 

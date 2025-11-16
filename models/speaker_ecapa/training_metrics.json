@@ -1,0 +1,244 @@
+{
+  "train": {
+    "accuracy": 0.9598540145985401,
+    "size": 8768
+  },
+  "val": {
+    "accuracy": 0.970504821327283,
+    "size": 1763
+  },
+  "test": {
+    "accuracy": 0.9564761405348715,
+    "size": 1907,
+    "classification_report": {
+      "David Kong": {
+        "precision": 0.9686520376175548,
+        "recall": 0.9537037037037037,
+        "f1-score": 0.9611197511664075,
+        "support": 324.0
+      },
+      "David Schwartz": {
+        "precision": 0.9909365558912386,
+        "recall": 0.9618768328445748,
+        "f1-score": 0.9761904761904762,
+        "support": 341.0
+      },
+      "Eric Rosenbaum": {
+        "precision": 0.9720670391061452,
+        "recall": 0.9182058047493403,
+        "f1-score": 0.9443690637720489,
+        "support": 379.0
+      },
+      "Kate Sackton": {
+        "precision": 0.9758064516129032,
+        "recall": 0.9603174603174603,
+        "f1-score": 0.968,
+        "support": 252.0
+      },
+      "Mike Sackton": {
+        "precision": 0.9472222222222222,
+        "recall": 0.9770773638968482,
+        "f1-score": 0.9619181946403385,
+        "support": 349.0
+      },
+      "Tim Sackton": {
+        "precision": 0.8797250859106529,
+        "recall": 0.9770992366412213,
+        "f1-score": 0.9258589511754068,
+        "support": 262.0
+      },
+      "accuracy": 0.9564761405348715,
+      "macro avg": {
+        "precision": 0.955734898726786,
+        "recall": 0.9580467336921915,
+        "f1-score": 0.9562427394907796,
+        "support": 1907.0
+      },
+      "weighted avg": {
+        "precision": 0.958121545589317,
+        "recall": 0.9564761405348715,
+        "f1-score": 0.9566964457608336,
+        "support": 1907.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        309,
+        0,
+        3,
+        0,
+        4,
+        8
+      ],
+      [
+        1,
+        328,
+        1,
+        2,
+        3,
+        6
+      ],
+      [
+        5,
+        1,
+        348,
+        4,
+        10,
+        11
+      ],
+      [
+        0,
+        1,
+        3,
+        242,
+        0,
+        6
+      ],
+      [
+        3,
+        1,
+        0,
+        0,
+        341,
+        4
+      ],
+      [
+        1,
+        0,
+        3,
+        0,
+        2,
+        256
+      ]
+    ]
+  },
+  "session_assignments": {
+    "train": [
+      "dufr-004",
+      "dufr-008",
+      "dufr-009",
+      "dufr-010",
+      "dufr-011",
+      "dufr-012",
+      "dufr-013",
+      "dufr-014",
+      "dufr-015",
+      "dufr-016",
+      "dufr-017",
+      "dufr-018",
+      "dufr-019",
+      "dufr-020",
+      "dufr-022",
+      "dufr-025",
+      "dufr-026",
+      "dufr-029",
+      "dufr-033",
+      "dufr-034",
+      "dufr-035",
+      "dufr-036",
+      "dufr-038",
+      "dufr-039",
+      "dufr-040",
+      "dufr-043",
+      "dufr-044",
+      "dufr-045",
+      "dufr-046",
+      "dufr-047",
+      "dufr-048",
+      "dufr-054",
+      "dufr-055",
+      "dufr-056",
+      "dufr-057",
+      "dufr-058",
+      "dufr-059",
+      "dufr-060",
+      "dufr-061",
+      "dufr-064",
+      "dufr-065",
+      "dufr-067",
+      "dufr-068",
+      "dufr-069",
+      "dufr-070",
+      "dufr-071",
+      "dufr-072",
+      "dufr-073",
+      "dufr-074",
+      "dufr-075",
+      "dufr-079",
+      "dufr-082",
+      "dufr-083",
+      "dufr-084",
+      "dufr-085",
+      "dufr-086",
+      "dufr-088",
+      "dufr-090",
+      "dufr-094",
+      "dufr-095",
+      "dufr-097",
+      "dufr-100",
+      "dufr-101",
+      "dufr-104",
+      "dufr-105",
+      "dufr-106",
+      "dufr-111",
+      "dufr-112",
+      "dufr-114",
+      "dufr-115",
+      "dufr-116",
+      "dufr-117",
+      "dufr-118",
+      "dufr-120",
+      "dufr-121",
+      "dufr-122",
+      "dufr-123",
+      "dufr-124",
+      "dufr-125",
+      "dufr-126",
+      "dufr-127",
+      "dufr-130",
+      "dufr-131",
+      "dufr-132",
+      "dufr-133"
+    ],
+    "val": [
+      "dufr-007",
+      "dufr-021",
+      "dufr-024",
+      "dufr-030",
+      "dufr-031",
+      "dufr-037",
+      "dufr-042",
+      "dufr-062",
+      "dufr-066",
+      "dufr-077",
+      "dufr-089",
+      "dufr-092",
+      "dufr-099",
+      "dufr-113",
+      "dufr-119",
+      "dufr-128",
+      "dufr-129",
+      "dufr-134"
+    ],
+    "test": [
+      "dufr-003",
+      "dufr-005",
+      "dufr-006",
+      "dufr-023",
+      "dufr-027",
+      "dufr-028",
+      "dufr-041",
+      "dufr-049",
+      "dufr-053",
+      "dufr-063",
+      "dufr-076",
+      "dufr-078",
+      "dufr-087",
+      "dufr-091",
+      "dufr-093",
+      "dufr-098",
+      "dufr-102",
+      "dufr-103"
+    ]
+  }
+}
