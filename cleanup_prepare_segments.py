@@ -138,34 +138,8 @@ def load_vtt_segments(path: str) -> List[Tuple[str, float, float]]:
     return segments
 
 
-def load_json_segments(path: str) -> List[Tuple[str, float, float]]:
-    """
-    Load segments from a diarization JSON file.
-
-    Returns a list of tuples (speaker_id, start, end). Recognizes two
-    common formats:
-
-    1. A top‑level list where each element is a dict containing
-       'start', 'end' and either 'speaker' or 'speaker_id'.
-    2. A top‑level dict with a 'segments' list containing objects with
-       the same fields.
-
-    Extra keys in the objects are ignored. If a speaker label is
-    missing, 'Unknown' is used. Times are converted to floats.
-    """
-    with open(path, "r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-        except Exception as exc:
-            raise ValueError(f"Failed to parse JSON from {path}: {exc}")
+def _segments_from_items(items: List[Dict[str, Any]]) -> List[Tuple[str, float, float]]:
     segments: List[Tuple[str, float, float]] = []
-    items = None
-    if isinstance(data, list):
-        items = data
-    elif isinstance(data, dict) and "segments" in data:
-        items = data["segments"]
-    else:
-        raise ValueError(f"Unrecognized diarization JSON format in {path}")
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -190,6 +164,106 @@ def load_json_segments(path: str) -> List[Tuple[str, float, float]]:
         speaker = item.get("speaker") or item.get("speaker_id") or "Unknown"
         segments.append((str(speaker), start, end))
     return segments
+
+
+def _segments_from_words(words: List[Dict[str, Any]]) -> List[Tuple[str, float, float]]:
+    """
+    Convert ElevenLabs-style word arrays into contiguous speaker segments.
+    """
+    segments: List[Tuple[str, float, float]] = []
+    current_speaker: Optional[str] = None
+    current_start: Optional[float] = None
+    current_end: Optional[float] = None
+
+    def flush_current() -> None:
+        nonlocal current_speaker, current_start, current_end
+        if current_speaker is None or current_start is None or current_end is None:
+            return
+        segments.append((current_speaker, current_start, current_end))
+        current_speaker = None
+        current_start = None
+        current_end = None
+
+    for word in words:
+        if not isinstance(word, dict):
+            continue
+        word_type = (word.get("type") or "").lower()
+        if word_type == "spacing":
+            continue
+        speaker = (
+            word.get("speaker_id")
+            or word.get("speaker")
+            or word.get("speaker_label")
+        )
+        start_val = word.get("start")
+        end_val = word.get("end")
+        if speaker is None or start_val is None or end_val is None:
+            continue
+        try:
+            start = float(start_val)
+            end = float(end_val)
+        except Exception:
+            continue
+        if end < start:
+            continue
+        speaker = str(speaker)
+        if current_speaker is None:
+            current_speaker = speaker
+            current_start = start
+            current_end = end
+            continue
+        if speaker == current_speaker and current_end is not None:
+            # Extend the active span for contiguous words.
+            current_end = max(current_end, end)
+            continue
+        flush_current()
+        current_speaker = speaker
+        current_start = start
+        current_end = end
+
+    flush_current()
+    return segments
+
+
+def load_json_segments(path: str) -> List[Tuple[str, float, float]]:
+    """
+    Load segments from a diarization JSON file.
+
+    Returns a list of tuples (speaker_id, start, end). Recognizes multiple
+    common formats:
+
+    1. A top‑level list where each element is a dict containing
+       'start', 'end' and either 'speaker' or 'speaker_id'.
+    2. A top‑level dict with a 'segments' list containing objects with
+       the same fields.
+    3. ElevenLabs transcription JSON where speech is stored under a
+       'words' array with per-word 'speaker_id', 'start', and 'end'.
+
+    Extra keys in the objects are ignored. If a speaker label is
+    missing, 'Unknown' is used. Times are converted to floats.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+        except Exception as exc:
+            raise ValueError(f"Failed to parse JSON from {path}: {exc}")
+    segments: List[Tuple[str, float, float]] = []
+    items: Optional[List[Dict[str, Any]]] = None
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        if "segments" in data:
+            seg_items = data.get("segments")
+            if isinstance(seg_items, list):
+                items = seg_items  # type: ignore[assignment]
+        elif "words" in data:
+            words = data.get("words")
+            if isinstance(words, list):
+                return _segments_from_words(words)  # type: ignore[arg-type]
+    if items is None:
+        raise ValueError(f"Unrecognized diarization JSON format in {path}")
+    else:
+        return _segments_from_items(items)
 
 
 def load_diar_segments(path: str) -> List[Tuple[str, float, float]]:
@@ -453,7 +527,6 @@ def process_manifest(
                         "chunk_order": r["order"],
                         "offset_seconds": round(cumulative_offset, 6),
                         "duration_seconds": round(duration, 6),
-                        "source_path": r["audio_path"],
                     }
                 )
                 cumulative_offset += duration
