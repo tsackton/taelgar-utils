@@ -182,12 +182,6 @@ def allocate_targets(chunks: Sequence[ChunkSpec], goal: int, min_per_chunk: int)
     if not chunks:
         return ([], goal)
     chunk_count = len(chunks)
-    if chunk_count * min_per_chunk > goal:
-        raise ValueError(
-            f"Cannot satisfy {goal} clips while keeping >= {min_per_chunk} per chunk "
-            f"(session has {chunk_count} chunks)."
-        )
-
     targets = [0 for _ in range(chunk_count)]
     remaining = goal
     for idx, chunk in enumerate(chunks):
@@ -200,11 +194,9 @@ def allocate_targets(chunks: Sequence[ChunkSpec], goal: int, min_per_chunk: int)
         targets[idx] = base
         remaining -= base
 
-    if remaining < 0:
-        raise ValueError(
-            f"Allocated {sum(targets)} clips which exceeds the requested total of {goal}. "
-            "Reduce min_per_chunk or increase the per-session goal."
-        )
+    allocated = sum(targets)
+    desired_total = max(goal, allocated)
+    remaining = desired_total - allocated
 
     while remaining > 0:
         made_progress = False
@@ -288,11 +280,7 @@ def main() -> None:
         if not chunks:
             print(f"  ! No usable chunks found in {session_dir.name}; skipping")
             continue
-        try:
-            targets, remaining = allocate_targets(chunks, args.per_session_target, args.min_per_chunk)
-        except ValueError as exc:
-            print(f"  ! {exc}")
-            continue
+        targets, remaining = allocate_targets(chunks, args.per_session_target, args.min_per_chunk)
 
         if remaining > 0:
             print(
