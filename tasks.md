@@ -22,22 +22,7 @@ High-level milestones:
 - [ ] Update `transcribe_with_whisper.py` docs/comments to refer to the unified transcript pipeline.
 - [ ] Add one end-to-end test or dry run script that takes a sample Zoom VTT and confirms the unified pipeline produces the same final transcript as the old three-step flow.
 
-### A2. Audio processing (ffmpeg / `preprocess_audio.py`)
 
-- [x] Document the exact ffmpeg graphs used by each audio profile (passthrough, normalize-only, zoom-audio, voice-memo).
-- [x] Expand `session_pipeline/audio_processing.py` to cover any additional filters we need (e.g., noise gates, gating, multiband compression).
-- [x] Polish the `preprocess_audio.py` CLI (directory traversal UX, progress reporting, dry-run).
-- [x] Replace any lingering references to the legacy shell script in README/docs with the Python CLI instructions.
-- [x] Ensure all audio entry points (`transcribe_with_whisper.py`, `transcribe_with_elevenlabs.py`, future Option 3) can call a single “prepare audio” helper with consistent sample rate / mono / PCM assumptions.
-- [x] Add a check or small script that confirms only transcript/text artifacts are written under the `sessions/` output path (raw audio lives in a clearly separate path).
-
-### A3. Chunking + session output hygiene
-
-- [x] Review `session_pipeline/audio.py` chunking logic and note current edge cases (tiny trailing chunks, silence-only chunks, etc.).
-- [x] Adjust chunking so that very small trailing chunks are merged into the previous chunk where possible.
-- [x] Add a simple test script that feeds a synthetic WAV of known length and checks that chunk durations cover the full audio with no overlaps or gaps.
-- [x] Create a helper or script that walks the session output directories and flags any non-text files (enforcing “session outputs are text only”).
-- [x] Run this validation over existing sessions and clean or move any stray audio files out of `sessions/`.
 
 ### A4. Option 2 + Option 3 alignment (diarized paths)
 

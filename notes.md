@@ -5,21 +5,34 @@ We want four pipelines - three different starting points for raw data -> standar
 ### Raw Data -> Raw Transcript
 
 **Zoom VTT -> Raw Transcript**
-This is done, involves various vtt handling scripts for input, then the normalize -> synch -> clean speakers pipeline
+This is done, involves various vtt handling scripts for input, then the normalize -> synch -> clean speakers pipeline. Possible improvements: consolidate to one script.
 
 **Diarized audio -> Raw Transcript**
 This is done, involves transcribe with whisper, then the normalize -> synch -> clean speakers pipline
-Could potentially use some tweaks to the normalize script to handle slight discrepancies in the diarization / boundry issues
+Possible improvements: some tweaks to the normalize script to handle slight discrepancies in the diarization / boundry issues; extension of transcribe with whisper to work with gpt-4o-transcribe or gemini models.
 
 **Raw audio -> Raw Transcript**
-This is in progress; the basic pieces are there but it needs a better way to assign speaker_num to a person based on voiceprints to improve diarization results
+This has a lot still to do. Right now the biggest challenge is diarization. 
 
-There are a few possible overall tweaks to the code base:
-- There is almost never a reason to run just one of the normalize -> synch -> clean pipeline; it might make sense to combine those into a single script rather than needing a runner. If the merging pieces part is handled by the input scripts (process zoom; transcribe with whisper; transcribe with elevenlabs) then we can generally just dump into normalize etc. This could clean up the workflow a little. 
-- Audio processing now lives in Python via `preprocess_audio.py` and `session_pipeline/audio_processing.py`; extend those helpers instead of shell scripts. 
-- Fix audio chunking and other details so that only text is ever written to the sessions output, in case want to manage with git
+(1) Working on a speaker verification model, which hopefully will be reasonably good when trained on actual voice recordings. 
+(2) Most likely the best solution here is to just build a pipeline that either does VAD/speaker change detection natively, or uses something like pyannotate locally, assuming that we can clean up locally with our speaker verification model. 
+(3) Alternatively, look into some kind of package, https://goodsnooze.gumroad.com/l/macwhisper
+https://voicewriter.io/speech-recognition-leaderboard
+
 
 ### Raw Transcript -> Clean Transcript
+
+Lots of experimentation here.
+
+Scene splitting is very hard to do except: (a) manually or chat-assisted via the transcript, or (b) automatically via line or word counts
+
+ChatGPT is great at both correcting puncutation/sentence structure and fixing mispellings. Cleaning up unknown speakers is harder. Likely even better if given a list of known in world terms. This is best with small-ish scenes. 
+
+I have not successfully translated this to API, and am not sure how expensive it would get and whether it is worthwhile. 
+
+From cleaned scenes to bullet points / timeline / narrative, probably an interactive approach with Codex is the fastest. 
+
+Old notes are here but might be superceded:
 
 This involves fixing various errors in the raw transcript, semi-automatically. Some experimentation suggests: 
 - fixing mispellings and unknown speakers is pretty hard; cleaning puncuation, sentence structure, and general messiness is pretty easy
@@ -44,6 +57,30 @@ This does three steps:
 - generate session note: takes a cleaned narrative, timeline, bullet points, and yaml config, and makes a session note. this builds various pieces and arranges them based on a template, while archiving all outputs. should have a “rebuild note from outputs’ option to change template without rerunning llm. should ideally extract combats here too.
 
 None of this is written, really, though some pieces exist in old session note code. 
+
+## Into the Chasm Episode 1 Process
+
+Here is the current workflow I used to go from a Zoom VTT to a Session Note:
+
+(1) Run the normalize/synchronize/clean_speakers code to produce a raw transcript with correct speaker names.
+(2) Make a copy of the raw transcript, and, guided by ChatGPT in places, add chapter/scene headers (`--- title ---`)
+(3) Run split_transcript_by_scene.py to produce raw transcripts for each scene and blank "cleaned" files
+(4) Paste each raw transcript into my D&D Transcript Cleaner GPT, copying the results into the cleaned file. After 2-3 scenes it is better to open a new chat as context gets full and performance degrads. 
+(5) Copy the empty summary.md file and the cleaned transcript files to _sessions/session-name-number in the Obsidian vault
+(6) Use Codex with gpt-5.1-high (but could also try Gemini 3 or Copilot) to process each cleaned transcript file, extract possible ASR errors (tagged with `<original>[replacement|reason]` from D&D Transcript Cleaner GPT), and fix. 
+(7) Do a few additional rounds of transcript cleaning with Codex to synchronize names and fix other minor issues. 
+(8) Use Codex to generate scene bullet points and a narrative summary in summary.md. 
+(9) Manually edit summary.md, adding a timeline and fixing some text in the bullet points and narrative summary
+(10) Copy timeline, bullet points, and narrative summary to a session note
+(11) Add minimal metadata to header (DR, DR_end, realWorldDate, tags)
+(12) Have Codex generate a session manifest from the session note
+(13) Have Codex add an info box, cast of characters, important places, combat summary to session note from manifest
+(14) Manual polish of codex-generated text
+
+- Manually splitting a transcript by scene does not take long and is tolerable even for processing hundreds of old sessions.
+- Copying each section to the D&D Transcript Cleaner GPT, waiting, copying the results back is tedious at best, and likely would need to be automated. If automated, it would probably be better to have it generate a final transcript not an ASR-marked transcript? Here could go back to the idea of generating diffs. 
+- If the D&D Transcript Cleaner was automated, then moving the scene-cleaned transcripts to the vault and doing a single codex pass to identify mistakes, or going back to the Taelgar corpus idea and doing automated cleaning, might be useful.
+- From a set of cleaned transcripts, the work in Codex to generate a bullet points, 
 
 ## Files 
 
