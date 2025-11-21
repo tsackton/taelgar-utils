@@ -1,0 +1,16 @@
+# Path to the DiscordChatExporter CLI executable
+# e.g. on mac/linux: /Users/tim/bin/DiscordChatExporter.Cli
+# e.g. on windows:   C:\tools\DiscordChatExporter\DiscordChatExporter.Cli.exe
+executable_path: "/Users/tim/Applications/DiscordChatExporter.Cli.osx-arm64/DiscordChatExporter.Cli"
+
+# Channel ID (works for both server channels and DMs, as long as you have access)
+channel_id: "1059870250440593520"
+
+# Optional: last retrieved date, passed directly to --after
+# Leave blank or omit if you want the full history
+# Format is whatever DiscordChatExporter accepts, e.g.:
+# "2024-01-01 00:00" or "15-SEP-2019 11:15 PM"
+last_retrieved_date: "2025-11-20 00:00"
+
+# Output format for DiscordChatExporter: Json, HtmlDark, HtmlLight, Txt, Csv
+format: "Json"
