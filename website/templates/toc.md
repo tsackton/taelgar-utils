@@ -28,8 +28,8 @@
             - {glob: things/artifacts-of-power}
         - Books of Taelgar
             - {glob: things/books}
-- [People](species/species.md)
-    - [Humans](species/humans.md)
+- [People](creatures/creatures-of-taelgar.md)
+    - [Humans](creatures/species/humans.md)
         - Chardonians
             - {glob: people/chardonians/}
         - Deno'qai
@@ -47,20 +47,20 @@
         - Addermarians
             - {glob: people/addermarians}
         - Other Humans
-            - {glob: people/other-humans/;people/maseauns;people/tyrwinghans;flatten}
-    - [Elves](species/elves.md)
+            - {glob: people/other-humans/;people/maseauns;people/tyrwinghans;people/aurbezeflatten}
+    - [Elves](creatures/species/elves.md)
         - {glob: people/elves/}
-    - [Dwarves](species/dwarves.md)
+    - [Dwarves](creatures/species/dwarves.md)
         - {glob: people/dwarves/}
-    - [Halflings](species/halflings.md)
+    - [Halflings](creatures/species/halflings.md)
         - {glob: people/halflings/}
-    - [Lizardfolk](species/lizardfolk.md)
+    - [Lizardfolk](creatures/species/lizardfolk.md)
         - {glob: people/lizardfolk/}
-    - [Stoneborn](species/stoneborn.md)
+    - [Stoneborn](creatures/species/stoneborn.md)
         - [Umli](people/other-nonhumans/umli.md)
-    - [Orcs](species/orcs.md)
+    - [Orcs](creatures/species/orcs.md)
         - {glob: people/orcs/}
-    - [Fey](species/extraplanar/fey.md)
+    - [Fey](creatures/fey/fey.md)
         - {glob: people/fey}
     - Other Nonhumans
         - {glob: people/other-nonhumans;people/giants;people/kenku, exclude: umli.md}
@@ -90,6 +90,7 @@
     - Primary Sources
         - {glob: primary-sources/}
 - [Other Campaigns](people/pcs/pcs.md)
+    - [Into the Chasm](campaigns/one-shots/into-the-chasm/characters-and-backstory.md)
     - [Mawar](campaigns/mawar-adventures/mawar-adventures.md)
         - Characters
             - {glob: people/pcs/mawar}
