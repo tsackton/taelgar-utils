@@ -47,7 +47,7 @@
         - Addermarians
             - {glob: people/addermarians}
         - Other Humans
-            - {glob: people/other-humans/;people/maseauns;people/tyrwinghans;people/aurbezeflatten}
+            - {glob: people/other-humans/;people/maseauns;people/tyrwinghans;people/aurbeze;flatten}
     - [Elves](creatures/species/elves.md)
         - {glob: people/elves/}
     - [Dwarves](creatures/species/dwarves.md)
