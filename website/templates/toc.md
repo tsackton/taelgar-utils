@@ -79,6 +79,8 @@
         - {glob: gods-and-religions/}
     - [Cosmology](cosmology/multiverse.md)
         - {glob: cosmology/, exclude:multiverse.md}
+    - [Creatures](creatures/creatures-of-taelgar.md)
+        - {glob: creatures, exclude:creatures-of-taelgar.md}
 - [World Map](gazetteer/world-of-taelgar.md)
 - [History](history/history.md)
     - [Calendar Eras](background/calendar-eras.md)
