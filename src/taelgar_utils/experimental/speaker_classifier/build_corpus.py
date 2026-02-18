@@ -17,7 +17,7 @@ from typing import Dict, Iterable, List, MutableMapping, Optional, Sequence, Tup
 import soundfile as sf
 import yaml
 
-from session_pipeline.audio_processing import (
+from taelgar_utils.audio.processing import (
     AUDIO_PROFILES,
     prepare_clean_audio,
 )

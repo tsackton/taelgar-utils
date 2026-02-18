@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, List
 
-from session_pipeline.audio_processing import (
+from taelgar_utils.audio.processing import (
     AUDIO_PROFILES,
     AudioProcessingError,
     SUPPORTED_OUTPUT_FORMATS,

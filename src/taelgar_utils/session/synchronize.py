@@ -13,8 +13,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from webvtt import Caption, WebVTT
 
-from session_pipeline.io_utils import write_json
-from session_pipeline.time_utils import format_timestamp
+from taelgar_utils.common.io import write_json
+from taelgar_utils.common.time import format_timestamp
 
 
 DEFAULT_UNKNOWN = "unknown_speaker"

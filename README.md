@@ -2,100 +2,72 @@
 
 Utilities for the Taelgar D&D workflow.
 
-This repo currently has three layers:
+The codebase is organized around two primary domains:
 
-1. **Core (maintained):** transcript processing, vault export, Discord export, and markdown helpers.
-2. **Experimental (keep, needs work):** speaker-classification and clip-mining pipeline.
-3. **Archived:** legacy code and retired corpus artifacts in `_old_stuff_/`.
+1. `session`: audio/VTT/transcript processing.
+2. `vault`: markdown/Obsidian export processing.
 
-## Core Workflows
+Supporting domains:
+- `audio`: shared audio utilities.
+- `markdown`: generic markdown helpers.
+- `utilities`: generic one-off utilities (currently Discord export).
+- `experimental`: speaker-classifier training/inference pipeline.
 
-### 1) Session Transcript Pipeline
+## CLI Entrypoints
 
-Primary path from raw recordings/transcripts to cleaned speaker-attributed outputs.
+- `cli/session.py`
+  - `preprocess-audio`
+  - `transcribe-whisper`
+  - `transcribe-elevenlabs`
+  - `normalize`
+  - `synchronize`
+  - `clean-speakers`
+  - `process-zoom`
+- `cli/vault.py`
+  - `export`
+- `cli/discord-export.py`
+- `cli/markdown-utils.py`
+  - `merge`
+  - `extract`
+  - `make-index`
 
-- `preprocess_audio.py`
-- `transcribe_with_whisper.py`
-- `transcribe_with_elevenlabs.py`
-- `normalize_transcript.py`
-- `synchronize_transcripts.py`
-- `clean_speakers.py`
-- `process_zoom_sessions.py`
-- `get_audio_offsets.py`
-- `session_pipeline/` (shared helpers)
+## Website Tooling
 
-### 2) Obsidian Vault Export + Website
+- `website/build_site.py` runs the current strict MkDocs check/export/build/serve/deploy workflow.
+- `website/site_builder/` contains the maintained exporter, scanner, link index, nav generator, and validation code.
+- `website/website_build_instructions.md` is the canonical website build reference.
+- `tests/test_website_build.py` covers the current website export behavior.
 
-Publishing and Obsidian-related utilities.
-
-- `export_vault.py`
-- `taelgar_lib/`
-- `website/`
-- `website/build_site.py` (strict MkDocs export/build/check CLI)
-
-### 3) Discord Ingestion / Export
-
-- `run_discord_exporter.py`
-- Config template: `configs/core/discord_export_config.yaml`
-
-### 4) Markdown Helpers
-
-- `merge_markdown.py`
-- `extract_yaml_fields.py`
-- `generate_index_page.py`
-
-## Experimental (WIP)
-
-These are kept but considered unfinished and lower stability.
-
-- `generate_speaker_corpus.py`
-- `train_speaker_classifier.py`
-- `assign_speakers.py`
-- `extract_segments.py`
-- `generate_session_chunk_clips.py`
-- `cleanup_prepare_segments.py`
-- `parse_speakers.py`
-- `parse_speakers_from_vtt.py`
-- `split_transcript_by_scene.py`
-- `models/`
-
-## Archived / Legacy
-
-- `_old_stuff_/` contains historical code, drafts, and retired artifacts.
-- Retired corpus artifacts are archived under `_old_stuff_/taelgar_corpus/`.
-
-## Configs, Docs, and Examples
-
-- `configs/core/`
-  - `default-zoom-roster.json`
-  - `discord_export_config.yaml`
-- `configs/experimental/`
-  - `speaker_corpus.config.template.yaml`
-  - `style-guide.json`
-  - `voiceprints.json`
-- `docs/planning/`
-  - `notes.md`
-  - `tasks.md`
-- `examples/manifests/`
-  - `session138_manifest.json`
-
-## Repository Layout (Current)
+## Source Layout
 
 ```text
 .
-├── configs/                # Core + experimental config files
-├── docs/                   # Planning notes and working docs
-├── examples/               # Sample manifests and reference inputs
-├── session_pipeline/        # Shared transcript/audio pipeline utilities
-├── taelgar_lib/             # Obsidian helper library
-├── website/                 # MkDocs build templates/assets/scripts
-├── tests/                   # Current tests (audio + pipeline-adjacent)
-├── models/                  # Experimental speaker model artifacts
-├── _old_stuff_/             # Archived code and retired artifacts
-└── *.py                     # Task entry-point scripts
+├── src/taelgar_utils/
+│   ├── session/
+│   ├── vault/
+│   ├── audio/
+│   ├── markdown/
+│   ├── utilities/
+│   ├── experimental/
+│   └── common/
+├── cli/
+├── configs/
+├── docs/
+├── examples/
+├── website/
+├── experimental-artifacts/
+└── _old_stuff_/
 ```
 
-## Notes
+## Configs and Docs
 
-- The repo is in an intentional transition from many standalone scripts toward clearer module boundaries.
-- Backward compatibility is not a goal for upcoming refactors.
+- `configs/core/`
+- `configs/experimental/`
+- `docs/planning/`
+- `examples/manifests/`
+
+## Archived / Legacy
+
+- `_old_stuff_/` contains legacy code and retired artifacts.
+- Retired corpus state is archived at `_old_stuff_/taelgar_corpus/`.
+- Archived test fixture data is at `_old_stuff_/tests/data/`.

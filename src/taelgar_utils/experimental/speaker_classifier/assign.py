@@ -17,10 +17,10 @@ import librosa
 import numpy as np
 from dotenv import load_dotenv
 
-from session_pipeline.audio_processing import prepare_clean_audio
+from taelgar_utils.audio.processing import prepare_clean_audio
 
 # Reuse the FeatureExtractor implementation from training.
-from train_speaker_classifier import FeatureExtractor, resolve_hf_token  # type: ignore
+from taelgar_utils.experimental.speaker_classifier.train import FeatureExtractor, resolve_hf_token  # type: ignore
 
 
 load_dotenv()

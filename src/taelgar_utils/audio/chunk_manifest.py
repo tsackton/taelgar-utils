@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from session_pipeline.audio import chunk_audio_file
+from taelgar_utils.audio.chunks import chunk_audio_file
 
 
 ChunkEntry = Dict[str, Any]

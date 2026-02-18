@@ -13,8 +13,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from webvtt import WebVTT
 
-from session_pipeline.io_utils import write_json
-from session_pipeline.time_utils import format_timestamp_hundredths, parse_vtt_timestamp
+from taelgar_utils.common.io import write_json
+from taelgar_utils.common.time import format_timestamp_hundredths, parse_vtt_timestamp
 
 
 DEFAULT_MIN_SPEAKER_FRACTION = 0.01
