@@ -1,8 +1,8 @@
 import sys
 import itertools
 from pathlib import Path
-from taelgar_lib.ObsNote import ObsNote
-from taelgar_lib.TaelgarDate import TaelgarDate
+from taelgar_utils.vault.obs_note import ObsNote
+from taelgar_utils.vault.taelgar_date import TaelgarDate
 
 def get_event_date_string(note):
     start = note.metadata.get("DR", "unknown")

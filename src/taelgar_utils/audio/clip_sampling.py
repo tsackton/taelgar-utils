@@ -26,18 +26,21 @@ Typical usage from the repo root:
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
-from extract_segments import filter_non_overlapping, load_segments
+from taelgar_utils.audio.clip_extract import filter_non_overlapping, load_segments
 
 
-DEFAULT_SESSIONS_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SRC_ROOT = REPO_ROOT / "src"
+DEFAULT_SESSIONS_ROOT = REPO_ROOT.parent
 DEFAULT_OUTPUT_ROOT = DEFAULT_SESSIONS_ROOT / "speaker_clips"
-EXTRACT_SCRIPT = Path(__file__).resolve().parent / "extract_segments.py"
+EXTRACT_MODULE = "taelgar_utils.audio.clip_extract"
 
 
 @dataclass
@@ -236,10 +239,11 @@ def invoke_extract_segments(
     args: argparse.Namespace,
     dry_run: bool,
 ) -> None:
-    """Run extract_segments.py for a chunk."""
+    """Run the clip extraction module for a chunk."""
     cmd = [
         sys.executable,
-        str(EXTRACT_SCRIPT),
+        "-m",
+        EXTRACT_MODULE,
         "--segments",
         str(chunk.segments_path),
         "--audio-file",
@@ -260,7 +264,13 @@ def invoke_extract_segments(
     print(f"    -> {chunk.name}: requesting {target_count} clips into {output_dir}")
     if dry_run:
         return
-    subprocess.run(cmd, check=True)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = (
+        str(SRC_ROOT)
+        if not env.get("PYTHONPATH")
+        else f"{SRC_ROOT}:{env['PYTHONPATH']}"
+    )
+    subprocess.run(cmd, check=True, env=env)
 
 
 def main() -> None:

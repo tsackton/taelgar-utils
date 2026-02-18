@@ -21,9 +21,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from session_pipeline.audio_processing import AUDIO_PROFILES, AudioProcessingError, prepare_clean_audio
-from session_pipeline.chunking import prepare_audio_chunks
-from session_pipeline.io_utils import write_json
+from taelgar_utils.audio.processing import AUDIO_PROFILES, AudioProcessingError, prepare_clean_audio
+from taelgar_utils.audio.chunk_manifest import prepare_audio_chunks
+from taelgar_utils.common.io import write_json
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -21,8 +21,8 @@ from typing import Any, Dict, List
 from dotenv import load_dotenv
 from elevenlabs import ElevenLabs
 from pydub import AudioSegment
-from session_pipeline.audio import chunk_audio_file
-from session_pipeline.audio_processing import AUDIO_PROFILES, AudioProcessingError, prepare_clean_audio
+from taelgar_utils.audio.chunks import chunk_audio_file
+from taelgar_utils.audio.processing import AUDIO_PROFILES, AudioProcessingError, prepare_clean_audio
 
 
 AUDIO_EXTENSIONS = {

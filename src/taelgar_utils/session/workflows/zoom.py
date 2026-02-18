@@ -13,14 +13,12 @@ from typing import Any, Dict, List, Optional
 from pydub import AudioSegment
 from webvtt import Caption, WebVTT
 
-from session_pipeline.runner_utils import move_file, prompt_for_roster_edit, run_cli
-from session_pipeline.time_utils import format_timestamp, parse_vtt_timestamp
+from taelgar_utils.common.runner import move_file, prompt_for_roster_edit, run_cli
+from taelgar_utils.common.time import format_timestamp, parse_vtt_timestamp
 
 
-REPO_ROOT = Path(__file__).resolve().parent
-NORMALIZE_SCRIPT = REPO_ROOT / "normalize_transcript.py"
-SYNC_SCRIPT = REPO_ROOT / "synchronize_transcripts.py"
-CLEAN_SCRIPT = REPO_ROOT / "clean_speakers.py"
+REPO_ROOT = Path(__file__).resolve().parents[4]
+SESSION_CLI = REPO_ROOT / "cli" / "session.py"
 ZOOM_VTT_PATTERN = "GMT*.transcript.vtt"
 DEFAULT_SESSION_PREFIX = "dufr-"
 METHOD_PREFIX = "zoom-session-"
@@ -146,7 +144,8 @@ def process_zoom_session(
     run_cli(
         [
             str(python),
-            str(NORMALIZE_SCRIPT),
+            str(SESSION_CLI),
+            "normalize",
             str(vtt_path),
             "--input-format",
             "vtt_speaker",
@@ -162,7 +161,8 @@ def process_zoom_session(
 
     sync_cmd = [
         str(python),
-        str(SYNC_SCRIPT),
+        str(SESSION_CLI),
+        "synchronize",
         "--session-id",
         session_id,
         "--method",
@@ -185,7 +185,8 @@ def process_zoom_session(
     run_cli(
         [
             str(python),
-            str(CLEAN_SCRIPT),
+            str(SESSION_CLI),
+            "clean-speakers",
             str(method_dir),
         ],
         dry_run=dry_run,

@@ -1,7 +1,7 @@
 import yaml
 import re
 from pathlib import Path
-from .TaelgarDate import TaelgarDate
+from .taelgar_date import TaelgarDate
 
 class ObsNote:
 

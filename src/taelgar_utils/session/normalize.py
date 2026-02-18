@@ -12,9 +12,9 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from webvtt import WebVTT
 
-from session_pipeline.offsets import determine_offset
-from session_pipeline.segments import group_words_into_segments
-from session_pipeline.time_utils import parse_timecode
+from taelgar_utils.session.offset_resolution import determine_offset
+from taelgar_utils.session.segments import group_words_into_segments
+from taelgar_utils.common.time import parse_timecode
 
 
 SCHEMA_VERSION = "1.0.0"

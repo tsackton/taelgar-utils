@@ -48,7 +48,7 @@ import wave
 from pathlib import Path
 from typing import List, Tuple, Optional
 
-from session_pipeline.audio_processing import AUDIO_PROFILES, AudioProcessingError, prepare_clean_audio
+from taelgar_utils.audio.processing import AUDIO_PROFILES, AudioProcessingError, prepare_clean_audio
 
 
 def load_segments(path: str) -> List[Tuple[float, float]]:
