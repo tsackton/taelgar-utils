@@ -1,0 +1,19 @@
+sourcePath: /absolute/path/to/session-input.vtt
+sourceType: transcript
+outputDir: /absolute/path/to/session-output
+
+campaign: ExampleCampaign
+sessionNumber: 1
+realWorldDate: 2026-03-28
+drStart: 1715-04-25
+drEnd: 1715-04-25
+drStartTime:
+drEndTime:
+
+participantsPath: /absolute/path/to/participants.yaml
+
+transcriptFormat: auto
+narrativeUnit: sentence
+minSpeakerFraction: 0.01
+
+knownMistakes: /absolute/path/to/known-mistakes.json
