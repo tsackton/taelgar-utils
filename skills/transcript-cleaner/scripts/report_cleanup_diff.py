@@ -24,12 +24,17 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build transcript cleanup artifacts from diffs.")
     parser.add_argument("--original", type=Path, required=True, help="Prepared transcript input.")
     parser.add_argument("--cleaned", type=Path, required=True, help="Cleaned transcript output.")
-    parser.add_argument("--report-json", type=Path, required=True, help="Path to cleanup_report.json.")
     parser.add_argument(
-        "--corrections-yaml",
+        "--output-dir",
         type=Path,
         required=True,
-        help="Path to session_corrections.yaml.",
+        help="Directory where cleanup artifacts will be written.",
+    )
+    parser.add_argument(
+        "--file-prefix",
+        type=str,
+        required=True,
+        help="Unique lowercase prefix for all generated cleanup artifacts, e.g. 'addermarch-007'.",
     )
     return parser.parse_args()
 
@@ -38,12 +43,27 @@ def main() -> int:
     args = parse_args()
     original = read_transcript(args.original)
     cleaned = read_transcript(args.cleaned)
+    output_dir = args.output_dir.expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_prefix = args.file_prefix.strip()
+    if not file_prefix:
+        raise SystemExit("--file-prefix must be non-empty.")
+
+    report_json_path = output_dir / f"{file_prefix}-cleanup-report.json"
+    corrections_yaml_path = output_dir / f"{file_prefix}-session-corrections.yaml"
+    human_transcript_path = output_dir / f"{file_prefix}-human-transcript.md"
+    cleanup_summary_path = output_dir / f"{file_prefix}-cleanup-summary.md"
 
     report, corrections = build_reports(original, cleaned)
 
-    args.report_json.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    args.corrections_yaml.write_text(
+    report_json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    corrections_yaml_path.write_text(
         yaml.safe_dump(corrections, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    human_transcript_path.write_text(build_human_transcript(cleaned), encoding="utf-8")
+    cleanup_summary_path.write_text(
+        build_cleanup_summary_markdown(report, corrections),
         encoding="utf-8",
     )
 
@@ -52,8 +72,11 @@ def main() -> int:
             print(f"ERROR: {error}")
         return 1
 
-    print(f"Wrote {args.report_json}")
-    print(f"Wrote {args.corrections_yaml}")
+    print_summary(report)
+    print(f"Wrote {report_json_path}")
+    print(f"Wrote {corrections_yaml_path}")
+    print(f"Wrote {human_transcript_path}")
+    print(f"Wrote {cleanup_summary_path}")
     return 0
 
 
@@ -70,6 +93,7 @@ def read_transcript(path: Path) -> List[Dict[str, str]]:
             {
                 "lineNumber": str(line_number),
                 "header": match.group("header"),
+                "speaker": extract_speaker(match.group("header")),
                 "text": match.group("text"),
             }
         )
@@ -149,6 +173,7 @@ def build_reports(
     ]
 
     report = {
+        "summary": build_summary(line_diffs, all_replacements, repeated_replacements, unresolved),
         "lineCount": len(original),
         "changedLineCount": len(line_diffs),
         "validationErrors": validation_errors,
@@ -162,6 +187,107 @@ def build_reports(
         "unresolvedPhrases": unresolved,
     }
     return report, corrections
+
+
+def build_summary(
+    line_diffs: Sequence[Dict[str, object]],
+    all_replacements: Sequence[Dict[str, object]],
+    repeated_replacements: Sequence[Dict[str, object]],
+    unresolved: Sequence[Dict[str, object]],
+) -> Dict[str, object]:
+    unique_unresolved = sorted({str(item["phrase"]) for item in unresolved})
+    return {
+        "changedLineCount": len(line_diffs),
+        "replacementCount": len(all_replacements),
+        "repeatedReplacementCount": len(repeated_replacements),
+        "topReplacements": list(all_replacements[:10]),
+        "uniqueUnresolvedPhrases": unique_unresolved,
+    }
+
+
+def print_summary(report: Dict[str, object]) -> None:
+    summary = report["summary"]
+    print(
+        "Summary: "
+        f"{summary['changedLineCount']} changed lines, "
+        f"{summary['replacementCount']} replacement patterns, "
+        f"{summary['repeatedReplacementCount']} repeated replacements, "
+        f"{report['unresolvedCount']} unresolved phrases."
+    )
+    top_replacements = summary["topReplacements"]
+    if top_replacements:
+        print("Top replacements:")
+        for item in top_replacements[:5]:
+            print(f"  {item['from']} -> {item['to']} ({item['count']}x)")
+    unique_unresolved = summary["uniqueUnresolvedPhrases"]
+    if unique_unresolved:
+        print("Unresolved phrases:")
+        for phrase in unique_unresolved[:10]:
+            print(f"  [[{phrase}]]")
+
+
+def build_human_transcript(cleaned: Sequence[Dict[str, str]]) -> str:
+    condensed: List[Tuple[str, List[str]]] = []
+    for line in cleaned:
+        speaker = line["speaker"]
+        text = line["text"].strip()
+        if condensed and condensed[-1][0] == speaker:
+            condensed[-1][1].append(text)
+        else:
+            condensed.append((speaker, [text]))
+
+    paragraphs = ["# Human-Readable Transcript", ""]
+    for speaker, texts in condensed:
+        merged_text = " ".join(texts).strip()
+        paragraphs.append(f"**{speaker}:** {merged_text}")
+        paragraphs.append("")
+    return "\n".join(paragraphs).rstrip() + "\n"
+
+
+def build_cleanup_summary_markdown(
+    report: Dict[str, object],
+    corrections: Dict[str, object],
+) -> str:
+    summary = report["summary"]
+    replacement_groups: Dict[str, List[Dict[str, object]]] = defaultdict(list)
+    for item in corrections["allReplacements"]:
+        replacement_groups[str(item["to"])].append(item)
+
+    lines = [
+        "# Cleanup Summary",
+        "",
+        f"- Transcript lines: {report['lineCount']}",
+        f"- Changed lines: {report['changedLineCount']}",
+        f"- Replacement patterns: {summary['replacementCount']}",
+        f"- Repeated replacements: {summary['repeatedReplacementCount']}",
+        f"- Unresolved phrases: {report['unresolvedCount']}",
+        "",
+        "## Replacements By Correct Term",
+        "",
+    ]
+
+    if not replacement_groups:
+        lines.append("No replacements recorded.")
+        lines.append("")
+    else:
+        for target in sorted(replacement_groups, key=str.lower):
+            lines.append(f"### {target}")
+            for item in sorted(
+                replacement_groups[target],
+                key=lambda entry: (-int(entry["count"]), str(entry["from"]).lower()),
+            ):
+                lines.append(f"- {item['from']} ({item['count']}x)")
+            lines.append("")
+
+    unresolved = report["unresolvedPhrases"]
+    if unresolved:
+        lines.append("## Unresolved Phrases")
+        lines.append("")
+        for item in unresolved:
+            lines.append(f"- [[{item['phrase']}]] at {item['header']}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def index_replacements(
@@ -199,6 +325,14 @@ def normalize_diff_span(tokens: Sequence[str]) -> str:
     text = re.sub(r"\(\s+", "(", text)
     text = re.sub(r"\s+\)", ")", text)
     return text.strip()
+
+
+def extract_speaker(header: str) -> str:
+    inner = header.strip()[1:-1]
+    parts = [part.strip() for part in inner.split("|")]
+    if len(parts) < 3:
+        raise SystemExit(f"Invalid transcript header: {header}")
+    return parts[-1]
 
 
 if __name__ == "__main__":

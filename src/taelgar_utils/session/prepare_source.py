@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 import textwrap
 import warnings
@@ -71,15 +72,42 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    config = load_yaml_mapping(args.config)
+    config_path = args.config.expanduser().resolve()
+    config = load_yaml_mapping(config_path)
     options = validate_config(config)
 
     source_path = Path(options["sourcePath"]).expanduser().resolve()
     if not source_path.exists():
         raise SystemExit(f"Source file not found: {source_path}")
 
-    output_dir = Path(options["outputDir"]).expanduser().resolve()
+    participants_path = Path(options["participantsPath"]).expanduser().resolve()
+    speaker_mappings_path = args.speaker_mappings.expanduser().resolve() if args.speaker_mappings else None
+    known_mistakes_path = (
+        Path(options["knownMistakes"]).expanduser().resolve()
+        if options.get("knownMistakes")
+        else None
+    )
+
+    bundle_stem = build_bundle_stem(options["campaign"], options["sessionNumber"])
+    output_parent_dir = Path(options["outputDir"]).expanduser().resolve()
+    output_dir = output_parent_dir / bundle_stem
+    sources_dir = output_dir / "sources"
+    cleaned_dir = output_dir / "cleaned"
     output_dir.mkdir(parents=True, exist_ok=True)
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    cleaned_dir.mkdir(parents=True, exist_ok=True)
+
+    session_path = cleaned_dir / f"{bundle_stem}-session.yaml"
+    prepared_path = cleaned_dir / f"{bundle_stem}-source-prepared.md"
+    speaker_stats_path = cleaned_dir / f"{bundle_stem}-speaker-stats.json"
+
+    archived_source_path = sources_dir / source_path.name
+    archived_config_path = sources_dir / config_path.name
+    archived_participants_path = sources_dir / participants_path.name
+    archived_speaker_mappings_path = sources_dir / speaker_mappings_path.name if speaker_mappings_path else None
+    archived_known_mistakes_path = (
+        sources_dir / known_mistakes_path.name if known_mistakes_path else None
+    )
 
     if options["sourceType"] == SOURCE_TYPE_TRANSCRIPT:
         if args.speaker_mappings is None and not args.interactive_speakers:
@@ -96,19 +124,29 @@ def main() -> int:
                 "Speaker resolution flags are only valid when sourceType=transcript."
             )
 
-    session_path = output_dir / "session.yaml"
-    prepared_path = output_dir / "source.prepared.md"
-    speaker_stats_path = output_dir / "speaker_stats.json"
-    for path in (session_path, prepared_path, speaker_stats_path):
+    output_paths = [session_path, prepared_path]
+    if options["sourceType"] == SOURCE_TYPE_TRANSCRIPT:
+        output_paths.append(speaker_stats_path)
+    source_archive_paths = [
+        archived_source_path,
+        archived_config_path,
+        archived_participants_path,
+    ]
+    if archived_speaker_mappings_path is not None:
+        source_archive_paths.append(archived_speaker_mappings_path)
+    if archived_known_mistakes_path is not None:
+        source_archive_paths.append(archived_known_mistakes_path)
+
+    for path in [*output_paths, *source_archive_paths]:
         if path.exists() and not args.force:
             raise SystemExit(f"Refusing to overwrite existing file without --force: {path}")
 
-    participants = load_participants(Path(options["participantsPath"]))
+    participants = load_participants(participants_path)
     participant_index = build_participant_index(participants)
-    known_mistakes = load_json_object(Path(options["knownMistakes"])) if options.get("knownMistakes") else {}
+    known_mistakes = load_json_object(known_mistakes_path) if known_mistakes_path else {}
     speaker_mappings = (
-        load_speaker_mappings(args.speaker_mappings, participant_index=participant_index)
-        if args.speaker_mappings
+        load_speaker_mappings(speaker_mappings_path, participant_index=participant_index)
+        if speaker_mappings_path
         else {}
     )
 
@@ -136,11 +174,23 @@ def main() -> int:
 
     manifest = build_session_manifest(
         options=options,
-        source_path=source_path,
+        source_path=archived_source_path,
+        config_path=archived_config_path,
+        participants_path=archived_participants_path,
+        speaker_mappings_path=archived_speaker_mappings_path,
+        known_mistakes_path=archived_known_mistakes_path,
         prepared_path=prepared_path,
         speaker_stats_path=speaker_stats_path if speaker_stats_payload is not None else None,
         participants=participants,
     )
+
+    copy_file(source_path, archived_source_path)
+    copy_file(config_path, archived_config_path)
+    copy_file(participants_path, archived_participants_path)
+    if speaker_mappings_path is not None and archived_speaker_mappings_path is not None:
+        copy_file(speaker_mappings_path, archived_speaker_mappings_path)
+    if known_mistakes_path is not None and archived_known_mistakes_path is not None:
+        copy_file(known_mistakes_path, archived_known_mistakes_path)
 
     session_path.write_text(
         yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
@@ -387,10 +437,35 @@ def resolve_transcript_format(source_path: Path, requested: str) -> str:
     return TRANSCRIPT_FORMAT_LINES
 
 
+def build_bundle_stem(campaign: Any, session_number: Any) -> str:
+    campaign_slug = slugify_text(str(campaign))
+    if not campaign_slug:
+        raise SystemExit("Campaign must contain at least one alphanumeric character.")
+    try:
+        session_number_int = int(session_number)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"sessionNumber must be an integer, got {session_number!r}") from exc
+    return f"{campaign_slug}-{session_number_int:03d}"
+
+
+def slugify_text(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return re.sub(r"-{2,}", "-", slug)
+
+
+def copy_file(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+
 def build_session_manifest(
     *,
     options: Dict[str, Any],
     source_path: Path,
+    config_path: Path,
+    participants_path: Path,
+    speaker_mappings_path: Optional[Path],
+    known_mistakes_path: Optional[Path],
     prepared_path: Path,
     speaker_stats_path: Optional[Path],
     participants: Sequence[Dict[str, Any]],
@@ -407,8 +482,14 @@ def build_session_manifest(
         "drEndTime": options.get("drEndTime"),
         "participants": list(participants),
         "sourceInputPath": str(source_path),
+        "sourceConfigPath": str(config_path),
+        "participantsPath": str(participants_path),
         "preparedSourcePath": str(prepared_path),
     }
+    if speaker_mappings_path is not None:
+        manifest["speakerMappingsPath"] = str(speaker_mappings_path)
+    if known_mistakes_path is not None:
+        manifest["knownMistakesPath"] = str(known_mistakes_path)
     if options["sourceType"] == SOURCE_TYPE_TRANSCRIPT:
         manifest["transcriptFormat"] = resolve_transcript_format(source_path, options["transcriptFormat"])
         if speaker_stats_path is not None:
