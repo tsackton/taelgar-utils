@@ -1,6 +1,6 @@
 ---
 name: beat-annotator
-description: Annotate RPG session beats from a cleaned transcript and finalized `beats.json`, either for the whole session or a specific `beatId`. Use when extracting beat summaries, NPCs, places, items, combats, events, hooks, and timeline facts without changing beat boundaries.
+description: Annotate finalized session beats with only NPCs, locations, and items, writing the results to a separate annotation file rather than editing `beats.json`. Use for either a whole session or one specific `beatId`.
 ---
 
 # Beat Annotator
@@ -12,7 +12,9 @@ Use this skill when working from a cleaned session bundle:
 - finalized `beats.json`
 - optional campaign glossary or dictionary
 
-The goal is to produce structured beat annotations that later synthesis steps can trust.
+The goal is to produce a separate beat annotation artifact.
+Do not edit `beats.json`.
+`beats.json` defines beat boundaries only.
 
 ## Allowed Inputs
 
@@ -24,8 +26,7 @@ Primary evidence:
 - an optional glossary or dictionary explicitly provided for this annotation run
 
 Strictly ignore files in the bundle's `sources/` directory when making annotation decisions.
-Those files are archival inputs and may contain stale transcript text or failed earlier attempts.
-They are not valid evidence for beat summaries, entities, outcomes, or timeline facts.
+Those files are archival inputs and are not valid evidence for beat annotations.
 
 Secondary evidence is allowed, but subordinate to the primary evidence above.
 This can include:
@@ -34,8 +35,18 @@ This can include:
 - earlier session outputs
 - relevant notes elsewhere in the vault
 
-Use secondary evidence only to confirm identity or canonical naming.
-Do not use it to invent events, outcomes, or facts that are not supported by the current cleaned transcript and beat ranges.
+Use secondary evidence only to confirm canonical naming.
+Do not use it to invent entities that are not supported by the current cleaned transcript and beat ranges.
+
+## Scope
+
+This version of the skill annotates only:
+
+- `npcs`
+- `locations`
+- `items`
+
+Do not add summaries, combat, events, timeline facts, hooks, open questions, or any other annotation categories.
 
 ## Modes
 
@@ -48,37 +59,73 @@ Use the deterministic helper first in either mode so the annotation pass works f
 
 ## Rules
 
-- Do not change beat boundaries.
-  `beats.json` is already canonical for segmentation.
-- Do not repeat more transcript text than needed.
-  Reference support with transcript `uid` values.
+- Do not edit `beats.json`.
+- Write annotations to a separate JSON file.
 - Annotate only what is supported by the current beat context.
-- Prefer omission or lower confidence over guessing.
+- Prefer omission over guessing.
 - Canonicalize names when the glossary or broader campaign context clearly supports that identity.
-- Keep summaries compact.
-  Aim for 1 to 3 sentences per beat.
-- Treat timeline facts as stricter than summaries.
-  If timing or date support is weak, mark the fact as uncertain or omit it.
-- If a beat is clearly non-combat, do not force combat fields beyond `isCombat: false`.
-- If a beat is combat, capture the main opponents, stakes, and outcome only if the transcript supports them.
+- Do not tag PCs or session participants as NPCs unless the transcript clearly refers to a distinct in-world NPC with the same name.
+- Do not list every incidental mention.
+  Only include NPCs, locations, and items that are meaningfully present in the beat.
+- Keep evidence local to the beat.
+  If you need broader context for naming, use it only to confirm names, not to override the beat transcript.
 
-## Suggested Output Shape
+## Canonical Output
 
-The canonical annotation artifact should be a JSON object keyed by `beatId` or an ordered list of beat annotations.
-Each beat annotation should aim to include:
+The canonical output should be a separate annotation file, for example:
+
+- `<prefix>-beat-annotations.json`
+
+The annotation file should contain an ordered list of beat annotations.
+Each entry should have exactly:
 
 - `beatId`
-- `summary`
 - `npcs`
 - `locations`
 - `items`
-- `combat`
-- `events`
-- `timelineFacts`
-- `hooks`
-- `openQuestions`
 
-Entity-like entries should include supporting `uid` evidence whenever practical.
+Each entity entry should be compact and include:
+
+- `name`
+- optional `confidence`
+- optional `evidence`
+
+Suggested shape:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "beatsPath": "/path/to/beats.json",
+  "annotations": [
+    {
+      "beatId": "b01",
+      "npcs": [
+        {
+          "name": "Candrosa",
+          "confidence": "high",
+          "evidence": ["u0123", "u0131"]
+        }
+      ],
+      "locations": [
+        {
+          "name": "Raven's Hold",
+          "confidence": "medium",
+          "evidence": ["u0204"]
+        }
+      ],
+      "items": [
+        {
+          "name": "Cloak of Rainbows",
+          "confidence": "medium",
+          "evidence": ["u0278"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+If a beat has none for one category, use an empty list.
 
 ## Workflow
 
@@ -110,17 +157,16 @@ python skills/beat-annotator/scripts/extract_beat_context.py \
 ```
 
 4. Use the generated beat context file or files as the primary annotation input.
-5. Draft annotations for either:
-   - every beat in order, or
-   - only the requested `beatId`
-6. Keep evidence local to the beat.
-   If you need broader context for naming, use it only to confirm names, not to override the beat transcript.
-7. Save the draft annotations as JSON.
-8. Review for:
-   - unsupported claims
+5. Produce a separate annotation JSON file containing only:
+   - `beatId`
+   - `npcs`
+   - `locations`
+   - `items`
+6. Review for:
+   - unsupported entities
    - duplicate entities under multiple spellings
-   - timeline facts without transcript support
-   - bleed-over from adjacent beats
+   - PCs incorrectly tagged as NPCs
+   - entities copied in from adjacent beats without support
 
 ## Helper Outputs
 
@@ -135,16 +181,14 @@ The JSON file is for downstream tooling.
 
 ## Annotation Guidance
 
-When extracting entities and facts, prioritize:
+Use these meanings:
 
-- named NPCs who act, speak, are discussed as decision-makers, or materially affect the beat
-- locations where the beat occurs or clearly transitions to
-- items, treasure, documents, clues, or objectives introduced, gained, lost, or pursued
-- major decisions, discoveries, setbacks, reveals, departures, arrivals, and combat outcomes
-- explicit or strongly implied timeline facts grounded in the transcript and beat dates
+- `npcs`: named non-player characters who are present, acting, speaking, or materially discussed in the beat
+- `locations`: places where the beat occurs or clearly moves to
+- `items`: named objects, treasure, documents, clues, or quest-significant things introduced, discussed, gained, lost, or pursued in the beat
 
 Avoid clutter:
 
-- do not list every incidental mention
-- do not duplicate the same event as both a summary sentence and multiple redundant event entries
-- do not carry entities forward just because they mattered in earlier beats
+- do not include generic enemies unless they are named or clearly treated as a distinct relevant group
+- do not include vague place descriptions unless they identify a meaningful location
+- do not include incidental gear unless it matters in the beat
