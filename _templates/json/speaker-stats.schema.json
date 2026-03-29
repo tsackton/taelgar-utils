@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taelgar-utils.local/schemas/speaker-stats.schema.json",
+  "title": "Speaker Stats",
+  "description": "Schema for speaker-stats.json written by prepare-source for transcript sessions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["totalDurationSeconds", "speakers"],
+  "properties": {
+    "totalDurationSeconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "speakers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/speaker" }
+    }
+  },
+  "$defs": {
+    "speaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transcriptIdentifier",
+        "name",
+        "gameRole",
+        "segmentCount",
+        "durationSeconds",
+        "fraction",
+        "wordCount"
+      ],
+      "properties": {
+        "transcriptIdentifier": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": ["string", "null"]
+        },
+        "gameRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "segmentCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "durationSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fraction": {
+          "type": "number",
+          "minimum": 0
+        },
+        "wordCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

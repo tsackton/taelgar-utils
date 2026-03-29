@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taelgar-utils.local/schemas/session-corrections.schema.json",
+  "title": "Session Corrections",
+  "description": "Schema for <prefix>-session-corrections.yaml written by report_cleanup_diff.py. JSON Schema can also validate the YAML representation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["allReplacements", "repeatedReplacements", "unresolvedPhrases"],
+  "properties": {
+    "allReplacements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/replacement" }
+    },
+    "repeatedReplacements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/replacement" }
+    },
+    "unresolvedPhrases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/unresolved" }
+    }
+  },
+  "$defs": {
+    "replacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "count", "headers"],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "unresolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["header", "lineNumber", "phrase"],
+      "properties": {
+        "header": { "type": "string", "minLength": 1 },
+        "lineNumber": { "type": "integer", "minimum": 1 },
+        "phrase": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
