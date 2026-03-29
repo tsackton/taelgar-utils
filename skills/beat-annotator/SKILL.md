@@ -1,6 +1,6 @@
 ---
 name: beat-annotator
-description: Produce `beat-facts.json` from finalized session beats without editing `beats.json`. Use to capture beat-level date-linked facts for locations, NPCs, items, and organizations, either for a whole session or one specific `beatId`.
+description: Produce `beat-facts.json` from finalized session beats without editing `beats.json`. Use to capture beat-level date-linked facts for summaries, locations, NPCs, items, organizations, and combats, either for a whole session or one specific `beatId`.
 ---
 
 # Beat Annotator
@@ -48,12 +48,15 @@ Each beat fact entry may include:
 - `dateStart`
 - optional `dateEnd`
 - optional `timeWindow`
+- `shortSummary`
+- `longSummary`
 - `location`
 - `npcs`
 - `items`
 - `organizations`
+- `combat`
 
-Do not add summaries, combat, events, timeline facts, hooks, or open questions.
+Do not add events, timeline facts, hooks, or open questions.
 
 ## Location Model
 
@@ -137,6 +140,55 @@ For both items and organizations, prefer one role label from:
 - `mentioned`
 - `encountered`
 
+## Summary Model
+
+Each beat should also include two summary fields:
+
+- `shortSummary`
+- `longSummary`
+
+`shortSummary` should be one sentence and work as the high-level zoomed-out view of the beat.
+
+`longSummary` should be one short paragraph and work as the medium-detail view of the beat.
+
+The detailed view remains the transcript itself.
+
+## Combat Model
+
+If the beat is not part of a combat, use:
+
+```json
+{
+  "isCombat": false
+}
+```
+
+If the beat is part of a combat, use:
+
+```json
+{
+  "isCombat": true,
+  "phase": "start",
+  "mainEnemies": [
+    {
+      "name": "Blackened Claw raiders",
+      "role": "encountered",
+      "notes": "Primary hostile force in the fight."
+    }
+  ],
+  "notes": "The ambush begins as the party reaches the pass."
+}
+```
+
+Use one combat phase from:
+
+- `start`
+- `middle`
+- `end`
+- `full`
+
+Use `full` when the entire combat is contained within one beat.
+
 ## Canonical Output
 
 The canonical output should be a separate annotation file, for example:
@@ -155,6 +207,8 @@ Suggested shape:
       "dateStart": "1372-05-14",
       "dateEnd": null,
       "timeWindow": "evening",
+      "shortSummary": "The party reaches Nura's house and takes shelter for the night.",
+      "longSummary": "The party arrives in Melusa and is taken in by Nura, Kalima's sister. The beat centers on reaching safety, orienting themselves in town, and settling into temporary shelter.",
       "location": {
         "kind": "fixed",
         "primary": "Melusa",
@@ -170,7 +224,10 @@ Suggested shape:
         }
       ],
       "items": [],
-      "organizations": []
+      "organizations": [],
+      "combat": {
+        "isCombat": false
+      }
     }
   ]
 }
@@ -199,6 +256,8 @@ If annotating only one beat, check for an existing `beat-facts.json` first so pr
 - Prefer omission over guessing.
 - Canonicalize names when the glossary or broader campaign context clearly supports that identity.
 - Do not tag PCs or session participants as NPCs unless the transcript clearly refers to a distinct in-world NPC with the same name.
+- Keep `shortSummary` to one sentence.
+- Keep `longSummary` to one short paragraph.
 - Do not list every incidental mention.
   Only include NPCs, locations, items, and organizations that matter to understanding the beat.
 - Keep facts local to the beat.
@@ -241,6 +300,8 @@ python skills/beat-annotator/scripts/extract_beat_context.py \
    - locations that should have been inherited from the prior beat
    - journey beats mislabeled as fixed beats
    - items or organizations that are too incidental to matter
+   - combat phases that do not match the transcript flow
+   - summaries that are either too vague or too detailed
 
 ## Helper Outputs
 
@@ -257,13 +318,17 @@ The JSON file is for downstream tooling.
 
 Use these meanings:
 
+- `shortSummary`: one-sentence high-level summary of the beat
+- `longSummary`: short-paragraph medium-detail summary of the beat
 - `location`: where the beat happens, or the route it covers if it is a travel beat
 - `npcs`: named non-player characters who materially matter in the beat
 - `items`: named objects, documents, clues, treasures, or quest-significant things that matter in the beat
 - `organizations`: named factions, groups, tribes, cults, units, or institutions that matter in the beat
+- `combat`: whether the beat contains combat, which phase it represents, and the main enemies involved
 
 Avoid clutter:
 
+- do not write ornate summaries or session-note prose
 - do not include vague place descriptions unless they identify a meaningful location
 - do not include generic enemies unless they are named or treated as a distinct meaningful group
 - do not include incidental gear unless it matters in the beat
