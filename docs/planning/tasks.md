@@ -10,6 +10,44 @@ High-level milestones:
 
 ---
 
+## Current Direction
+
+The current implementation direction has converged on **beats** as the core unit rather than generic scenes.
+
+That means the active path is now:
+
+1. prepared bundle
+2. cleaned transcript
+3. `beats.json`
+4. `beat-facts.json`
+5. session synthesis / rollup
+6. note generation
+
+Some of the older “scene” tasks below are still useful conceptually, but they should now be interpreted through a beat-first pipeline unless there is a strong reason to revive a separate scene layer.
+
+## Recent Progress
+
+- [x] Add `docs/session-pipeline-overview.md` as the current MOC for the session pipeline.
+- [x] Solidify the transcript-cleaner skill around deterministic cleanup artifacts.
+- [x] Solidify the transcript-splitter skill around canonical `beats.json` plus preview rendering.
+- [x] Create the beat-annotator skill scaffold as a separate stage that does **not** edit `beats.json`.
+- [x] Define the current `beat-facts.json` target shape for:
+  - [x] beat summaries (`shortSummary`, `longSummary`)
+  - [x] beat location facts
+  - [x] beat NPC/item/organization facts
+  - [x] beat combat facts
+- [x] Add deterministic beat-context extraction for either all beats or a single `beatId`.
+- [x] Add JSON Schemas under `_templates/json` for the current structured session-pipeline artifacts.
+
+## Immediate Next Steps
+
+- [ ] Implement a deterministic `manage_beat_facts.py` validator/renderer for `beat-facts.json`.
+- [ ] Decide whether single-beat annotation should optionally load an existing `beat-facts.json` for prior-location inheritance.
+- [ ] Create a separate synthesis skill/artifact that rolls `beats.json` + `beat-facts.json` into a session-level summary JSON.
+- [ ] Test the current splitter + beat-annotator flow on a real session bundle and revise schemas based on actual edge cases.
+
+---
+
 ## M1 – Raw Data → Raw Transcript
 
 ### A1. Normalize → Sync → Clean refactor
@@ -126,6 +164,16 @@ Need to figure out how to optimize...
 - [ ] Define the JSON schema for a “scene summary” (bullets, tagged NPCs, locations, loot, flags like `is_combat`).
 - [ ] Define the YAML/JSON structure for a final session note (synopsis, scenes, NPCs, timeline, tags, etc.).
 
+### C1a. Beat-first artifacts
+
+- [x] Define the canonical `beats.json` structure.
+- [x] Define the initial `beat-facts.json` structure.
+- [x] Define JSON Schemas for the current structured beat/bundle artifacts under `_templates/json`.
+- [ ] Implement deterministic validation for `beat-facts.json`.
+- [ ] Add a rendered preview artifact for `beat-facts.json`, similar to the beat preview.
+- [ ] Decide whether `beat-facts.json` should preserve per-field provenance/evidence references, or keep V1 fully summary-level.
+- [ ] Test beat-facts on at least one real session and revise enum values / field names where the current design is awkward.
+
 ### C2. Scene detection (`split_transcript_into_scenes.py`)
 
 - [ ] Draft a simple heuristic for scene boundaries (timestamp gaps over a threshold, obvious setting changes, etc.).
@@ -152,9 +200,30 @@ Need to figure out how to optimize...
   - [ ] Re-run specific scenes with updated glossary/mistake dictionaries.
 - [ ] Add a `--previously-on` input option so the LLM can incorporate prior-session context.
 
+### C3a. Beat facts and zoom levels
+
+- [x] Add `shortSummary` and `longSummary` to beat facts as the “zoomed-out” and “medium-detail” beat views.
+- [x] Add location modeling for fixed beats, journey beats, and carried-forward location context.
+- [x] Add NPC/item/organization role modeling to beat facts.
+- [x] Add beat-level combat facts with `phase` and `mainEnemies`.
+- [ ] Decide whether beat summaries should remain inside `beat-facts.json` long-term or move into a sibling beat-summary artifact.
+- [ ] Decide how aggressively to canonicalize unnamed-first / named-later NPCs and locations when annotating a single beat in isolation.
+
 ---
 
 ## M4 – Bullets → Narrative → Session Note
+
+### C3b. Session synthesis (`session-summary.json`)
+
+- [ ] Define the schema for the rolled-up session artifact that consumes `beats.json` + `beat-facts.json`.
+- [ ] Decide which session-level outputs belong in synthesis vs note rendering:
+  - [ ] cast of characters
+  - [ ] places visited
+  - [ ] combat tracker
+  - [ ] notable items / organizations
+  - [ ] session recap / opening summary
+- [ ] Implement a separate synthesis skill or script that merges beat-local facts into session-level entities and summaries.
+- [ ] Decide whether session synthesis should emit note-ready markdown fragments, JSON only, or both.
 
 ### C4. Narrative + timeline (`generate_narrative.py`)
 
