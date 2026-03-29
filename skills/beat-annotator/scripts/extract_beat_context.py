@@ -278,8 +278,6 @@ def render_index(payload: Dict[str, Any]) -> str:
             lines.append(f"- Date: {beat['dateStart']} to {beat['dateEnd']}")
         else:
             lines.append(f"- Date: {beat.get('dateStart') or 'unknown'}")
-        lines.append(f"- Time Window: {beat.get('timeWindow') or 'unknown'}")
-        lines.append(f"- Combat: {'yes' if beat.get('containsCombat') else 'no'}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -290,14 +288,13 @@ def render_context_markdown(context: Dict[str, Any]) -> str:
     lines = [
         f"# Beat Context: {beat['beatId']} - {beat['title']}",
         "",
+        "This file is only for extracting `npcs`, `locations`, and `items` into a separate annotation file.",
+        "Do not edit `beats.json`.",
+        "",
         "## Session",
         "",
-        f"- Title: {session.get('title') or 'unknown'}",
         f"- Campaign: {session.get('campaign') or 'unknown'}",
         f"- Session Number: {session.get('sessionNumber') if session.get('sessionNumber') is not None else 'unknown'}",
-        f"- DR Start: {session.get('drStart') or 'unknown'}",
-        f"- DR End: {session.get('drEnd') or 'unknown'}",
-        f"- Real World Date: {session.get('realWorldDate') or 'unknown'}",
         "",
         "## Beat Metadata",
         "",
@@ -307,18 +304,18 @@ def render_context_markdown(context: Dict[str, Any]) -> str:
         f"- Lines: {beat['lineCount']}",
         f"- Date Start: {beat.get('dateStart') or 'unknown'}",
         f"- Date End: {beat.get('dateEnd') or 'same day'}",
-        f"- Time Window: {beat.get('timeWindow') or 'unknown'}",
-        f"- Combat: {'yes' if beat.get('containsCombat') else 'no'}",
-        f"- Boundary Reason: {beat['boundaryReason']}",
         "",
-        "## Date Evidence",
+        "## Output Shape",
         "",
+        "```json",
+        "{",
+        f'  "beatId": "{beat["beatId"]}",',
+        '  "npcs": [],',
+        '  "locations": [],',
+        '  "items": []',
+        "}",
+        "```",
     ]
-    if beat["dateEvidence"]:
-        for item in beat["dateEvidence"]:
-            lines.append(f"- {item}")
-    else:
-        lines.append("- none")
 
     if session["participants"]:
         lines.extend(["", "## Participants", ""])
