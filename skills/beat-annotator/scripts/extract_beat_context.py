@@ -61,15 +61,21 @@ def main() -> int:
     uid_to_index = build_uid_index(transcript_lines)
 
     selected_beats = select_beats(beats, args.beat_id)
-    contexts = [
-        build_beat_context(
-            beat=beat,
-            transcript_lines=transcript_lines,
-            uid_to_index=uid_to_index,
-            session_payload=session_payload,
+    contexts = []
+    for beat in selected_beats:
+        beat_index = beats.index(beat)
+        previous_beat = beats[beat_index - 1] if beat_index > 0 else None
+        next_beat = beats[beat_index + 1] if beat_index + 1 < len(beats) else None
+        contexts.append(
+            build_beat_context(
+                beat=beat,
+                previous_beat=previous_beat,
+                next_beat=next_beat,
+                transcript_lines=transcript_lines,
+                uid_to_index=uid_to_index,
+                session_payload=session_payload,
+            )
         )
-        for beat in selected_beats
-    ]
 
     json_path = output_dir / f"{file_prefix}-beat-contexts.json"
     index_path = output_dir / f"{file_prefix}-beat-context-index.md"
@@ -203,6 +209,8 @@ def select_beats(beats: Sequence[Dict[str, Any]], beat_id: Optional[str]) -> Lis
 def build_beat_context(
     *,
     beat: Dict[str, Any],
+    previous_beat: Optional[Dict[str, Any]],
+    next_beat: Optional[Dict[str, Any]],
     transcript_lines: Sequence[Dict[str, str]],
     uid_to_index: Dict[str, int],
     session_payload: Dict[str, Any],
@@ -228,6 +236,8 @@ def build_beat_context(
             "startIndex": start_index,
             "endIndex": end_index,
         },
+        "previousBeat": summarize_adjacent_beat(previous_beat),
+        "nextBeat": summarize_adjacent_beat(next_beat),
         "session": summarize_session(session_payload),
         "transcriptLines": beat_lines,
     }
@@ -258,6 +268,17 @@ def summarize_session(session_payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def summarize_adjacent_beat(beat: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if beat is None:
+        return None
+    return {
+        "beatId": beat["beatId"],
+        "title": beat["title"],
+        "dateStart": beat.get("dateStart"),
+        "dateEnd": beat.get("dateEnd"),
+    }
+
+
 def render_index(payload: Dict[str, Any]) -> str:
     lines = [
         "# Beat Context Index",
@@ -274,21 +295,22 @@ def render_index(payload: Dict[str, Any]) -> str:
         lines.append("")
         lines.append(f"- Lines: {beat['lineCount']}")
         lines.append(f"- Range: `{beat['startUid']}` -> `{beat['endUid']}`")
-        if beat.get("dateEnd"):
-            lines.append(f"- Date: {beat['dateStart']} to {beat['dateEnd']}")
-        else:
-            lines.append(f"- Date: {beat.get('dateStart') or 'unknown'}")
+        lines.append(f"- Date Start: {beat.get('dateStart') or 'unknown'}")
+        lines.append(f"- Date End: {beat.get('dateEnd') or 'same day'}")
+        lines.append(f"- Time Window: {beat.get('timeWindow') or 'unknown'}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 
 def render_context_markdown(context: Dict[str, Any]) -> str:
     beat = context["beat"]
+    previous_beat = context.get("previousBeat")
+    next_beat = context.get("nextBeat")
     session = context["session"]
     lines = [
         f"# Beat Context: {beat['beatId']} - {beat['title']}",
         "",
-        "This file is only for extracting `npcs`, `locations`, and `items` into a separate annotation file.",
+        "This file is only for producing `beat-facts.json`.",
         "Do not edit `beats.json`.",
         "",
         "## Session",
@@ -304,18 +326,55 @@ def render_context_markdown(context: Dict[str, Any]) -> str:
         f"- Lines: {beat['lineCount']}",
         f"- Date Start: {beat.get('dateStart') or 'unknown'}",
         f"- Date End: {beat.get('dateEnd') or 'same day'}",
+        f"- Time Window: {beat.get('timeWindow') or 'unknown'}",
         "",
         "## Output Shape",
         "",
         "```json",
         "{",
         f'  "beatId": "{beat["beatId"]}",',
+        f'  "dateStart": "{beat.get("dateStart") or ""}",',
+        f'  "dateEnd": {json.dumps(beat.get("dateEnd"))},',
+        f'  "timeWindow": {json.dumps(beat.get("timeWindow"))},',
+        '  "location": {',
+        '    "kind": "fixed",',
+        '    "primary": "",',
+        '    "context": "",',
+        '    "notes": ""',
+        "  },",
         '  "npcs": [],',
-        '  "locations": [],',
-        '  "items": []',
+        '  "items": [',
+        '    {',
+        '      "name": "",',
+        '      "role": "mentioned",',
+        '      "notes": ""',
+        "    }",
+        "  ],",
+        '  "organizations": [',
+        '    {',
+        '      "name": "",',
+        '      "role": "mentioned",',
+        '      "notes": ""',
+        "    }",
+        "  ]",
         "}",
         "```",
     ]
+
+    if previous_beat or next_beat:
+        lines.extend(["", "## Adjacent Beats", ""])
+        if previous_beat:
+            previous_date = previous_beat.get("dateEnd") or previous_beat.get("dateStart") or "unknown"
+            lines.append(f"- Previous: {previous_beat['beatId']} - {previous_beat['title']} ({previous_date})")
+        if next_beat:
+            next_date = next_beat.get("dateStart") or "unknown"
+            lines.append(f"- Next: {next_beat['beatId']} - {next_beat['title']} ({next_date})")
+        lines.extend(
+            [
+                "",
+                "If the transcript does not clearly restate the location, prefer inheriting the prior beat's location unless there is a clear move or travel transition.",
+            ]
+        )
 
     if session["participants"]:
         lines.extend(["", "## Participants", ""])
