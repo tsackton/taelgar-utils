@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taelgar-utils.local/schemas/cleanup-report.schema.json",
+  "title": "Cleanup Report",
+  "description": "Schema for <prefix>-cleanup-report.json written by report_cleanup_diff.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "lineCount",
+    "changedLineCount",
+    "validationErrors",
+    "unresolvedCount",
+    "unresolvedPhrases",
+    "changedLines"
+  ],
+  "properties": {
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changedLineCount",
+        "replacementCount",
+        "repeatedReplacementCount",
+        "topReplacements",
+        "uniqueUnresolvedPhrases"
+      ],
+      "properties": {
+        "changedLineCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "replacementCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "repeatedReplacementCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "topReplacements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/replacement" }
+        },
+        "uniqueUnresolvedPhrases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "lineCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "changedLineCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "validationErrors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unresolvedCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unresolvedPhrases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/unresolved" }
+    },
+    "changedLines": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/changedLine" }
+    }
+  },
+  "$defs": {
+    "replacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "count", "headers"],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "unresolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["header", "lineNumber", "phrase"],
+      "properties": {
+        "header": { "type": "string", "minLength": 1 },
+        "lineNumber": { "type": "integer", "minimum": 1 },
+        "phrase": { "type": "string", "minLength": 1 }
+      }
+    },
+    "changedLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["header", "lineNumber", "originalText", "cleanedText"],
+      "properties": {
+        "header": { "type": "string", "minLength": 1 },
+        "lineNumber": { "type": "integer", "minimum": 1 },
+        "originalText": { "type": "string" },
+        "cleanedText": { "type": "string" }
+      }
+    }
+  }
+}

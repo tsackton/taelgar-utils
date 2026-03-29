@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taelgar-utils.local/schemas/beat-facts.schema.json",
+  "title": "Beat Facts",
+  "description": "Schema for <prefix>-beat-facts.json produced by the beat-annotator skill.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "beatsPath", "facts"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "beatsPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "facts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/beatFact" }
+    }
+  },
+  "$defs": {
+    "timeWindow": {
+      "type": "string",
+      "enum": ["dawn", "morning", "midday", "afternoon", "evening", "night"]
+    },
+    "npcRole": {
+      "type": "string",
+      "enum": ["companion", "enemy", "mentioned", "encountered"]
+    },
+    "mentionRole": {
+      "type": "string",
+      "enum": ["mentioned", "encountered"]
+    },
+    "namedEntityWithContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {},
+        "context": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "namedEntityWithNotes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": { "$ref": "#/$defs/mentionRole" },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "fixedLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "primary", "context"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "fixed"
+        },
+        "primary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "journeyLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to", "context"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "journey"
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "mainEnemy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": { "$ref": "#/$defs/mentionRole" },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "combatFalse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isCombat"],
+      "properties": {
+        "isCombat": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "combatTrue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isCombat", "phase"],
+      "properties": {
+        "isCombat": {
+          "type": "boolean",
+          "const": true
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["start", "middle", "end", "full"]
+        },
+        "mainEnemies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/mainEnemy" }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "beatFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "beatId",
+        "dateStart",
+        "shortSummary",
+        "longSummary",
+        "location",
+        "npcs",
+        "items",
+        "organizations",
+        "combat"
+      ],
+      "properties": {
+        "beatId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dateStart": {
+          "type": "string",
+          "format": "date"
+        },
+        "dateEnd": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "timeWindow": {
+          "anyOf": [
+            { "$ref": "#/$defs/timeWindow" },
+            { "type": "null" }
+          ]
+        },
+        "shortSummary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "longSummary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "oneOf": [
+            { "$ref": "#/$defs/fixedLocation" },
+            { "$ref": "#/$defs/journeyLocation" }
+          ]
+        },
+        "npcs": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/namedEntityWithContext" },
+              {
+                "type": "object",
+                "properties": {
+                  "role": { "$ref": "#/$defs/npcRole" }
+                }
+              }
+            ]
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/namedEntityWithNotes" }
+        },
+        "organizations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/namedEntityWithNotes" }
+        },
+        "combat": {
+          "oneOf": [
+            { "$ref": "#/$defs/combatFalse" },
+            { "$ref": "#/$defs/combatTrue" }
+          ]
+        }
+      }
+    }
+  }
+}

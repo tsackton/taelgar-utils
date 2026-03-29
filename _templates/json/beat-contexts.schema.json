@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taelgar-utils.local/schemas/beat-contexts.schema.json",
+  "title": "Beat Contexts",
+  "description": "Schema for <prefix>-beat-contexts.json written by extract_beat_context.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceTranscriptPath",
+    "sessionPath",
+    "beatsPath",
+    "selectedBeatIds",
+    "contexts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "sourceTranscriptPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sessionPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "beatsPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "selectedBeatIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "contexts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/context" }
+    }
+  },
+  "$defs": {
+    "timeWindow": {
+      "type": "string",
+      "enum": ["dawn", "morning", "midday", "afternoon", "evening", "night"]
+    },
+    "beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "beatId",
+        "title",
+        "startUid",
+        "endUid",
+        "lineCount",
+        "dateStart",
+        "containsCombat",
+        "boundaryReason",
+        "dateEvidence"
+      ],
+      "properties": {
+        "beatId": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "startUid": { "type": "string", "pattern": "^u\\d{4,}$" },
+        "endUid": { "type": "string", "pattern": "^u\\d{4,}$" },
+        "lineCount": { "type": "integer", "minimum": 1 },
+        "dateStart": { "type": "string", "format": "date" },
+        "dateEnd": { "type": ["string", "null"], "format": "date" },
+        "timeWindow": {
+          "anyOf": [
+            { "$ref": "#/$defs/timeWindow" },
+            { "type": "null" }
+          ]
+        },
+        "containsCombat": { "type": "boolean" },
+        "boundaryReason": { "type": "string", "minLength": 1 },
+        "dateEvidence": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "startIndex": { "type": "integer", "minimum": 0 },
+        "endIndex": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "adjacentBeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["beatId", "title", "dateStart", "dateEnd"],
+      "properties": {
+        "beatId": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "dateStart": { "type": ["string", "null"], "format": "date" },
+        "dateEnd": { "type": ["string", "null"], "format": "date" }
+      }
+    },
+    "participantSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": ["string", "null"] },
+        "role": { "type": ["string", "null"] },
+        "gameRole": { "type": ["string", "null"] }
+      }
+    },
+    "sessionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "campaign", "sessionNumber", "drStart", "drEnd", "realWorldDate", "participants"],
+      "properties": {
+        "title": { "type": ["string", "null"] },
+        "campaign": { "type": ["string", "null"] },
+        "sessionNumber": { "type": ["integer", "string", "null"] },
+        "drStart": { "type": ["string", "null"], "format": "date" },
+        "drEnd": { "type": ["string", "null"], "format": "date" },
+        "realWorldDate": { "type": ["string", "null"], "format": "date" },
+        "participants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/participantSummary" }
+        }
+      }
+    },
+    "transcriptLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uid", "header", "text", "raw"],
+      "properties": {
+        "uid": { "type": "string", "pattern": "^u\\d{4,}$" },
+        "header": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "raw": { "type": "string", "minLength": 1 }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["beat", "previousBeat", "nextBeat", "session", "transcriptLines"],
+      "properties": {
+        "beat": { "$ref": "#/$defs/beat" },
+        "previousBeat": {
+          "anyOf": [
+            { "$ref": "#/$defs/adjacentBeat" },
+            { "type": "null" }
+          ]
+        },
+        "nextBeat": {
+          "anyOf": [
+            { "$ref": "#/$defs/adjacentBeat" },
+            { "type": "null" }
+          ]
+        },
+        "session": { "$ref": "#/$defs/sessionSummary" },
+        "transcriptLines": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transcriptLine" }
+        }
+      }
+    }
+  }
+}

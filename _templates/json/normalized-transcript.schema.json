@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taelgar-utils.local/schemas/normalized-transcript.schema.json",
+  "title": "Normalized Transcript",
+  "description": "Schema for *.normalized.json written by taelgar_utils.session.normalize.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source", "segments", "speakers", "meta"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "segments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/segment" }
+    },
+    "speakers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/speaker" }
+    },
+    "meta": { "$ref": "#/$defs/meta" }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "offset_seconds"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "offset_seconds": {
+          "type": "number"
+        },
+        "audio_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "start", "end", "speaker_id", "text", "words"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^seg_\\d{6}$"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "speaker_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "words": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/word" }
+        },
+        "meta": {
+          "type": "object"
+        }
+      }
+    },
+    "word": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end", "text", "speaker_id", "source_id"],
+      "properties": {
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "speaker_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "speaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meta": {
+          "type": "object"
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_format", "input_path"],
+      "properties": {
+        "input_format": {
+          "type": "string",
+          "enum": [
+            "elevenlabs_json",
+            "plain_text",
+            "vtt_voice",
+            "vtt_speaker",
+            "whisper_diarization"
+          ]
+        },
+        "input_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_details": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

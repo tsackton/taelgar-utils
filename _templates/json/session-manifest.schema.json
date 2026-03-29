@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taelgar-utils.local/schemas/session-manifest.schema.json",
+  "title": "Session Manifest",
+  "description": "Schema for session.yaml written by prepare-source. JSON Schema can also validate the YAML representation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceType",
+    "campaign",
+    "sessionNumber",
+    "realWorldDate",
+    "participants",
+    "sourceInputPath",
+    "sourceConfigPath",
+    "participantsPath",
+    "preparedSourcePath"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "sourceType": {
+      "type": "string",
+      "enum": ["transcript", "narrative", "raw_notes"]
+    },
+    "campaign": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sessionNumber": {
+      "type": "integer"
+    },
+    "realWorldDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "drStart": {
+      "type": ["string", "null"],
+      "format": "date"
+    },
+    "drEnd": {
+      "type": ["string", "null"],
+      "format": "date"
+    },
+    "drStartTime": {
+      "type": ["string", "null"]
+    },
+    "drEndTime": {
+      "type": ["string", "null"]
+    },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/participant" }
+    },
+    "sourceInputPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceConfigPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "participantsPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "preparedSourcePath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "speakerMappingsPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "knownMistakesPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "transcriptFormat": {
+      "type": "string",
+      "enum": ["vtt", "speaker_lines"]
+    },
+    "speakerStatsPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "narrativeUnit": {
+      "type": "string",
+      "enum": ["sentence", "paragraph"]
+    }
+  },
+  "$defs": {
+    "participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "gameRole", "transcriptIdentifiers"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gameRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "transcriptIdentifiers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

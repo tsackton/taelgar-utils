@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taelgar-utils.local/schemas/beats.schema.json",
+  "title": "Beats",
+  "description": "Schema for <prefix>-beats.json written by manage_beats.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sourceTranscriptPath", "sessionPath", "beats"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "sourceTranscriptPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sessionPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "beats": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/beat" }
+    }
+  },
+  "$defs": {
+    "timeWindow": {
+      "type": "string",
+      "enum": ["dawn", "morning", "midday", "afternoon", "evening", "night"]
+    },
+    "beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "beatId",
+        "title",
+        "startUid",
+        "endUid",
+        "lineCount",
+        "dateStart",
+        "containsCombat",
+        "boundaryReason",
+        "dateEvidence"
+      ],
+      "properties": {
+        "beatId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startUid": {
+          "type": "string",
+          "pattern": "^u\\d{4,}$"
+        },
+        "endUid": {
+          "type": "string",
+          "pattern": "^u\\d{4,}$"
+        },
+        "lineCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dateStart": {
+          "type": "string",
+          "format": "date"
+        },
+        "dateEnd": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "timeWindow": {
+          "anyOf": [
+            { "$ref": "#/$defs/timeWindow" },
+            { "type": "null" }
+          ]
+        },
+        "containsCombat": {
+          "type": "boolean"
+        },
+        "boundaryReason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dateEvidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}
