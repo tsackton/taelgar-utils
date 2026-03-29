@@ -1,6 +1,6 @@
 ---
 name: transcript-splitter
-description: Split a cleaned RPG session transcript into ordered story beats while preserving full transcript coverage. Use when producing `beats.json` from a cleaned transcript, especially when beat titles, date inference, time windows, combat sub-splits, and markdown review overrides are needed.
+description: Split a cleaned RPG session transcript into ordered story beats while preserving full transcript coverage. Use when producing `beats.json` from a cleaned transcript, especially when beat titles, date inference, time windows, combat sub-splits, and markdown preview artifacts are needed.
 ---
 
 # Transcript Splitter
@@ -24,6 +24,8 @@ Primary evidence:
 Strictly ignore files in the bundle's `sources/` directory when making segmentation decisions.
 Those files are archival inputs and may themselves contain transcription errors or stale failed attempts.
 They are not valid evidence for beat boundaries or date inference.
+Treat this as a hard prohibition, not a preference.
+Do not read from `sources/`, do not quote from it, and do not use it to confirm or reject a boundary.
 
 Secondary evidence is allowed, but subordinate to the primary evidence above.
 This can include:
@@ -33,6 +35,7 @@ This can include:
 - relevant notes elsewhere in the vault
 
 Use secondary evidence only to support or confirm a boundary or date inference, never to override what the current cleaned transcript, `session.yaml`, and glossary/dictionary indicate.
+The `sources/` directory is never secondary evidence. It is always out of bounds.
 
 ## Rules
 
@@ -42,12 +45,17 @@ Use secondary evidence only to support or confirm a boundary or date inference, 
   Reference transcript ranges only with `startUid` and `endUid`.
 - Every transcript line must belong to exactly one beat.
 - Beat order must match transcript order.
-- Beat boundaries should be medium-granularity by default:
-  one beat per major shift in action, focus, location, objective, or day phase.
+- Segment in two passes:
+  1. split on obvious scene transitions
+  2. split overly long scenes at natural sub-points
 - Prefer day-aware boundaries where evidence supports them.
   If the transcript clearly moves into a new day, prefer a beat split there unless it would create a trivial fragment.
-- Treat combat as one beat unless that beat would exceed 400 transcript lines.
+- Aim for beats between 150 and 500 transcript lines.
+- Beats under 150 lines should usually be merged with an adjacent beat, especially at the beginning or end of the transcript, unless there is a strong scene break or day transition.
+- Beats over 500 lines should usually be split at natural sub-points.
+- Treat combat as one beat unless that beat would exceed 500 transcript lines.
   If so, split the combat into contiguous sub-beats at natural tactical or narrative phase changes.
+- Exceptions to the 150-500 target range are allowed only when strongly justified by a real scene break or date transition.
 - Every beat must have `dateStart`.
 - `dateEnd` is optional and should be used only when a single beat spans multiple consecutive days.
 - `timeWindow` is optional and must be one of:
@@ -61,6 +69,8 @@ Use secondary evidence only to support or confirm a boundary or date inference, 
   - a short title
   - a boundary reason
   - date evidence
+- Beat titles should aim to be 6 words or fewer.
+  Only exceed that when extra words are strictly needed for clarity.
 
 ## Date Inference
 
@@ -95,8 +105,11 @@ When date evidence is weak:
    - combat phase changes
    - day or time-of-day transitions
    - travel montage boundaries
-4. Draft an initial ordered beat list that covers every `uNNNN` line exactly once.
-5. For each beat, assign:
+4. Draft an initial ordered beat list by first splitting on obvious scene transitions.
+5. Review the resulting scene-sized beats for size.
+   - merge very short beats unless a day transition or very strong scene break justifies them
+   - split long beats, especially long combats, at natural sub-points
+6. For each beat, assign:
    - `beatId`
    - `title`
    - `startUid`
@@ -107,8 +120,8 @@ When date evidence is weak:
    - `containsCombat`
    - `boundaryReason`
    - `dateEvidence`
-6. Run `scripts/manage_beats.py` to validate the beats, render the preview, create/read the markdown override file, and rebuild the final artifacts deterministically.
-7. If validation fails, fix the beat draft or override file and rerun the script.
+7. Run `scripts/manage_beats.py` to validate the beats and render the preview deterministically.
+8. If validation fails or the preview shows weak boundaries, revise the beats in chat or edit the JSON directly, then rerun the script.
 
 ## Review Artifacts
 
@@ -116,39 +129,9 @@ The deterministic script should own these files:
 
 - `<prefix>-beats.json`
 - `<prefix>-beats-preview.md`
-- `<prefix>-beats-overrides.md`
 
 The preview is for human review in Obsidian.
-The override file is the manual correction layer and should stay easy to edit.
-
-Use a markdown file containing a single fenced YAML block with this general structure:
-
-```md
-# Beat Overrides
-
-```yaml
-splits:
-  - beforeUid: u0450
-    title: "Second phase of the bridge fight"
-
-merges:
-  - firstBeatId: beat-003
-    secondBeatId: beat-004
-
-updates:
-  - beatId: beat-005
-    title: "Camping by the river"
-    dateStart: "1715-04-26"
-    dateEnd: null
-    timeWindow: "night"
-```
-```
-
-Only these override operations are supported in v1:
-
-- split before `uNNNN`
-- merge adjacent beats
-- update title / dateStart / dateEnd / timeWindow
+If you want to adjust titles, dates, time windows, or beat boundaries, revise the JSON directly or ask the agent to do it interactively in chat.
 
 ## Deterministic Script
 
@@ -158,7 +141,7 @@ Generate artifacts with:
 python skills/transcript-splitter/scripts/manage_beats.py \
   --transcript /path/to/source.cleaned.md \
   --session /path/to/session.yaml \
-  --draft-beats /path/to/draft_beats.json \
+  --beats-json /path/to/beats.json \
   --output-dir /path/to/beat-artifacts \
   --file-prefix addermarch-campaign-007
 ```
@@ -167,8 +150,8 @@ The script is the source of truth for:
 
 - transcript coverage validation
 - date sequencing validation
+- beat-size warnings
 - combat-size validation
 - preview rendering
-- override parsing and application
 
-Treat the script output as the canonical beat artifact rather than manually editing the final `beats.json`.
+Treat the script output as the canonical beat artifact rather than editing the preview.
