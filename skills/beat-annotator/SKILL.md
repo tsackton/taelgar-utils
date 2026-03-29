@@ -73,7 +73,7 @@ For a fixed-location beat:
 {
   "kind": "fixed",
   "primary": "Melusa",
-  "context": "Nura's house",
+  "context": "Nura's house, where the party is sheltering",
   "notes": "The party is sheltering here."
 }
 ```
@@ -83,14 +83,20 @@ For a journey beat:
 ```json
 {
   "kind": "journey",
-  "from": "Melusa",
-  "to": "Raven's Hold",
+  "from": "Melusa (Addermarch)",
+  "to": "Raven's Hold (Addermarch)",
   "context": "travel by road through the pass",
   "notes": "The beat covers the departure and overland travel."
 }
 ```
 
 If the location is not explicitly restated in a beat, prefer inheriting the same location as the previous beat unless the transcript clearly indicates a move or travel transition.
+Prefer the larger named place for `primary` on fixed beats, and put the more specific room, corridor, chamber, building, or local sub-area in `context`.
+For journey beats between sub-areas of a larger named place, use parenthetical forms in `from` and `to`, for example `warm fissure chamber (Zefya's Labyrinth)`.
+
+If a location is clearly present before it is properly named later in the session, still annotate it in the earlier beat.
+When annotating the full session, use the later canonical name for the earlier beat if the identity is clear.
+If the identity is still uncertain, use a compact descriptive placeholder in `primary`, `from`, or `to`, and clarify in `notes`.
 
 ## NPC Model
 
@@ -118,6 +124,10 @@ Suggested example:
   "notes": "Kalima's sister in Melusa, sheltering the party."
 }
 ```
+
+If an NPC is clearly present before they are properly named later in the session, still annotate them in the earlier beat.
+When annotating the full session, use the later canonical name for the earlier beat if the identity is clear.
+If the identity is still uncertain, use a compact descriptive placeholder name and explain the uncertainty in `notes`.
 
 ## Item And Organization Model
 
@@ -212,7 +222,7 @@ Suggested shape:
       "location": {
         "kind": "fixed",
         "primary": "Melusa",
-        "context": "Nura's house",
+        "context": "Nura's house, where the party takes shelter",
         "notes": "The party takes shelter here."
       },
       "npcs": [
@@ -262,6 +272,9 @@ If annotating only one beat, check for an existing `beat-facts.json` first so pr
   Only include NPCs, locations, items, and organizations that matter to understanding the beat.
 - Keep facts local to the beat.
   Use broader context only to confirm names or to inherit the prior beat's location when the transcript supports continuity.
+- Do not skip an NPC or location just because the transcript has not named it yet.
+  If later beats make the identity clear, back-apply the canonical name to earlier beats in the same session.
+  If later beats do not make the identity clear, keep a compact descriptive placeholder and explain it briefly in `notes`.
 
 ## Workflow
 
@@ -320,11 +333,17 @@ Use these meanings:
 
 - `shortSummary`: one-sentence high-level summary of the beat
 - `longSummary`: short-paragraph medium-detail summary of the beat
-- `location`: where the beat happens, or the route it covers if it is a travel beat
+- `location`: where the beat happens, or the route it covers if it is a travel beat; prefer the larger named place in `primary`, and use `context` or parenthetical `from` / `to` values for more specific sublocations
 - `npcs`: named non-player characters who materially matter in the beat
 - `items`: named objects, documents, clues, treasures, or quest-significant things that matter in the beat
 - `organizations`: named factions, groups, tribes, cults, units, or institutions that matter in the beat
 - `combat`: whether the beat contains combat, which phase it represents, and the main enemies involved
+
+For deferred naming:
+
+- annotate NPCs and locations even when they are only described at first
+- when a later beat clearly reveals the name of the same NPC or location, use that canonical name in earlier beats too
+- when the identity is still uncertain, use a short descriptive placeholder rather than omitting the entity
 
 Avoid clutter:
 
