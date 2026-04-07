@@ -10,5 +10,6 @@ These schemas cover the structured artifacts currently produced by the session c
 - `beats.schema.json`: `<prefix>-beats.json` from `manage_beats.py`
 - `beat-contexts.schema.json`: `<prefix>-beat-contexts.json` from `extract_beat_context.py`
 - `beat-facts.schema.json`: `<prefix>-beat-facts.json` from the beat-annotator skill
+- `session-summary-context.schema.json`: `<prefix>-session-summary-context.json` from `build_session_summary_context.py`
 
 The YAML artifacts are listed here because JSON Schema can validate YAML data models too.

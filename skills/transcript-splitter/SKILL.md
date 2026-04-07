@@ -1,6 +1,6 @@
 ---
 name: transcript-splitter
-description: Split a cleaned RPG session transcript into ordered story beats while preserving full transcript coverage. Use when producing `beats.json` from a cleaned transcript, especially when beat titles, date inference, time windows, combat sub-splits, and markdown preview artifacts are needed.
+description: Split a cleaned RPG session source into ordered story beats while preserving full source coverage. Use when producing `beats.json` from a cleaned transcript or a normalized non-transcript source, especially when beat titles, date inference, time windows, combat sub-splits, and markdown preview artifacts are needed.
 ---
 
 # Transcript Splitter
@@ -8,7 +8,7 @@ description: Split a cleaned RPG session transcript into ordered story beats whi
 Use this skill when working from a cleaned session bundle:
 
 - `session.yaml`
-- cleaned transcript (`source.cleaned.md` or equivalent)
+- cleaned source (`source.cleaned.md`, `source-cleaned.md`, or equivalent)
 - optional campaign glossary or dictionary
 
 The goal is to produce an ordered beat segmentation artifact that later annotation steps can trust.
@@ -18,7 +18,7 @@ The goal is to produce an ordered beat segmentation artifact that later annotati
 Primary evidence:
 
 - `session.yaml`
-- the current cleaned transcript
+- the current cleaned source
 - an optional glossary or dictionary explicitly provided for this segmentation run
 
 Strictly ignore files in the bundle's `sources/` directory when making segmentation decisions.
@@ -34,47 +34,54 @@ This can include:
 - earlier session outputs
 - relevant notes elsewhere in the vault
 
-Use secondary evidence only to support or confirm a boundary or date inference, never to override what the current cleaned transcript, `session.yaml`, and glossary/dictionary indicate.
+Use secondary evidence only to support or confirm a boundary or date inference, never to override what the current cleaned source, `session.yaml`, and glossary/dictionary indicate.
 The `sources/` directory is never secondary evidence. It is always out of bounds.
 
 ## Rules
 
-- Work from the cleaned transcript, not the raw transcript.
+- Work from the cleaned source, not the raw source.
 - The canonical artifact is `beats.json`.
-- Do not repeat transcript body text in `beats.json`.
-  Reference transcript ranges only with `startUid` and `endUid`.
-- Every transcript line must belong to exactly one beat.
-- Beat order must match transcript order.
+- Do not repeat source body text in `beats.json`.
+  Reference source ranges only with `startUid` and `endUid`.
+- Every source line must belong to exactly one beat.
+- Beat order must match source order.
 - Segment in two passes:
   1. split on obvious scene transitions
   2. split overly long scenes at natural sub-points
 - Prefer day-aware boundaries where evidence supports them.
-  If the transcript clearly moves into a new day, prefer a beat split there unless it would create a trivial fragment.
-- Aim for beats between 150 and 500 transcript lines.
-- Beats under 150 lines should usually be merged with an adjacent beat, especially at the beginning or end of the transcript, unless there is a strong scene break or day transition.
-- Beats over 500 lines should usually be split at natural sub-points.
-- Treat combat as one beat unless that beat would exceed 500 transcript lines.
+  If the source clearly moves into a new day, prefer a beat split there unless it would create a trivial fragment.
+- For transcript sources, aim for beats between 150 and 500 source lines.
+- For transcript sources, beats under 150 lines should usually be merged with an adjacent beat, especially at the beginning or end of the session, unless there is a strong scene break or day transition.
+- For transcript sources, beats over 500 lines should usually be split at natural sub-points.
+- For note-based or other non-transcript sources, do not apply transcript-size heuristics mechanically.
+  Short total input length is normal and is not, by itself, a reason to collapse the session into one beat.
+- For non-transcript sources, preserve meaningful scene, objective, location, chronology, or framing transitions even when the resulting beats are small.
+- For non-transcript sources, prefer multiple small beats over one omnibus beat when the source clearly covers multiple events or scenes.
+- For `scope=arc`, if the normalized source has explicit `Session N` headings, default to one beat per session heading unless a heading clearly contains multiple major scenes that need separation.
+- Treat combat as one beat unless that beat would exceed 500 source lines in a transcript-derived source.
   If so, split the combat into contiguous sub-beats at natural tactical or narrative phase changes.
-- Exceptions to the 150-500 target range are allowed only when strongly justified by a real scene break or date transition.
-- Every beat must have `dateStart`.
+- Exceptions to the 150-500 target range apply to transcript-derived sources only.
+- Every beat must have a `dateResolution` of:
+  `exact`, `inferred`, or `unknown`
+- `dateStart` may be null only when `dateResolution` is `unknown`.
 - `dateEnd` is optional and should be used only when a single beat spans multiple consecutive days.
 - `timeWindow` is optional and must be one of:
   `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`
-- Beat `n+1` must either:
+- When adjacent beats both have usable dates, beat `n+1` must either:
   - stay on the same day as beat `n`, or
   - advance by exactly one day from beat `n`'s effective end date
-- Do not skip days between adjacent beats.
-  If the transcript covers multiple days in one continuous beat, use a date range within that beat instead.
+- Do not skip days between adjacent dated beats.
+  If the source covers multiple days in one continuous beat, use a date range within that beat instead.
 - Every beat should have:
   - a short title
   - a boundary reason
-  - date evidence
+  - date evidence, unless `dateResolution` is `unknown`
 - Beat titles should aim to be 6 words or fewer.
   Only exceed that when extra words are strictly needed for clarity.
 
 ## Date Inference
 
-Infer beat dates and time windows from the transcript and `session.yaml`.
+Infer beat dates and time windows from the source and `session.yaml`.
 
 Strong date/time evidence includes:
 
@@ -89,15 +96,16 @@ Strong date/time evidence includes:
 
 When date evidence is weak:
 
-- default to the prior beat's date
-- only advance the date when the transcript gives real support
+- default to the prior beat's date when that is still supported by the source structure
+- only advance the date when the source gives real support
 - omit `timeWindow` rather than guessing
+- if the source does not support a defensible date assignment, use `dateResolution: unknown` and leave date fields null instead of guessing
 
 ## Workflow
 
-1. Read `session.yaml` and the current cleaned transcript.
+1. Read `session.yaml` and the current cleaned source.
 2. If a glossary or dictionary is provided, load it once before reasoning about beats.
-3. Do a line-by-line boundary scan through the transcript.
+3. Do a line-by-line boundary scan through the source.
    For each local region, check for:
    - location shifts
    - objective shifts
@@ -106,14 +114,17 @@ When date evidence is weak:
    - day or time-of-day transitions
    - travel montage boundaries
 4. Draft an initial ordered beat list by first splitting on obvious scene transitions.
+   For non-transcript sources, treat headings, paragraph breaks, timeline bullets, and explicit event pivots as first-class boundary signals.
 5. Review the resulting scene-sized beats for size.
-   - merge very short beats unless a day transition or very strong scene break justifies them
+   - for transcript sources, merge very short beats unless a day transition or very strong scene break justifies them
+   - for non-transcript sources, do not merge solely because a beat is short; merge only when two adjacent units are clearly part of the same uninterrupted event
    - split long beats, especially long combats, at natural sub-points
 6. For each beat, assign:
    - `beatId`
    - `title`
    - `startUid`
    - `endUid`
+   - `dateResolution`
    - `dateStart`
    - optional `dateEnd`
    - optional `timeWindow`
@@ -148,7 +159,7 @@ python skills/transcript-splitter/scripts/manage_beats.py \
 
 The script is the source of truth for:
 
-- transcript coverage validation
+- source coverage validation
 - date sequencing validation
 - beat-size warnings
 - combat-size validation

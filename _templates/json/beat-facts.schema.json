@@ -112,16 +112,32 @@
         }
       }
     },
+    "unknownLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "context"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "unknown"
+        },
+        "context": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
     "mainEnemy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "role"],
+      "required": ["name"],
       "properties": {
         "name": {
           "type": "string",
           "minLength": 1
         },
-        "role": { "$ref": "#/$defs/mentionRole" },
         "notes": {
           "type": "string"
         }
@@ -180,7 +196,7 @@
           "minLength": 1
         },
         "dateStart": {
-          "type": "string",
+          "type": ["string", "null"],
           "format": "date"
         },
         "dateEnd": {
@@ -204,7 +220,8 @@
         "location": {
           "oneOf": [
             { "$ref": "#/$defs/fixedLocation" },
-            { "$ref": "#/$defs/journeyLocation" }
+            { "$ref": "#/$defs/journeyLocation" },
+            { "$ref": "#/$defs/unknownLocation" }
           ]
         },
         "npcs": {

@@ -1,0 +1,18 @@
+campaign: Test Campaign
+sessionNumber: 12
+realWorldDate: 2026-03-29
+drStart: 1730-01-25
+drEnd: 1730-01-25
+pcs:
+  - Ekko
+  - Justas
+  - Eolo
+participants:
+  - name: Maris
+    gameRole: DM
+  - name: Ekko
+    gameRole: Wizard
+  - name: Justas
+    gameRole: Fighter
+  - name: Eolo
+    gameRole: Bard

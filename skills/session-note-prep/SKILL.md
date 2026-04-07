@@ -1,0 +1,307 @@
+---
+name: session-note-prep
+description: Run the full RPG session-prep pipeline from a prepared session bundle through `session-recap.md`, branching between transcript cleanup and non-transcript source normalization before beat splitting, then continuing through `beat-annotator` and `session-summary` in either `auto` mode (no user pauses) or `interactive` mode (pause for cleanup and confirmation at the main checkpoints).
+---
+
+# Session Note Prep
+
+Use this skill to run the existing session pipeline end to end on one prepared bundle.
+
+This is an orchestration skill.
+It does not replace the stage-specific rules in the component skills.
+At each stage, load the next skill and follow its rules strictly:
+
+- [`../transcript-cleaner/SKILL.md`](../transcript-cleaner/SKILL.md)
+- [`../transcript-splitter/SKILL.md`](../transcript-splitter/SKILL.md)
+- [`../beat-annotator/SKILL.md`](../beat-annotator/SKILL.md)
+- [`../session-summary/SKILL.md`](../session-summary/SKILL.md)
+
+Prefer loading only the stage you are currently executing, not all four in full up front.
+
+## Required Inputs
+
+Work from a prepared session bundle with:
+
+- bundle root containing `cleaned/` and `sources/`
+- `cleaned/<bundle-stem>-session.yaml`
+- `cleaned/<bundle-stem>-source-prepared.md`
+- optional glossary or dictionary explicitly provided for this run
+
+Use `<bundle-stem>` as the canonical `file_prefix`.
+Derive it from the session manifest filename by stripping the trailing `-session`.
+
+In this repo, the cleaned transcript equivalent of `source.cleaned.md` should normally be:
+
+- `cleaned/<bundle-stem>-source-cleaned.md`
+
+Prefer these canonical downstream artifact paths in `cleaned/`:
+
+- `<bundle-stem>-beats.json`
+- `<bundle-stem>-beats-preview.md`
+- `<bundle-stem>-beat-facts.json`
+- `<bundle-stem>-beat-facts-preview.md`
+- `<bundle-stem>-session-summary-context.json`
+- `<bundle-stem>-session-recap.md`
+
+Stage-specific helper artifacts may live in subdirectories under `cleaned/`, for example:
+
+- `cleanup-artifacts/`
+- `annotation-context/`
+
+## Modes
+
+If the user does not specify a mode, default to `interactive`.
+
+### `auto`
+
+- Run all four stages in order.
+- After each stage, run the stage's deterministic validator or helper for a quick validation pass.
+- Make one narrow repair pass if the validator output is specific and easy to fix.
+- Do not pause for user confirmation between stages.
+- Do not ask for manual cleanup at checkpoint boundaries.
+- If a stage still has a hard blocker after the quick repair pass, stop the pipeline there and report the blocker clearly instead of pretending the next stage is reliable.
+
+### `interactive`
+
+- Run all four stages in order.
+- After transcript cleanup, transcript splitting, and beat annotation:
+  - run the validator
+  - summarize the current artifact state and warnings
+  - pause for user cleanup or confirmation before continuing
+- If the user edits an artifact during a checkpoint, reread it and rerun the validator before moving on.
+- Do not insert an extra checkpoint after `session-summary` unless the user explicitly asks for one.
+
+## Shared Rules
+
+- Honor the component skills' evidence rules and hard prohibitions, especially the ban on using files in `sources/` as correction or annotation evidence.
+- Treat validated downstream artifacts as the handoff between stages.
+- Do not silently weaken a stage's validation requirements just because this orchestrator is running the full pipeline.
+- Before starting a stage, check whether its expected bundle artifact already exists.
+- If an artifact already exists, validate it before trusting it.
+- If an existing artifact validates cleanly and its upstream dependencies also exist in the current bundle, reuse it and skip regenerating that stage.
+- If an existing artifact fails validation, treat that stage as incomplete: repair or regenerate it, then continue forward.
+- Do not rerun completed stages just because this is a full-pipeline skill.
+- Keep filenames stable across the run so later stages point at the current validated outputs.
+
+## Workflow
+
+1. Discover the bundle root and `cleaned/` directory.
+2. Resolve:
+   - `session_yaml = cleaned/<bundle-stem>-session.yaml`
+   - `prepared_transcript = cleaned/<bundle-stem>-source-prepared.md`
+   - `cleaned_transcript = cleaned/<bundle-stem>-source-cleaned.md`
+   - `beats_json = cleaned/<bundle-stem>-beats.json`
+   - `beat_facts_json = cleaned/<bundle-stem>-beat-facts.json`
+   - `summary_context_json = cleaned/<bundle-stem>-session-summary-context.json`
+   - `session_recap_md = cleaned/<bundle-stem>-session-recap.md`
+3. Check which stage outputs are already present in `cleaned/`.
+4. Validate and resume from the latest trustworthy stage instead of restarting automatically.
+   Use this order:
+   - if `session_recap_md` and `summary_context_json` exist and `manage_session_recap.py` passes, the pipeline is already complete
+   - else if `beat_facts_json` exists and `manage_beat_facts.py` passes, resume at `session-summary`
+   - else if `beats_json` exists and `manage_beats.py` passes, resume at `beat-annotator`
+   - else if `cleaned_transcript` exists and the upstream normalization/cleanup stage has already produced it, resume at `transcript-splitter`
+   - else start at transcript cleanup for `sourceType=transcript`, or source normalization for `sourceType=narrative|raw_notes`
+5. Create helper directories only if needed, for example:
+   - `cleaned/cleanup-artifacts/`
+   - `cleaned/annotation-context/`
+6. Run the remaining stages in order below.
+
+## Stage 1: Upstream Source Cleanup Or Normalization
+
+For `sourceType=transcript`, load `transcript-cleaner` before doing this stage.
+
+Produce `cleaned/<bundle-stem>-source-cleaned.md`.
+
+If `cleaned/<bundle-stem>-source-cleaned.md` already exists and is trustworthy, skip this stage and move to source splitting.
+
+For transcript bundles:
+
+Then run the diff report:
+
+```bash
+python skills/transcript-cleaner/scripts/report_cleanup_diff.py \
+  --original /path/to/cleaned/<bundle-stem>-source-prepared.md \
+  --cleaned /path/to/cleaned/<bundle-stem>-source-cleaned.md \
+  --output-dir /path/to/cleaned/cleanup-artifacts \
+  --file-prefix <bundle-stem>
+```
+
+For non-transcript bundles:
+
+Run:
+
+```bash
+python cli/session.py normalize-source \
+  --session /path/to/cleaned/<bundle-stem>-session.yaml \
+  --output-dir /path/to/cleaned \
+  --file-prefix <bundle-stem>
+```
+
+Quick-pass validation focus:
+
+- transcript bundles: header preservation, line-count preservation, unresolved markers, repeated correction drift
+- non-transcript bundles: sensible detected shape, useful primary units, preserved supplemental sources, omitted duplicate sections recorded in the normalization report
+
+Mode handling:
+
+- `auto`: do not pause; either fix narrow validation issues immediately or stop with a blocker report.
+- `interactive`: pause after the report is generated and validated or blocked.
+
+At the interactive checkpoint, provide:
+
+- path to the cleaned transcript
+- changed-line count and unresolved-marker count from the cleanup report
+- path to the cleanup summary markdown
+- a direct request for user cleanup or confirmation
+
+## Stage 2: Source Splitting
+
+Load `transcript-splitter` before doing this stage.
+
+If `beats_json` already exists, run the validator first.
+If it validates cleanly, skip regeneration and move to beat annotation.
+
+Otherwise, draft `beats_json`, then validate and render it with:
+
+```bash
+python skills/transcript-splitter/scripts/manage_beats.py \
+  --transcript /path/to/cleaned/<bundle-stem>-source-cleaned.md \
+  --session /path/to/cleaned/<bundle-stem>-session.yaml \
+  --beats-json /path/to/cleaned/<bundle-stem>-beats.json \
+  --output-dir /path/to/cleaned \
+  --file-prefix <bundle-stem>
+```
+
+Quick-pass validation focus:
+
+- full transcript coverage
+- beat order
+- date sequencing
+- suspiciously tiny or oversized beats
+- preview sanity
+
+Mode handling:
+
+- `auto`: revise once if the validator or preview reveals an obvious fix, then continue without asking.
+- `interactive`: pause after validation and preview generation.
+
+At the interactive checkpoint, provide:
+
+- path to `beats.json`
+- beat count
+- any validator warnings worth human review
+- path to `beats-preview.md`
+- a request for boundary/date/title cleanup or confirmation
+
+## Stage 3: Beat Annotation
+
+Load `beat-annotator` before doing this stage.
+
+If `beat_facts_json` already exists, validate it first.
+If it validates cleanly, skip regeneration and move to session summary.
+
+Otherwise, first extract deterministic beat context:
+
+```bash
+python skills/beat-annotator/scripts/extract_beat_context.py \
+  --transcript /path/to/cleaned/<bundle-stem>-source-cleaned.md \
+  --session /path/to/cleaned/<bundle-stem>-session.yaml \
+  --beats-json /path/to/cleaned/<bundle-stem>-beats.json \
+  --output-dir /path/to/cleaned/annotation-context \
+  --file-prefix <bundle-stem>
+```
+
+Then draft and validate beat facts:
+
+```bash
+python skills/beat-annotator/scripts/manage_beat_facts.py \
+  --session /path/to/cleaned/<bundle-stem>-session.yaml \
+  --beats-json /path/to/cleaned/<bundle-stem>-beats.json \
+  --beat-facts-json /path/to/cleaned/<bundle-stem>-beat-facts.json \
+  --output-dir /path/to/cleaned \
+  --file-prefix <bundle-stem>
+```
+
+Quick-pass validation focus:
+
+- beat/fact ordering alignment
+- missing facts
+- PCs incorrectly tagged as NPCs
+- location continuity problems
+- combat mismatches and preview sanity
+
+Mode handling:
+
+- `auto`: revise once if the validator exposes a narrow fix, then continue without asking.
+- `interactive`: pause after beat facts validate and preview cleanly enough for review.
+
+At the interactive checkpoint, provide:
+
+- path to `beat-facts.json`
+- path to `beat-facts-preview.md`
+- path to `annotation-context/<bundle-stem>-beat-context-index.md` if useful
+- any warnings or suspicious facts that merit human cleanup
+- a request for fact cleanup or confirmation
+
+## Stage 4: Session Summary
+
+Load `session-summary` before doing this stage.
+
+If both `summary_context_json` and `session_recap_md` already exist, run `manage_session_recap.py` first.
+If it validates cleanly, skip this stage and treat the bundle as already complete.
+
+Otherwise, build the deterministic context:
+
+```bash
+python skills/session-summary/scripts/build_session_summary_context.py \
+  --session /path/to/cleaned/<bundle-stem>-session.yaml \
+  --beats-json /path/to/cleaned/<bundle-stem>-beats.json \
+  --beat-facts-json /path/to/cleaned/<bundle-stem>-beat-facts.json \
+  --output-dir /path/to/cleaned \
+  --file-prefix <bundle-stem>
+```
+
+Build the recap scaffold:
+
+```bash
+python skills/session-summary/scripts/build_session_recap.py \
+  --context-json /path/to/cleaned/<bundle-stem>-session-summary-context.json \
+  --output-dir /path/to/cleaned \
+  --file-prefix <bundle-stem>
+```
+
+Then fill in the prose fields and validate:
+
+```bash
+python skills/session-summary/scripts/manage_session_recap.py \
+  --context-json /path/to/cleaned/<bundle-stem>-session-summary-context.json \
+  --session-recap-md /path/to/cleaned/<bundle-stem>-session-recap.md
+```
+
+Quick-pass validation focus:
+
+- all required sections present
+- no remaining `TODO` placeholders
+- Session Header title, tagline, summary, DM, and PCs are filled correctly
+- recap/timeline/combat block ordering preserved
+
+This stage completes the skill.
+Do not add an automatic pause after it in `interactive` mode unless the user asked for one.
+
+## Completion Criteria
+
+The run is complete when these files exist and pass their stage validations:
+
+- `cleaned/<bundle-stem>-source-cleaned.md`
+- `cleaned/<bundle-stem>-beats.json`
+- `cleaned/<bundle-stem>-beat-facts.json`
+- `cleaned/<bundle-stem>-session-summary-context.json`
+- `cleaned/<bundle-stem>-session-recap.md`
+
+If the run stops early, report:
+
+- the last completed stage
+- the blocking artifact path
+- the validator error or unresolved review issue
+- the next concrete action needed to continue

@@ -29,6 +29,10 @@ SOURCE_TYPE_CHOICES = [
     SOURCE_TYPE_RAW_NOTES,
 ]
 
+SCOPE_SESSION = "session"
+SCOPE_ARC = "arc"
+SCOPE_CHOICES = [SCOPE_SESSION, SCOPE_ARC]
+
 TRANSCRIPT_FORMAT_AUTO = "auto"
 TRANSCRIPT_FORMAT_LINES = "speaker_lines"
 TRANSCRIPT_FORMAT_VTT = "vtt"
@@ -88,7 +92,12 @@ def main() -> int:
         else None
     )
 
-    bundle_stem = build_bundle_stem(options["campaign"], options["sessionNumber"])
+    bundle_stem = build_bundle_stem(
+        options["campaign"],
+        options.get("sessionNumber"),
+        scope=options["scope"],
+        source_path=source_path,
+    )
     output_parent_dir = Path(options["outputDir"]).expanduser().resolve()
     output_dir = output_parent_dir / bundle_stem
     sources_dir = output_dir / "sources"
@@ -107,6 +116,10 @@ def main() -> int:
     archived_speaker_mappings_path = sources_dir / speaker_mappings_path.name if speaker_mappings_path else None
     archived_known_mistakes_path = (
         sources_dir / known_mistakes_path.name if known_mistakes_path else None
+    )
+    archived_supplemental_sources = archive_supplemental_sources(
+        options.get("supplementalSources", []),
+        sources_dir=sources_dir,
     )
 
     if options["sourceType"] == SOURCE_TYPE_TRANSCRIPT:
@@ -136,6 +149,10 @@ def main() -> int:
         source_archive_paths.append(archived_speaker_mappings_path)
     if archived_known_mistakes_path is not None:
         source_archive_paths.append(archived_known_mistakes_path)
+    for supplemental in archived_supplemental_sources:
+        archived_path = supplemental.get("archivedPath")
+        if archived_path is not None:
+            source_archive_paths.append(Path(archived_path))
 
     for path in [*output_paths, *source_archive_paths]:
         if path.exists() and not args.force:
@@ -182,6 +199,7 @@ def main() -> int:
         prepared_path=prepared_path,
         speaker_stats_path=speaker_stats_path if speaker_stats_payload is not None else None,
         participants=participants,
+        supplemental_sources=archived_supplemental_sources,
     )
 
     copy_file(source_path, archived_source_path)
@@ -191,6 +209,12 @@ def main() -> int:
         copy_file(speaker_mappings_path, archived_speaker_mappings_path)
     if known_mistakes_path is not None and archived_known_mistakes_path is not None:
         copy_file(known_mistakes_path, archived_known_mistakes_path)
+    for supplemental in archived_supplemental_sources:
+        source_value = supplemental.get("sourcePath")
+        archived_path = supplemental.get("archivedPath")
+        if source_value is None or archived_path is None:
+            continue
+        copy_file(Path(source_value), Path(archived_path))
 
     session_path.write_text(
         yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
@@ -218,6 +242,7 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     options = {
         "sourcePath": config.get("sourcePath"),
         "sourceType": config.get("sourceType"),
+        "scope": config.get("scope") or SCOPE_SESSION,
         "outputDir": config.get("outputDir"),
         "campaign": config.get("campaign"),
         "sessionNumber": config.get("sessionNumber"),
@@ -231,6 +256,8 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "narrativeUnit": config.get("narrativeUnit") or NARRATIVE_UNIT_SENTENCE,
         "minSpeakerFraction": config.get("minSpeakerFraction", 0.01),
         "knownMistakes": config.get("knownMistakes"),
+        "supplementalSources": normalize_supplemental_sources(config.get("supplementalSources")),
+        "sessionNote": normalize_session_note_config(config.get("sessionNote")),
     }
 
     required = [
@@ -238,20 +265,38 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "sourceType",
         "outputDir",
         "campaign",
-        "sessionNumber",
-        "realWorldDate",
         "participantsPath",
     ]
+    if options["scope"] == SCOPE_SESSION:
+        required.extend(["sessionNumber", "realWorldDate"])
     missing = [key for key in required if not options.get(key)]
     if missing:
         raise SystemExit("Missing required config fields: " + ", ".join(missing))
     if options["sourceType"] not in SOURCE_TYPE_CHOICES:
         raise SystemExit(f"Unsupported sourceType: {options['sourceType']}")
+    if options["scope"] not in SCOPE_CHOICES:
+        raise SystemExit(f"Unsupported scope: {options['scope']}")
     if options["transcriptFormat"] not in TRANSCRIPT_FORMAT_CHOICES:
         raise SystemExit(f"Unsupported transcriptFormat: {options['transcriptFormat']}")
     if options["narrativeUnit"] not in NARRATIVE_UNIT_CHOICES:
         raise SystemExit(f"Unsupported narrativeUnit: {options['narrativeUnit']}")
     return options
+
+
+def normalize_session_note_config(value: Any) -> Optional[Dict[str, str]]:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise SystemExit("sessionNote must be a mapping when provided.")
+    normalized = {
+        "templatePath": str(value.get("templatePath", "")).strip(),
+        "generatedRoot": str(value.get("generatedRoot", "")).strip(),
+        "publishedNotePath": str(value.get("publishedNotePath", "")).strip(),
+    }
+    missing = [key for key, item in normalized.items() if not item]
+    if missing:
+        raise SystemExit("sessionNote is missing required fields: " + ", ".join(missing))
+    return normalized
 
 
 def load_participants(path: Path) -> List[Dict[str, Any]]:
@@ -437,10 +482,19 @@ def resolve_transcript_format(source_path: Path, requested: str) -> str:
     return TRANSCRIPT_FORMAT_LINES
 
 
-def build_bundle_stem(campaign: Any, session_number: Any) -> str:
+def build_bundle_stem(
+    campaign: Any,
+    session_number: Any,
+    *,
+    scope: str,
+    source_path: Path,
+) -> str:
     campaign_slug = slugify_text(str(campaign))
     if not campaign_slug:
         raise SystemExit("Campaign must contain at least one alphanumeric character.")
+    if scope == SCOPE_ARC and session_number in (None, ""):
+        source_slug = slugify_text(source_path.stem) or "arc"
+        return f"{campaign_slug}-{source_slug}"
     try:
         session_number_int = int(session_number)
     except (TypeError, ValueError) as exc:
@@ -469,10 +523,12 @@ def build_session_manifest(
     prepared_path: Path,
     speaker_stats_path: Optional[Path],
     participants: Sequence[Dict[str, Any]],
+    supplemental_sources: Sequence[Dict[str, str]],
 ) -> Dict[str, Any]:
     manifest: Dict[str, Any] = {
         "schemaVersion": "1.0",
         "sourceType": options["sourceType"],
+        "scope": options["scope"],
         "campaign": options["campaign"],
         "sessionNumber": options["sessionNumber"],
         "realWorldDate": options["realWorldDate"],
@@ -486,6 +542,8 @@ def build_session_manifest(
         "participantsPath": str(participants_path),
         "preparedSourcePath": str(prepared_path),
     }
+    if supplemental_sources:
+        manifest["supplementalSources"] = list(supplemental_sources)
     if speaker_mappings_path is not None:
         manifest["speakerMappingsPath"] = str(speaker_mappings_path)
     if known_mistakes_path is not None:
@@ -496,6 +554,8 @@ def build_session_manifest(
             manifest["speakerStatsPath"] = str(speaker_stats_path)
     if options["sourceType"] == SOURCE_TYPE_NARRATIVE:
         manifest["narrativeUnit"] = options["narrativeUnit"]
+    if options.get("sessionNote") is not None:
+        manifest["sessionNote"] = dict(options["sessionNote"])
     return manifest
 
 
@@ -901,6 +961,47 @@ def prepare_raw_notes(*, source_path: Path, known_mistakes: Dict[str, str]) -> L
         if stripped:
             units.append(apply_known_mistakes(normalize_whitespace(stripped), known_mistakes))
     return [f"[u{index:04d}] {text}" for index, text in enumerate(units, start=1)]
+
+
+def normalize_supplemental_sources(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if not isinstance(value, list):
+        raise SystemExit("supplementalSources must be a list of file paths or URLs.")
+    normalized: List[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text:
+            normalized.append(text)
+    return normalized
+
+
+def archive_supplemental_sources(
+    supplemental_sources: Sequence[str],
+    *,
+    sources_dir: Path,
+) -> List[Dict[str, str]]:
+    archived: List[Dict[str, str]] = []
+    supplemental_dir = sources_dir / "supplemental"
+    for index, entry in enumerate(supplemental_sources, start=1):
+        if re.match(r"^https?://", entry, re.IGNORECASE):
+            archived.append({"original": entry, "archivedPath": entry})
+            continue
+        source_path = Path(entry).expanduser().resolve()
+        if not source_path.exists():
+            raise SystemExit(f"Supplemental source file not found: {source_path}")
+        destination = supplemental_dir / f"{index:02d}-{source_path.name}"
+        archived.append(
+            {
+                "original": entry,
+                "sourcePath": str(source_path),
+                "archivedPath": str(destination),
+            }
+        )
+    return archived
 
 
 def strip_note_prefix(line: str) -> str:

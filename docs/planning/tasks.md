@@ -20,8 +20,9 @@ That means the active path is now:
 2. cleaned transcript
 3. `beats.json`
 4. `beat-facts.json`
-5. session synthesis / rollup
-6. note generation
+5. `session-summary-context.json`
+6. `session-recap.md`
+7. note generation from reviewed recap
 
 Some of the older “scene” tasks below are still useful conceptually, but they should now be interpreted through a beat-first pipeline unless there is a strong reason to revive a separate scene layer.
 
@@ -37,14 +38,16 @@ Some of the older “scene” tasks below are still useful conceptually, but the
   - [x] beat NPC/item/organization facts
   - [x] beat combat facts
 - [x] Add deterministic beat-context extraction for either all beats or a single `beatId`.
+- [x] Implement deterministic validation + preview rendering for `beat-facts.json`.
+- [x] Build the `session-summary` skill around deterministic context plus structured `session-recap.md`.
 - [x] Add JSON Schemas under `_templates/json` for the current structured session-pipeline artifacts.
 
 ## Immediate Next Steps
 
-- [ ] Implement a deterministic `manage_beat_facts.py` validator/renderer for `beat-facts.json`.
+- [ ] Test the current splitter + beat-annotator + session-summary flow on a real session bundle and revise schemas/prompts based on actual edge cases.
 - [ ] Decide whether single-beat annotation should optionally load an existing `beat-facts.json` for prior-location inheritance.
-- [ ] Create a separate synthesis skill/artifact that rolls `beats.json` + `beat-facts.json` into a session-level summary JSON.
-- [ ] Test the current splitter + beat-annotator flow on a real session bundle and revise schemas based on actual edge cases.
+- [ ] Implement deterministic parsing from reviewed `session-recap.md` into downstream note artifacts.
+- [ ] Design the first deterministic session-note renderer that consumes parsed recap artifacts.
 
 ---
 
@@ -169,8 +172,8 @@ Need to figure out how to optimize...
 - [x] Define the canonical `beats.json` structure.
 - [x] Define the initial `beat-facts.json` structure.
 - [x] Define JSON Schemas for the current structured beat/bundle artifacts under `_templates/json`.
-- [ ] Implement deterministic validation for `beat-facts.json`.
-- [ ] Add a rendered preview artifact for `beat-facts.json`, similar to the beat preview.
+- [x] Implement deterministic validation for `beat-facts.json`.
+- [x] Add a rendered preview artifact for `beat-facts.json`, similar to the beat preview.
 - [ ] Decide whether `beat-facts.json` should preserve per-field provenance/evidence references, or keep V1 fully summary-level.
 - [ ] Test beat-facts on at least one real session and revise enum values / field names where the current design is awkward.
 
@@ -213,17 +216,19 @@ Need to figure out how to optimize...
 
 ## M4 – Bullets → Narrative → Session Note
 
-### C3b. Session synthesis (`session-summary.json`)
+### C3b. Session recap synthesis (`session-recap.md`)
 
-- [ ] Define the schema for the rolled-up session artifact that consumes `beats.json` + `beat-facts.json`.
-- [ ] Decide which session-level outputs belong in synthesis vs note rendering:
-  - [ ] cast of characters
-  - [ ] places visited
-  - [ ] combat tracker
-  - [ ] notable items / organizations
-  - [ ] session recap / opening summary
-- [ ] Implement a separate synthesis skill or script that merges beat-local facts into session-level entities and summaries.
-- [ ] Decide whether session synthesis should emit note-ready markdown fragments, JSON only, or both.
+- [x] Define the structured markdown shape for the rolled-up session recap that consumes `beats.json` + `beat-facts.json`.
+- [x] Decide which session-level outputs belong in synthesis vs note rendering:
+  - [x] cast of characters
+  - [x] places visited
+  - [x] combat tracker
+  - [x] notable items / organizations
+  - [x] session recap / opening summary
+- [x] Implement a separate synthesis skill or script that merges beat-local facts into a machine-parseable markdown recap.
+- [x] Implement deterministic markdown validation for reviewed `session-recap.md`.
+- [ ] Implement deterministic parsing from reviewed recap markdown into downstream note artifacts.
+- [ ] Iterate on recap prose quality and compaction using real session outputs.
 
 ### C4. Narrative + timeline (`generate_narrative.py`)
 
@@ -238,20 +243,14 @@ Need to figure out how to optimize...
 ### C5. Session note assembly (`generate_session_note.py`)
 
 - [ ] Extract your current Obsidian session-note template into a standalone template file (Jinja or simple string formatting).
-- [ ] Define a `session_config.yaml` format with:
-  - [ ] Session ID, title, date.
-  - [ ] Campaign/location tags.
-  - [ ] Optional manual notes to inject.
+- [ ] Define the parsed artifact shape that comes out of reviewed `session-recap.md`.
 - [ ] Implement `generate_session_note.py` that:
-  - [ ] Reads `session.scene_summaries.json` and `session.scene_narratives.json`.
-  - [ ] Reads `session_config.yaml`.
+  - [ ] Reads parsed recap artifacts from reviewed `session-recap.md`.
   - [ ] Outputs a Markdown session note matching your template.
 - [ ] Add a “rebuild note” mode that:
-  - [ ] Re-renders the note entirely from existing JSON artifacts without calling any LLMs.
+  - [ ] Re-renders the note entirely from reviewed recap artifacts without calling any LLMs.
   - [ ] Allows template changes to be applied retroactively.
-- [ ] Implement simple combat extraction inside note generation:
-  - [ ] Use `is_combat` flags or heuristics on scenes.
-  - [ ] Collect combat-related bullets into a “Combats” section in the note.
+- [ ] Decide whether any additional note-only metadata should be layered in after recap review, or whether the reviewed recap is the complete authoring boundary.
 
 ---
 

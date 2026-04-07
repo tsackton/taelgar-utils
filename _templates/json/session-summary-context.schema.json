@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taelgar-utils.local/schemas/session-summary-context.schema.json",
+  "title": "Session Summary Context",
+  "description": "Schema for <prefix>-session-summary-context.json produced by the session-summary skill.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sessionPath",
+    "beatsPath",
+    "beatFactsPath",
+    "session",
+    "timelineBlocks",
+    "recapBlocks",
+    "recapExtrasCandidates",
+    "worldCandidates"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+    "sessionPath": { "type": "string", "minLength": 1 },
+    "beatsPath": { "type": "string", "minLength": 1 },
+    "beatFactsPath": { "type": "string", "minLength": 1 },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaign", "scope", "sessionNumber", "realWorldDate", "drStart", "drEnd"],
+      "properties": {
+        "campaign": { "type": ["string", "null"] },
+        "scope": { "type": "string", "enum": ["session", "arc"] },
+        "sessionNumber": { "type": ["integer", "string", "null"] },
+        "realWorldDate": { "type": ["string", "null"], "format": "date" },
+        "drStart": { "type": ["string", "null"], "format": "date" },
+        "drEnd": { "type": ["string", "null"], "format": "date" }
+      }
+    },
+    "timelineBlocks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/timelineBlock" }
+    },
+    "recapBlocks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/recapBlock" }
+    },
+    "recapExtrasCandidates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cast", "combats", "majorLocations"],
+      "properties": {
+        "cast": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/namedCandidate" }
+        },
+        "combats": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/combatCandidate" }
+        },
+        "majorLocations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/namedCandidate" }
+        }
+      }
+    },
+    "worldCandidates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encountered", "mentioned"],
+      "properties": {
+        "encountered": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["npcs", "locations", "organizations", "items"],
+          "properties": {
+            "npcs": { "type": "array", "items": { "$ref": "#/$defs/worldEntry" } },
+            "locations": { "type": "array", "items": { "$ref": "#/$defs/locationEntry" } },
+            "organizations": { "type": "array", "items": { "$ref": "#/$defs/worldEntry" } },
+            "items": { "type": "array", "items": { "$ref": "#/$defs/worldEntry" } }
+          }
+        },
+        "mentioned": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["npcs", "locations", "organizations", "items"],
+          "properties": {
+            "npcs": { "type": "array", "items": { "$ref": "#/$defs/mentionedEntry" } },
+            "locations": { "type": "array", "items": { "$ref": "#/$defs/mentionedEntry" } },
+            "organizations": { "type": "array", "items": { "$ref": "#/$defs/mentionedEntry" } },
+            "items": { "type": "array", "items": { "$ref": "#/$defs/mentionedEntry" } }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nameList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "transcriptRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startUid", "endUid"],
+      "properties": {
+        "startUid": { "type": "string", "pattern": "^u\\d{4,}$" },
+        "endUid": { "type": "string", "pattern": "^u\\d{4,}$" }
+      }
+    },
+    "timelineBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blockId",
+        "dateStart",
+        "dateEnd",
+        "timeWindow",
+        "resolution",
+        "beatIds",
+        "locationRefs",
+        "npcRefs",
+        "organizationRefs",
+        "itemRefs",
+        "combatBeatIds",
+        "sourceShortSummaries",
+        "sourceLongSummaries"
+      ],
+      "properties": {
+        "blockId": { "type": "string", "minLength": 1 },
+        "dateStart": { "type": ["string", "null"], "format": "date" },
+        "dateEnd": { "type": ["string", "null"], "format": "date" },
+        "timeWindow": { "type": ["string", "null"] },
+        "resolution": { "type": "string", "enum": ["date-range", "day", "part-of-day", "undated"] },
+        "beatIds": { "$ref": "#/$defs/nameList" },
+        "locationRefs": { "$ref": "#/$defs/nameList" },
+        "npcRefs": { "$ref": "#/$defs/nameList" },
+        "organizationRefs": { "$ref": "#/$defs/nameList" },
+        "itemRefs": { "$ref": "#/$defs/nameList" },
+        "combatBeatIds": { "$ref": "#/$defs/nameList" },
+        "sourceShortSummaries": { "$ref": "#/$defs/nameList" },
+        "sourceLongSummaries": { "$ref": "#/$defs/nameList" }
+      }
+    },
+    "recapBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blockId",
+        "kind",
+        "title",
+        "beatIds",
+        "sourceRange",
+        "sourceRanges",
+        "dateStart",
+        "dateEnd",
+        "timeWindow",
+        "resolution",
+        "locationRefs",
+        "npcRefs",
+        "organizationRefs",
+        "itemRefs",
+        "combatEnemyRefs",
+        "sourceShortSummaries",
+        "sourceLongSummaries"
+      ],
+      "properties": {
+        "blockId": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["beat", "combat"] },
+        "title": { "type": "string", "minLength": 1 },
+        "beatIds": { "$ref": "#/$defs/nameList" },
+        "sourceRange": { "$ref": "#/$defs/transcriptRange" },
+        "sourceRanges": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transcriptRange" }
+        },
+        "dateStart": { "type": ["string", "null"], "format": "date" },
+        "dateEnd": { "type": ["string", "null"], "format": "date" },
+        "timeWindow": { "type": ["string", "null"] },
+        "resolution": { "type": "string", "enum": ["date-range", "day", "part-of-day", "undated"] },
+        "locationRefs": { "$ref": "#/$defs/nameList" },
+        "npcRefs": { "$ref": "#/$defs/nameList" },
+        "organizationRefs": { "$ref": "#/$defs/nameList" },
+        "itemRefs": { "$ref": "#/$defs/nameList" },
+        "combatEnemyRefs": { "$ref": "#/$defs/nameList" },
+        "sourceShortSummaries": { "$ref": "#/$defs/nameList" },
+        "sourceLongSummaries": { "$ref": "#/$defs/nameList" }
+      }
+    },
+    "namedCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "beatIds", "relationKinds"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "beatIds": { "$ref": "#/$defs/nameList" },
+        "relationKinds": { "$ref": "#/$defs/nameList" }
+      }
+    },
+    "combatCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockId", "beatIds", "enemyRefs", "dateStart", "dateEnd"],
+      "properties": {
+        "blockId": { "type": "string", "minLength": 1 },
+        "beatIds": { "$ref": "#/$defs/nameList" },
+        "enemyRefs": { "$ref": "#/$defs/nameList" },
+        "dateStart": { "type": ["string", "null"], "format": "date" },
+        "dateEnd": { "type": ["string", "null"], "format": "date" }
+      }
+    },
+    "historyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "dateStart", "dateEnd"],
+      "properties": {
+        "location": { "type": "string", "minLength": 1 },
+        "dateStart": { "type": "string", "format": "date" },
+        "dateEnd": { "type": ["string", "null"], "format": "date" }
+      }
+    },
+    "visitEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dateStart", "dateEnd", "kind"],
+      "properties": {
+        "dateStart": { "type": "string", "format": "date" },
+        "dateEnd": { "type": ["string", "null"], "format": "date" },
+        "kind": { "type": "string", "enum": ["visited", "traveled-through"] }
+      }
+    },
+    "mentionedEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "contextHint": { "type": ["string", "null"] }
+      }
+    },
+    "worldEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "relationKinds", "contextHint", "beatIds", "history"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "relationKinds": { "$ref": "#/$defs/nameList" },
+        "contextHint": { "type": ["string", "null"] },
+        "beatIds": { "$ref": "#/$defs/nameList" },
+        "history": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/historyEntry" }
+        }
+      }
+    },
+    "locationEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "relationKinds", "contextHint", "beatIds", "visits"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "relationKinds": { "$ref": "#/$defs/nameList" },
+        "contextHint": { "type": ["string", "null"] },
+        "beatIds": { "$ref": "#/$defs/nameList" },
+        "visits": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/visitEntry" }
+        }
+      }
+    }
+  }
+}

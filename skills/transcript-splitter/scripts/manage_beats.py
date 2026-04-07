@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Validate and render transcript beat artifacts."""
+"""Validate and render source beat artifacts."""
 
 from __future__ import annotations
 
@@ -16,22 +16,23 @@ from typing import Any, Dict, List, Optional, Sequence
 import yaml
 
 
-TRANSCRIPT_LINE_RE = re.compile(r"^(?P<header>\[(?P<uid>u\d{4,})\s*\|[^\]]+\])\s(?P<text>.*)$")
+SOURCE_LINE_RE = re.compile(r"^(?P<header>\[(?P<uid>u\d{4,})(?:\s*\|[^\]]+)?\])\s*(?P<text>.*)$")
 VALID_TIME_WINDOWS = {"dawn", "morning", "midday", "afternoon", "evening", "night"}
+VALID_DATE_RESOLUTIONS = {"exact", "inferred", "unknown"}
 TARGET_MIN_LINES = 150
 TARGET_MAX_LINES = 500
 TITLE_WORD_TARGET = 6
 
 
 @dataclass(frozen=True)
-class TranscriptLine:
+class SourceLine:
     uid: str
     text: str
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate and render beat artifacts.")
-    parser.add_argument("--transcript", type=Path, required=True, help="Cleaned transcript path.")
+    parser.add_argument("--transcript", type=Path, required=True, help="Cleaned source path.")
     parser.add_argument("--session", type=Path, required=True, help="session.yaml path.")
     parser.add_argument("--beats-json", type=Path, required=True, help="Beat JSON path.")
     parser.add_argument("--output-dir", type=Path, required=True, help="Directory for final beat artifacts.")
@@ -61,7 +62,7 @@ def main() -> int:
     assert_not_in_sources_dir(session_path, "--session")
     assert_not_in_sources_dir(beats_input_path, "--beats-json")
 
-    transcript_lines = read_transcript(transcript_path)
+    transcript_lines = read_source_lines(transcript_path)
     session_payload = read_yaml_mapping(session_path)
     beats_payload = read_json_mapping(beats_input_path)
     beats = finalize_beats(parse_beats_payload(beats_payload), transcript_lines)
@@ -94,15 +95,15 @@ def main() -> int:
     return 0
 
 
-def read_transcript(path: Path) -> List[TranscriptLine]:
-    lines: List[TranscriptLine] = []
+def read_source_lines(path: Path) -> List[SourceLine]:
+    lines: List[SourceLine] = []
     for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not raw.strip():
             continue
-        match = TRANSCRIPT_LINE_RE.match(raw)
+        match = SOURCE_LINE_RE.match(raw)
         if not match:
-            raise SystemExit(f"Invalid cleaned transcript line in {path}:{line_number}: {raw}")
-        lines.append(TranscriptLine(uid=match.group("uid"), text=match.group("text")))
+            raise SystemExit(f"Invalid cleaned source line in {path}:{line_number}: {raw}")
+        lines.append(SourceLine(uid=match.group("uid"), text=match.group("text")))
     return lines
 
 
@@ -145,6 +146,7 @@ def parse_beats_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
             "dateStart": normalize_optional_string(raw.get("dateStart")),
             "dateEnd": normalize_optional_string(raw.get("dateEnd")),
             "timeWindow": normalize_optional_string(raw.get("timeWindow")),
+            "dateResolution": normalize_optional_string(raw.get("dateResolution")),
             "containsCombat": bool(raw.get("containsCombat", False)),
             "boundaryReason": str(raw.get("boundaryReason", "")).strip(),
             "dateEvidence": normalize_string_list(raw.get("dateEvidence")),
@@ -172,7 +174,7 @@ def normalize_string_list(value: Any) -> List[str]:
 
 def finalize_beats(
     beats: Sequence[Dict[str, Any]],
-    transcript_lines: Sequence[TranscriptLine],
+    transcript_lines: Sequence[SourceLine],
 ) -> List[Dict[str, Any]]:
     uid_to_index = build_uid_index(transcript_lines)
     finalized: List[Dict[str, Any]] = []
@@ -185,6 +187,8 @@ def finalize_beats(
             raise SystemExit(f"Beat has inverted uid range: {beat['beatId']}")
         finalized_beat = deepcopy(beat)
         finalized_beat["lineCount"] = end_index - start_index + 1
+        if normalize_optional_string(finalized_beat.get("dateResolution")) is None:
+            finalized_beat["dateResolution"] = "unknown" if finalized_beat.get("dateStart") is None else "exact"
         finalized_beat["dateEvidence"] = dedupe_preserve_order(finalized_beat["dateEvidence"])
         finalized.append(finalized_beat)
     return finalized
@@ -193,17 +197,18 @@ def finalize_beats(
 def validate_beats(
     *,
     beats: Sequence[Dict[str, Any]],
-    transcript_lines: Sequence[TranscriptLine],
+    transcript_lines: Sequence[SourceLine],
     session_payload: Dict[str, Any],
 ) -> tuple[List[str], List[str]]:
     errors: List[str] = []
     warnings: List[str] = []
     uid_to_index = build_uid_index(transcript_lines)
     covered_indices: List[int] = []
+    source_type = normalize_optional_string(session_payload.get("sourceType")) or "transcript"
 
     previous_end_index: Optional[int] = None
     previous_end_date: Optional[date] = parse_optional_date(session_payload.get("drStart"))
-    previous_date_end: Optional[date] = None
+    previous_date_end: Optional[date] = previous_end_date
 
     seen_ids: set[str] = set()
     for beat in beats:
@@ -241,56 +246,69 @@ def validate_beats(
         if time_window is not None and time_window not in VALID_TIME_WINDOWS:
             errors.append(f"{beat_id} has invalid timeWindow: {time_window}")
 
+        date_resolution = normalize_optional_string(beat.get("dateResolution")) or "unknown"
+        if date_resolution not in VALID_DATE_RESOLUTIONS:
+            errors.append(f"{beat_id} has invalid dateResolution: {date_resolution}")
+
         date_start = parse_optional_date(beat.get("dateStart"))
-        if date_start is None:
-            errors.append(f"{beat_id} is missing dateStart.")
-            continue
-        date_end = parse_optional_date(beat.get("dateEnd")) or date_start
-        if date_end < date_start:
-            errors.append(f"{beat_id} has dateEnd before dateStart.")
-        if previous_end_date is not None:
-            if date_start != previous_end_date and date_start != previous_end_date + timedelta(days=1):
-                errors.append(
-                    f"{beat_id} violates day sequencing: {date_start.isoformat()} does not match "
-                    f"{previous_end_date.isoformat()} or the next day."
-                )
-        previous_end_date = date_end
+        if date_resolution == "unknown":
+            if date_start is not None:
+                warnings.append(f"{beat_id} sets dateStart even though dateResolution=unknown.")
+            if beat.get("dateEvidence"):
+                warnings.append(f"{beat_id} includes dateEvidence even though dateResolution=unknown.")
+            date_end = None
+            previous_end_date = None
+        else:
+            if date_start is None:
+                errors.append(f"{beat_id} is missing dateStart.")
+                continue
+            date_end = parse_optional_date(beat.get("dateEnd")) or date_start
+            if date_end < date_start:
+                errors.append(f"{beat_id} has dateEnd before dateStart.")
+            if previous_end_date is not None:
+                if date_start != previous_end_date and date_start != previous_end_date + timedelta(days=1):
+                    errors.append(
+                        f"{beat_id} violates day sequencing: {date_start.isoformat()} does not match "
+                        f"{previous_end_date.isoformat()} or the next day."
+                    )
+            previous_end_date = date_end
 
         if not beat.get("boundaryReason"):
             errors.append(f"{beat_id} is missing boundaryReason.")
-        if not beat.get("dateEvidence"):
+        if date_resolution != "unknown" and not beat.get("dateEvidence"):
             errors.append(f"{beat_id} is missing dateEvidence.")
 
-        if bool(beat.get("containsCombat")) and expected_line_count > TARGET_MAX_LINES:
+        if source_type == "transcript" and bool(beat.get("containsCombat")) and expected_line_count > TARGET_MAX_LINES:
             errors.append(f"{beat_id} is a combat beat with {expected_line_count} lines (> {TARGET_MAX_LINES}).")
 
-        if expected_line_count < TARGET_MIN_LINES:
-            if previous_date_end is None or date_start == previous_date_end:
+        if source_type == "transcript":
+            if expected_line_count < TARGET_MIN_LINES:
+                if previous_date_end is None or date_start == previous_date_end:
+                    warnings.append(
+                        f"{beat_id} is short at {expected_line_count} lines; consider merging unless a strong scene break or day transition justifies it."
+                    )
+                else:
+                    warnings.append(
+                        f"{beat_id} is short at {expected_line_count} lines, but a day transition may justify it."
+                    )
+            elif expected_line_count > TARGET_MAX_LINES:
                 warnings.append(
-                    f"{beat_id} is short at {expected_line_count} lines; consider merging unless a strong scene break or day transition justifies it."
+                    f"{beat_id} is long at {expected_line_count} lines; consider splitting unless a strong scene break or date structure justifies it."
                 )
-            else:
-                warnings.append(
-                    f"{beat_id} is short at {expected_line_count} lines, but a day transition may justify it."
-                )
-        elif expected_line_count > TARGET_MAX_LINES:
-            warnings.append(
-                f"{beat_id} is long at {expected_line_count} lines; consider splitting unless a strong scene break or date structure justifies it."
-            )
 
-        previous_date_end = date_end
+        previous_date_end = date_end or previous_date_end
 
     if len(covered_indices) != len(transcript_lines):
         errors.append(
-            f"Transcript coverage mismatch: beats cover {len(covered_indices)} lines, transcript has {len(transcript_lines)}."
+            f"Source coverage mismatch: beats cover {len(covered_indices)} lines, source has {len(transcript_lines)}."
         )
     elif sorted(covered_indices) != list(range(len(transcript_lines))):
-        errors.append("Transcript coverage has gaps or overlaps.")
+        errors.append("Source coverage has gaps or overlaps.")
 
     return errors, warnings
 
 
-def build_uid_index(transcript_lines: Sequence[TranscriptLine]) -> Dict[str, int]:
+def build_uid_index(transcript_lines: Sequence[SourceLine]) -> Dict[str, int]:
     return {line.uid: index for index, line in enumerate(transcript_lines)}
 
 
@@ -319,7 +337,7 @@ def render_preview(payload: Dict[str, Any], warnings: Sequence[str]) -> str:
     lines = [
         "# Beats Preview",
         "",
-        f"- Source transcript: {payload['sourceTranscriptPath']}",
+        f"- Source: {payload['sourceTranscriptPath']}",
         f"- Session file: {payload['sessionPath']}",
         f"- Beat count: {len(beats)}",
         "",
@@ -335,16 +353,22 @@ def render_preview(payload: Dict[str, Any], warnings: Sequence[str]) -> str:
         lines.append("")
         lines.append(f"- Range: `{beat['startUid']}` → `{beat['endUid']}`")
         lines.append(f"- Lines: {beat['lineCount']}")
-        if beat.get("dateEnd"):
+        if beat.get("dateResolution") == "unknown":
+            lines.append("- Date: unknown")
+        elif beat.get("dateEnd"):
             lines.append(f"- Date: {beat['dateStart']} to {beat['dateEnd']}")
         else:
             lines.append(f"- Date: {beat['dateStart']}")
+        lines.append(f"- Date Resolution: {beat.get('dateResolution') or 'unknown'}")
         lines.append(f"- Time Window: {beat.get('timeWindow') or 'unknown'}")
         lines.append(f"- Combat: {'yes' if beat.get('containsCombat') else 'no'}")
         lines.append(f"- Boundary Reason: {beat['boundaryReason']}")
         lines.append("- Date Evidence:")
-        for item in beat["dateEvidence"]:
-            lines.append(f"  - {item}")
+        if beat["dateEvidence"]:
+            for item in beat["dateEvidence"]:
+                lines.append(f"  - {item}")
+        else:
+            lines.append("  - none")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -353,7 +377,7 @@ def print_summary(beats: Sequence[Dict[str, Any]], warnings: Sequence[str]) -> N
     combat_count = sum(1 for beat in beats if beat.get("containsCombat"))
     print(
         f"Summary: {len(beats)} beats, {combat_count} combat beats, "
-        f"{sum(int(beat['lineCount']) for beat in beats)} transcript lines covered."
+        f"{sum(int(beat['lineCount']) for beat in beats)} source lines covered."
     )
     if warnings:
         print("Warnings:")

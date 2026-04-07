@@ -8,7 +8,7 @@ description: Produce `beat-facts.json` from finalized session beats without edit
 Use this skill when working from a cleaned session bundle:
 
 - `session.yaml`
-- cleaned transcript (`source.cleaned.md` or equivalent)
+- cleaned source (`source.cleaned.md`, `source-cleaned.md`, or equivalent)
 - finalized `beats.json`
 - optional campaign glossary or dictionary
 
@@ -21,7 +21,7 @@ Do not edit `beats.json`.
 Primary evidence:
 
 - `session.yaml`
-- the current cleaned transcript
+- the current cleaned source
 - finalized `beats.json`
 - an optional glossary or dictionary explicitly provided for this annotation run
 
@@ -36,7 +36,7 @@ This can include:
 - relevant notes elsewhere in the vault
 
 Use secondary evidence only to confirm canonical naming.
-Do not use it to invent facts that are not supported by the current cleaned transcript and beat ranges.
+Do not use it to invent facts that are not supported by the current cleaned source and beat ranges.
 
 ## Output Scope
 
@@ -90,7 +90,7 @@ For a journey beat:
 }
 ```
 
-If the location is not explicitly restated in a beat, prefer inheriting the same location as the previous beat unless the transcript clearly indicates a move or travel transition.
+If the location is not explicitly restated in a beat, prefer inheriting the same location as the previous beat unless the source clearly indicates a move or travel transition.
 Prefer the larger named place for `primary` on fixed beats, and put the more specific room, corridor, chamber, building, or local sub-area in `context`.
 For journey beats between sub-areas of a larger named place, use parenthetical forms in `from` and `to`, for example `warm fissure chamber (Zefya's Labyrinth)`.
 
@@ -161,7 +161,11 @@ Each beat should also include two summary fields:
 
 `longSummary` should be one short paragraph and work as the medium-detail view of the beat.
 
-The detailed view remains the transcript itself.
+For short note-based or other non-transcript sources, prefer a lightly cleaned rendering of the source material where possible.
+Stay close to the original event wording, sequence, and emphasis rather than aggressively paraphrasing.
+Condense only when the source is repetitive, fragmented, or too awkward to read directly.
+
+The detailed view remains the source itself.
 
 ## Combat Model
 
@@ -182,7 +186,6 @@ If the beat is part of a combat, use:
   "mainEnemies": [
     {
       "name": "Blackened Claw raiders",
-      "role": "encountered",
       "notes": "Primary hostile force in the fight."
     }
   ],
@@ -198,6 +201,7 @@ Use one combat phase from:
 - `full`
 
 Use `full` when the entire combat is contained within one beat.
+`mainEnemies` does not need a `role`; hostility is already implied by the field name.
 
 ## Canonical Output
 
@@ -265,22 +269,24 @@ If annotating only one beat, check for an existing `beat-facts.json` first so pr
 - Annotate only what is supported by the current beat context.
 - Prefer omission over guessing.
 - Canonicalize names when the glossary or broader campaign context clearly supports that identity.
-- Do not tag PCs or session participants as NPCs unless the transcript clearly refers to a distinct in-world NPC with the same name.
+- Do not tag PCs or session participants as NPCs unless the source clearly refers to a distinct in-world NPC with the same name.
 - Keep `shortSummary` to one sentence.
 - Keep `longSummary` to one short paragraph.
+- For short note-based or other non-transcript sources, `longSummary` should preserve as much of the cleaned source phrasing and event order as possible.
+  Do not flatten a multi-step note into a generic one-sentence paraphrase just because the beat is short.
 - Do not list every incidental mention.
   Only include NPCs, locations, items, and organizations that matter to understanding the beat.
 - Keep facts local to the beat.
-  Use broader context only to confirm names or to inherit the prior beat's location when the transcript supports continuity.
+  Use broader context only to confirm names or to inherit the prior beat's location when the source supports continuity.
 - Do not skip an NPC or location just because the transcript has not named it yet.
   If later beats make the identity clear, back-apply the canonical name to earlier beats in the same session.
   If later beats do not make the identity clear, keep a compact descriptive placeholder and explain it briefly in `notes`.
 
 ## Workflow
 
-1. Read `session.yaml`, the cleaned transcript, and finalized `beats.json`.
+1. Read `session.yaml`, the cleaned source, and finalized `beats.json`.
 2. If a glossary or dictionary is provided, load it once before annotating any beat.
-3. Run the helper script to extract beat context from the cleaned transcript.
+3. Run the helper script to extract beat context from the cleaned source.
 
 For all beats:
 
@@ -307,13 +313,24 @@ python skills/beat-annotator/scripts/extract_beat_context.py \
 
 4. Use the generated beat context file or files as the primary annotation input.
 5. Produce `<prefix>-beat-facts.json` containing only beat-level facts.
-6. Review for:
+6. Run the validator to generate the canonical JSON and review preview:
+
+```bash
+python skills/beat-annotator/scripts/manage_beat_facts.py \
+  --session /path/to/session.yaml \
+  --beats-json /path/to/beats.json \
+  --beat-facts-json /path/to/beat-facts.json \
+  --output-dir /path/to/annotation-artifacts \
+  --file-prefix addermarch-campaign-007
+```
+
+7. Review for:
    - unsupported NPCs or locations
    - PCs incorrectly tagged as NPCs
    - locations that should have been inherited from the prior beat
    - journey beats mislabeled as fixed beats
    - items or organizations that are too incidental to matter
-   - combat phases that do not match the transcript flow
+   - combat phases that do not match the source flow
    - summaries that are either too vague or too detailed
 
 ## Helper Outputs
@@ -348,6 +365,8 @@ For deferred naming:
 Avoid clutter:
 
 - do not write ornate summaries or session-note prose
+- for short note-based inputs, prefer lightly cleaned source phrasing over generic recap language
+- condense only when the source is repetitive, duplicative, or too fragmented to read clearly
 - do not include vague place descriptions unless they identify a meaningful location
 - do not include generic enemies unless they are named or treated as a distinct meaningful group
 - do not include incidental gear unless it matters in the beat

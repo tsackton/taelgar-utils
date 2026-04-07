@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "sourceTranscriptPath": "/tmp/source.cleaned.md",
+  "sessionPath": "/tmp/session.yaml",
+  "beats": [
+    {
+      "beatId": "b01",
+      "title": "Arrival at the Shrine",
+      "startUid": "u0001",
+      "endUid": "u0100",
+      "lineCount": 100,
+      "dateStart": "1372-05-14",
+      "dateEnd": null,
+      "timeWindow": "evening",
+      "containsCombat": false,
+      "boundaryReason": "Arrival scene",
+      "dateEvidence": ["The party arrives at dusk."]
+    },
+    {
+      "beatId": "b02",
+      "title": "The Ambush",
+      "startUid": "u0101",
+      "endUid": "u0200",
+      "lineCount": 100,
+      "dateStart": "1372-05-15",
+      "dateEnd": null,
+      "timeWindow": "morning",
+      "containsCombat": true,
+      "boundaryReason": "New day and combat",
+      "dateEvidence": ["After the long rest, the party leaves at dawn."]
+    }
+  ]
+}

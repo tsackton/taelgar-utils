@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0",
+  "beatsPath": "/tmp/old-beats.json",
+  "facts": [
+    {
+      "beatId": "b01",
+      "dateStart": "1999-01-01",
+      "dateEnd": "1999-01-02",
+      "timeWindow": "night",
+      "shortSummary": "The party reaches the shrine and gets its bearings.",
+      "longSummary": "The party arrives at the ruined shrine, takes stock of the site, and discusses what to do next before bedding down nearby.",
+      "location": {
+        "kind": "fixed",
+        "primary": "Ruined Shrine",
+        "context": "outer courtyard",
+        "notes": "The party is settling in here."
+      },
+      "npcs": [
+        {
+          "name": "Caretaker Nella",
+          "role": "encountered",
+          "context": "host",
+          "notes": "She greets the party at the shrine."
+        }
+      ],
+      "items": [],
+      "organizations": [],
+      "combat": {
+        "isCombat": false
+      }
+    },
+    {
+      "beatId": "b02",
+      "dateStart": "2000-01-01",
+      "dateEnd": null,
+      "timeWindow": "night",
+      "shortSummary": "Bandits spring an ambush on the road.",
+      "longSummary": "As the party departs the shrine the next morning, a bandit crew attacks from cover and forces an immediate roadside fight.",
+      "location": {
+        "kind": "journey",
+        "from": "Ruined Shrine",
+        "to": "South Road",
+        "context": "morning departure along the old road"
+      },
+      "npcs": [],
+      "items": [],
+      "organizations": [
+        {
+          "name": "Ashen Knives",
+          "role": "encountered",
+          "notes": "The bandit crew behind the ambush."
+        }
+      ],
+      "combat": {
+        "isCombat": true,
+        "phase": "full",
+        "mainEnemies": [
+          {
+            "name": "Ashen Knives raiders",
+            "notes": "Primary attackers."
+          }
+        ]
+      }
+    }
+  ]
+}
