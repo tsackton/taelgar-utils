@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0",
+  "beatsPath": "/tmp/beats.json",
+  "facts": [
+    {
+      "beatId": "beat-001",
+      "dateStart": "1730-01-25",
+      "dateEnd": null,
+      "timeWindow": "afternoon",
+      "shortSummary": "The party descends from the entrance bridge into Zeyfa's Labyrinth and feels its first branching tunnels shift from ordinary stone into something more alive and hostile.",
+      "longSummary": "After a short rest and a brief reorientation, the party helps Kalima down from the icy bridge into the labyrinth's entrance chamber, lights the way, and starts testing the first forked passages. The early routes lead through snowy, cramped stone tunnels and dead ends, and Ekko notes that unlike the Great Chasm's abandoned depths, this place feels active and alive as they press deeper toward a warmer chamber ahead.",
+      "location": {
+        "kind": "journey",
+        "from": "Zeyfa's Labyrinth (entrance chamber)",
+        "to": "Zeyfa's Labyrinth (deeper branching tunnels)",
+        "context": "descending from the ice bridge and probing the first forked passages within the labyrinth"
+      },
+      "npcs": [
+        {
+          "name": "Kalima",
+          "role": "companion",
+          "context": "frightened guide"
+        }
+      ],
+      "items": [
+        {
+          "name": "Romil's token",
+          "role": "encountered"
+        }
+      ],
+      "organizations": [],
+      "combat": {
+        "isCombat": false
+      }
+    },
+    {
+      "beatId": "beat-002",
+      "dateStart": "1730-01-25",
+      "dateEnd": null,
+      "timeWindow": "afternoon",
+      "shortSummary": "The party studies a warm fissure lined with ice ferns, watches the room grow more violent, and finally commits to crossing after Eolo's failed leap proves how dangerous it is.",
+      "longSummary": "The tunnels open into a broad chamber split by a dark crack with warm air rising from below and strange ice ferns waving at the edge. As the party experiments with light, distance, and possible routes, the wind and snow intensify around the fissure, Kalima grows more alarmed, and Eolo's slipping attempt shows that the crossing is riskier than it first looked; by the end of the beat, the group decides they have to get everyone across anyway.",
+      "location": {
+        "kind": "fixed",
+        "primary": "Zeyfa's Labyrinth",
+        "context": "warm fissure chamber, a wide room split by a dark crack with ice ferns and warm air below"
+      },
+      "npcs": [
+        {
+          "name": "Kalima",
+          "role": "companion",
+          "context": "alarmed witness"
+        }
+      ],
+      "items": [],
+      "organizations": [],
+      "combat": {
+        "isCombat": false
+      }
+    },
+    {
+      "beatId": "beat-003",
+      "dateStart": "1730-01-25",
+      "dateEnd": null,
+      "timeWindow": "afternoon",
+      "shortSummary": "The party forces a crossing over the fissure and pushes onward through storm-lashed corridors where the maze shifts and ice grows beneath every step.",
+      "longSummary": "Using flight, levitation, rope, and brute force, the party gets everyone across the fissure, with Justas briefly plunging into the gap and discovering a pocket of hot, lightless blackness inside it. Beyond the crossing, the labyrinth becomes harsher rather than safer: the wind howls, exits move, visibility drops, and ice thickens underfoot as the group follows changing passages deeper toward a side chamber ahead.",
+      "location": {
+        "kind": "journey",
+        "from": "Zeyfa's Labyrinth (warm fissure chamber)",
+        "to": "Zeyfa's Labyrinth (deeper storm passages)",
+        "context": "crossing the crack and navigating shifting icy corridors farther into the labyrinth"
+      },
+      "npcs": [
+        {
+          "name": "Kalima",
+          "role": "companion",
+          "context": "passenger through the crossing"
+        }
+      ],
+      "items": [],
+      "organizations": [],
+      "combat": {
+        "isCombat": false
+      }
+    }
+  ]
+}

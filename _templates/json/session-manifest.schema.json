@@ -8,9 +8,8 @@
   "required": [
     "schemaVersion",
     "sourceType",
+    "scope",
     "campaign",
-    "sessionNumber",
-    "realWorldDate",
     "participants",
     "sourceInputPath",
     "sourceConfigPath",
@@ -26,15 +25,19 @@
       "type": "string",
       "enum": ["transcript", "narrative", "raw_notes"]
     },
+    "scope": {
+      "type": "string",
+      "enum": ["session", "arc"]
+    },
     "campaign": {
       "type": "string",
       "minLength": 1
     },
     "sessionNumber": {
-      "type": "integer"
+      "type": ["integer", "null"]
     },
     "realWorldDate": {
-      "type": "string",
+      "type": ["string", "null"],
       "format": "date"
     },
     "drStart": {
@@ -71,6 +74,10 @@
       "type": "string",
       "minLength": 1
     },
+    "supplementalSources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/supplementalSource" }
+    },
     "speakerMappingsPath": {
       "type": "string",
       "minLength": 1
@@ -90,6 +97,9 @@
     "narrativeUnit": {
       "type": "string",
       "enum": ["sentence", "paragraph"]
+    },
+    "sessionNote": {
+      "$ref": "#/$defs/sessionNote"
     }
   },
   "$defs": {
@@ -113,6 +123,44 @@
             "minLength": 1
           },
           "uniqueItems": true
+        }
+      }
+    },
+    "supplementalSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["original", "archivedPath"],
+      "properties": {
+        "original": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourcePath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "archivedPath": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "sessionNote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["templatePath", "generatedRoot", "publishedNotePath"],
+      "properties": {
+        "templatePath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generatedRoot": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publishedNotePath": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }

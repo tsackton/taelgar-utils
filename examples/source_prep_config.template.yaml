@@ -1,5 +1,6 @@
 sourcePath: /absolute/path/to/session-input.vtt
 sourceType: transcript
+scope: session
 outputDir: /absolute/path/to/session-output
 
 campaign: ExampleCampaign
@@ -11,6 +12,12 @@ drStartTime:
 drEndTime:
 
 participantsPath: /absolute/path/to/participants.yaml
+supplementalSources: []
+
+sessionNote:
+  templatePath: _templates/session-notes/example-session.md
+  generatedRoot: Campaigns/Example Campaign/_generated/session-notes
+  publishedNotePath: Campaigns/Example Campaign/Sessions/Example Session 01.md
 
 transcriptFormat: auto
 narrativeUnit: sentence

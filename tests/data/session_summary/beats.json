@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "sourceTranscriptPath": "/tmp/source.cleaned.md",
+  "sessionPath": "/tmp/session.yaml",
+  "beats": [
+    {
+      "beatId": "beat-001",
+      "title": "Into the Labyrinth",
+      "startUid": "u0001",
+      "endUid": "u0100",
+      "lineCount": 100,
+      "dateStart": "1730-01-25",
+      "dateEnd": null,
+      "timeWindow": "afternoon",
+      "containsCombat": false,
+      "boundaryReason": "Initial descent",
+      "dateEvidence": ["The descent begins in the afternoon."]
+    },
+    {
+      "beatId": "beat-002",
+      "title": "The Warm Fissure",
+      "startUid": "u0101",
+      "endUid": "u0200",
+      "lineCount": 100,
+      "dateStart": "1730-01-25",
+      "dateEnd": null,
+      "timeWindow": "afternoon",
+      "containsCombat": false,
+      "boundaryReason": "Hazard study",
+      "dateEvidence": ["The party remains in the same afternoon exploration."]
+    },
+    {
+      "beatId": "beat-003",
+      "title": "Crossing Deeper In",
+      "startUid": "u0201",
+      "endUid": "u0300",
+      "lineCount": 100,
+      "dateStart": "1730-01-25",
+      "dateEnd": null,
+      "timeWindow": "afternoon",
+      "containsCombat": false,
+      "boundaryReason": "Crossing and deeper travel",
+      "dateEvidence": ["The whole sequence remains within the same afternoon push."]
+    }
+  ]
+}

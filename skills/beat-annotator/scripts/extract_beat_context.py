@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Extract beat-scoped transcript context for annotation workflows."""
+"""Extract beat-scoped source context for annotation workflows."""
 
 from __future__ import annotations
 
@@ -13,12 +13,12 @@ from typing import Any, Dict, List, Optional, Sequence
 import yaml
 
 
-TRANSCRIPT_LINE_RE = re.compile(r"^(?P<header>\[(?P<uid>u\d{4,})\s*\|[^\]]+\])\s(?P<text>.*)$")
+SOURCE_LINE_RE = re.compile(r"^(?P<header>\[(?P<uid>u\d{4,})(?:\s*\|[^\]]+)?\])\s*(?P<text>.*)$")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Extract beat transcript context for annotation.")
-    parser.add_argument("--transcript", type=Path, required=True, help="Cleaned transcript path.")
+    parser = argparse.ArgumentParser(description="Extract beat source context for annotation.")
+    parser.add_argument("--transcript", type=Path, required=True, help="Cleaned source path.")
     parser.add_argument("--session", type=Path, required=True, help="session.yaml path.")
     parser.add_argument("--beats-json", type=Path, required=True, help="Finalized beats.json path.")
     parser.add_argument("--output-dir", type=Path, required=True, help="Directory for extracted context files.")
@@ -55,10 +55,14 @@ def main() -> int:
     assert_not_in_sources_dir(session_path, "--session")
     assert_not_in_sources_dir(beats_path, "--beats-json")
 
-    transcript_lines = read_transcript(transcript_path)
+    transcript_lines = read_source_lines(transcript_path)
     session_payload = read_yaml_mapping(session_path)
     beats = parse_beats_payload(read_json_mapping(beats_path))
     uid_to_index = build_uid_index(transcript_lines)
+    supplemental_sources = load_supplemental_sources(
+        cleaned_dir=session_path.parent,
+        file_prefix=file_prefix,
+    )
 
     selected_beats = select_beats(beats, args.beat_id)
     contexts = []
@@ -74,6 +78,7 @@ def main() -> int:
                 transcript_lines=transcript_lines,
                 uid_to_index=uid_to_index,
                 session_payload=session_payload,
+                supplemental_sources=supplemental_sources,
             )
         )
 
@@ -85,6 +90,7 @@ def main() -> int:
         "sessionPath": str(session_path),
         "beatsPath": str(beats_path),
         "selectedBeatIds": [context["beat"]["beatId"] for context in contexts],
+        "supplementalSources": supplemental_sources,
         "contexts": contexts,
     }
     json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -121,14 +127,14 @@ def read_json_mapping(path: Path) -> Dict[str, Any]:
     return payload
 
 
-def read_transcript(path: Path) -> List[Dict[str, str]]:
+def read_source_lines(path: Path) -> List[Dict[str, str]]:
     lines: List[Dict[str, str]] = []
     for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not raw.strip():
             continue
-        match = TRANSCRIPT_LINE_RE.match(raw)
+        match = SOURCE_LINE_RE.match(raw)
         if not match:
-            raise SystemExit(f"Invalid cleaned transcript line in {path}:{line_number}: {raw}")
+            raise SystemExit(f"Invalid cleaned source line in {path}:{line_number}: {raw}")
         lines.append(
             {
                 "uid": match.group("uid"),
@@ -214,6 +220,7 @@ def build_beat_context(
     transcript_lines: Sequence[Dict[str, str]],
     uid_to_index: Dict[str, int],
     session_payload: Dict[str, Any],
+    supplemental_sources: Sequence[Dict[str, Any]],
 ) -> Dict[str, Any]:
     start_index = uid_to_index.get(beat["startUid"])
     end_index = uid_to_index.get(beat["endUid"])
@@ -239,7 +246,8 @@ def build_beat_context(
         "previousBeat": summarize_adjacent_beat(previous_beat),
         "nextBeat": summarize_adjacent_beat(next_beat),
         "session": summarize_session(session_payload),
-        "transcriptLines": beat_lines,
+        "sourceLines": beat_lines,
+        "supplementalSources": list(supplemental_sources),
     }
 
 
@@ -260,6 +268,8 @@ def summarize_session(session_payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "title": optional_string(session_payload.get("title")),
         "campaign": optional_string(session_payload.get("campaign")),
+        "scope": optional_string(session_payload.get("scope")),
+        "sourceType": optional_string(session_payload.get("sourceType")),
         "sessionNumber": session_payload.get("sessionNumber"),
         "drStart": optional_string(session_payload.get("drStart")),
         "drEnd": optional_string(session_payload.get("drEnd")),
@@ -283,7 +293,7 @@ def render_index(payload: Dict[str, Any]) -> str:
     lines = [
         "# Beat Context Index",
         "",
-        f"- Source transcript: {payload['sourceTranscriptPath']}",
+        f"- Source: {payload['sourceTranscriptPath']}",
         f"- Session file: {payload['sessionPath']}",
         f"- Beats file: {payload['beatsPath']}",
         f"- Selected beats: {len(payload['contexts'])}",
@@ -401,11 +411,49 @@ def render_context_markdown(context: Dict[str, Any]) -> str:
                 details.append(f"gameRole={entry['gameRole']}")
             lines.append(f"- {label}: {', '.join(details)}")
 
-    lines.extend(["", "## Transcript", ""])
-    for line in context["transcriptLines"]:
+    lines.extend(["", "## Source", ""])
+    for line in context["sourceLines"]:
         lines.append(line["raw"])
+    if context.get("supplementalSources"):
+        lines.extend(["", "## Supplemental Sources", ""])
+        for source in context["supplementalSources"]:
+            lines.append(f"### {source.get('label') or 'Supplemental'}")
+            lines.append("")
+            if source.get("original"):
+                lines.append(f"- Original: {source['original']}")
+            for line in source.get("lines", []):
+                lines.append(line)
+            lines.append("")
     lines.append("")
     return "\n".join(lines)
+
+
+def load_supplemental_sources(*, cleaned_dir: Path, file_prefix: str) -> List[Dict[str, Any]]:
+    structure_path = cleaned_dir / "normalization-artifacts" / f"{file_prefix}-source-structure.json"
+    if not structure_path.exists():
+        return []
+    payload = read_json_mapping(structure_path)
+    supplemental_sources = payload.get("supplementalSources")
+    if not isinstance(supplemental_sources, list):
+        return []
+    loaded: List[Dict[str, Any]] = []
+    for item in supplemental_sources:
+        if not isinstance(item, dict):
+            continue
+        path_text = optional_string(item.get("path"))
+        if path_text is None:
+            continue
+        source_path = Path(path_text).expanduser().resolve()
+        if not source_path.exists():
+            continue
+        loaded.append(
+            {
+                "label": optional_string(item.get("label")),
+                "original": optional_string(item.get("original")),
+                "lines": source_path.read_text(encoding="utf-8").splitlines(),
+            }
+        )
+    return loaded
 
 
 def safe_slug(value: str) -> str:

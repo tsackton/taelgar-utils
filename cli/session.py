@@ -18,6 +18,7 @@ COMMAND_TO_MODULE = {
     "clean-speakers": "taelgar_utils.session.clean_speakers",
     "process-zoom": "taelgar_utils.session.workflows.zoom",
     "prepare-source": "taelgar_utils.session.prepare_source",
+    "normalize-source": "taelgar_utils.session.normalize_source",
 }
 
 
