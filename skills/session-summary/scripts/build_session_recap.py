@@ -110,6 +110,7 @@ def render_session_header(
         heading,
         "",
         f"- Title: TODO",
+        f"- Desc Title: TODO",
         f"- Tagline: TODO",
         f"- One-Sentence Summary: TODO",
         f"- Campaign: {render_scalar(session.get('campaign'))}",
@@ -129,7 +130,9 @@ def render_timeline(blocks: Sequence[Dict[str, Any]]) -> List[str]:
         lines.append(f"### {format_display_date_span(block.get('dateStart'), block.get('dateEnd'))}{format_time_window(block.get('timeWindow'))}")
         lines.append("")
         lines.append(f"- Timeline Segment: {block['blockId']}")
-        lines.append(f"- Timeline Key: {format_timeline_key(block.get('dateStart'), block.get('timeWindow'))}")
+        lines.append(
+            f"- Timeline Key: {format_timeline_key(block.get('dateStart'), block.get('dateEnd'), block.get('timeWindow'))}"
+        )
         lines.append(f"- Resolution: {block['resolution']}")
         lines.append(f"- Beat IDs: {', '.join(block['beatIds'])}")
         lines.append(f"- Locations: {render_name_list(block.get('locationRefs', []))}")
@@ -258,11 +261,20 @@ def render_location_entries(entries: Sequence[Dict[str, Any]]) -> List[str]:
         return []
     lines: List[str] = []
     for entry in entries:
-        context_text = normalize_optional_string(entry.get("contextHint")) or "TODO"
-        lines.append(f"- {entry['name']}: {context_text}")
-        for visit in entry.get("visits", []):
-            lines.append(f"  - {visit['kind']} on {format_date_span(visit.get('dateStart'), visit.get('dateEnd'))}")
+        sublocations = normalize_optional_string(entry.get("contextHint")) or "TODO"
+        lines.append(f"- {entry['name']}")
+        lines.append("  - Summary: TODO")
+        lines.append(f"  - Sublocations: {sublocations}")
+        lines.append(f"  - Date Visited: {format_location_date_visited(entry.get('visits', []))}")
     return lines
+
+
+def format_location_date_visited(visits: Sequence[Dict[str, Any]]) -> str:
+    if not visits:
+        return "TODO"
+    first = visits[0]
+    last = visits[-1]
+    return format_date_span(first.get("dateStart"), last.get("dateEnd"))
 
 
 def render_mentioned_entries(entries: Sequence[Dict[str, Any]], relation_label: str) -> List[str]:
@@ -329,12 +341,15 @@ def format_display_date(date_text: str) -> str:
     return f"{month_names[month_text]} {day}{suffix}, {year_text}"
 
 
-def format_timeline_key(date_start: Optional[str], time_window: Optional[str]) -> str:
+def format_timeline_key(date_start: Optional[str], date_end: Optional[str], time_window: Optional[str]) -> str:
     if not date_start:
         return "undated"
+    key = f"(DR:: {date_start})"
+    if normalize_optional_string(date_end) and date_end != date_start:
+        key += f" - (DR_end:: {date_end})"
     if normalize_optional_string(time_window):
-        return f"(DR:: {date_start}), {time_window}"
-    return f"(DR:: {date_start})"
+        key += f", {time_window}"
+    return key
 
 
 def render_scalar(value: Any) -> str:

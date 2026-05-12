@@ -17,7 +17,6 @@ supplementalSources: []
 sessionNote:
   templatePath: _templates/session-notes/example-session.md
   generatedRoot: Campaigns/Example Campaign/_generated/session-notes
-  publishedNotePath: Campaigns/Example Campaign/Sessions/Example Session 01.md
 
 transcriptFormat: auto
 narrativeUnit: sentence

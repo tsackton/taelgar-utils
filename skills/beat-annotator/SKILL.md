@@ -165,6 +165,18 @@ For short note-based or other non-transcript sources, prefer a lightly cleaned r
 Stay close to the original event wording, sequence, and emphasis rather than aggressively paraphrasing.
 Condense only when the source is repetitive, fragmented, or too awkward to read directly.
 
+For transcript-based beats, preserve the concrete causal sequence and the distinctive scene-specific details that make the beat legible later.
+If the transcript clearly supports them, keep details such as:
+
+- who initiates the plan or action
+- what specific complication breaks or changes the plan
+- any unusual tactic, spell, disguise, translation step, or positioning detail that drives the scene
+- the concrete outcome or retreat state
+
+Do not flatten transcript-supported beats into generic labels like `the bluff fails`, `a skirmish breaks out`, or `they punish the troublemakers` when the source gives more exact wording.
+Prefer compact but specific phrasing that preserves what actually happened in order.
+The goal is that someone reading `longSummary` later can still reconstruct the scene without reopening the transcript.
+
 The detailed view remains the source itself.
 
 ## Combat Model

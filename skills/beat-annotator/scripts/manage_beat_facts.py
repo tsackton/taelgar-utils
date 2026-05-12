@@ -217,6 +217,7 @@ def finalize_fact(
         errors,
     )
     combat = finalize_combat(raw_fact.get("combat"), beat_id, errors)
+    timeline = finalize_timeline(raw_fact.get("timeline"), beat, beat_id, errors)
 
     for npc in npcs:
         if npc["name"].casefold() in participant_names:
@@ -241,6 +242,8 @@ def finalize_fact(
         "organizations": organizations,
         "combat": combat,
     }
+    if timeline is not None:
+        final_fact["timeline"] = timeline
     return final_fact, errors, warnings
 
 
@@ -355,6 +358,68 @@ def finalize_combat(raw_combat: Any, beat_id: str, errors: List[str]) -> Dict[st
     if notes is not None:
         combat["notes"] = notes
     return combat
+
+
+def finalize_timeline(
+    raw_timeline: Any,
+    beat: Dict[str, Any],
+    beat_id: str,
+    errors: List[str],
+) -> Optional[List[Dict[str, Any]]]:
+    if raw_timeline is None:
+        return None
+    if not isinstance(raw_timeline, list) or not raw_timeline:
+        errors.append(f"{beat_id} timeline must be a non-empty list when present.")
+        return None
+
+    finalized: List[Dict[str, Any]] = []
+    for index, raw_entry in enumerate(raw_timeline, start=1):
+        if not isinstance(raw_entry, dict):
+            errors.append(f"{beat_id} timeline[{index}] is not an object.")
+            continue
+        label = f"timeline[{index}]."
+        date_start = normalize_optional_string(raw_entry.get("dateStart")) or beat.get("dateStart")
+        date_end = normalize_optional_string(raw_entry.get("dateEnd"))
+        time_window = normalize_optional_string(raw_entry.get("timeWindow"))
+        if time_window is not None and time_window not in VALID_TIME_WINDOWS:
+            errors.append(f"{beat_id} {label}timeWindow has invalid value: {time_window}")
+        short_summary = required_string(raw_entry, "shortSummary", beat_id, errors, label)
+        long_summary = required_string(raw_entry, "longSummary", beat_id, errors, label)
+        entry: Dict[str, Any] = {
+            "dateStart": date_start,
+            "dateEnd": date_end,
+            "timeWindow": time_window,
+            "shortSummary": short_summary,
+            "longSummary": long_summary,
+        }
+        for field_name in ("locationRefs", "npcRefs", "organizationRefs", "itemRefs", "combatBeatIds"):
+            refs = finalize_string_list(raw_entry.get(field_name), beat_id, f"{label}{field_name}", errors)
+            if refs is not None:
+                entry[field_name] = refs
+        finalized.append(entry)
+    return finalized
+
+
+def finalize_string_list(
+    raw_values: Any,
+    beat_id: str,
+    field_name: str,
+    errors: List[str],
+) -> Optional[List[str]]:
+    if raw_values is None:
+        return None
+    if not isinstance(raw_values, list):
+        errors.append(f"{beat_id} {field_name} must be a list when present.")
+        return None
+    values: List[str] = []
+    for index, raw_value in enumerate(raw_values, start=1):
+        value = normalize_optional_string(raw_value)
+        if value is None:
+            errors.append(f"{beat_id} {field_name}[{index}] must be a non-empty string.")
+            continue
+        if value not in values:
+            values.append(value)
+    return values
 
 
 def required_string(

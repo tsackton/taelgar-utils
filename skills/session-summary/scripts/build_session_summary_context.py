@@ -111,6 +111,7 @@ def parse_beats_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
             {
                 "beatId": beat_id,
                 "title": required_string(raw, "title", beat_id),
+                "boundaryReason": normalize_optional_string(raw.get("boundaryReason")),
                 "startUid": required_string(raw, "startUid", beat_id),
                 "endUid": required_string(raw, "endUid", beat_id),
                 "dateStart": normalize_optional_string(raw.get("dateStart")),
@@ -173,7 +174,7 @@ def build_context_payload(
             "drStart": normalize_optional_string(session_payload.get("drStart")),
             "drEnd": normalize_optional_string(session_payload.get("drEnd")),
         },
-        "timelineBlocks": build_timeline_blocks(combined),
+        "timelineBlocks": build_timeline_blocks(expand_timeline_entries(combined)),
         "recapBlocks": build_recap_blocks(combined),
         "recapExtrasCandidates": build_recap_extras_candidates(combined),
         "worldCandidates": build_world_candidates(combined),
@@ -188,6 +189,7 @@ def combine_beat_and_fact(beat: Dict[str, Any], fact: Dict[str, Any]) -> Dict[st
     return {
         "beatId": beat["beatId"],
         "title": beat["title"],
+        "boundaryReason": beat.get("boundaryReason"),
         "dateStart": beat["dateStart"],
         "dateEnd": beat["dateEnd"],
         "timeWindow": beat["timeWindow"],
@@ -204,11 +206,42 @@ def combine_beat_and_fact(beat: Dict[str, Any], fact: Dict[str, Any]) -> Dict[st
         "locationRelationKinds": location_relation_kinds,
         "locationEvents": location_events,
         "locationContextHint": extract_location_context_hint(fact.get("location", {})),
+        "locationNotes": normalize_optional_string(fact.get("location", {}).get("notes")) if isinstance(fact.get("location"), dict) else None,
         "historyLocation": history_location,
         "npcRefs": npc_refs,
         "itemRefs": item_refs,
         "organizationRefs": organization_refs,
+        "timeline": list(fact.get("timeline", [])) if isinstance(fact.get("timeline"), list) else [],
     }
+
+
+def expand_timeline_entries(combined: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    timeline_entries: List[Dict[str, Any]] = []
+    for entry in combined:
+        custom_timeline = entry.get("timeline")
+        if not custom_timeline:
+            timeline_entries.append(entry)
+            continue
+        for timeline_index, timeline_entry in enumerate(custom_timeline, start=1):
+            expanded = dict(entry)
+            expanded["timelineEntryId"] = f"{entry['beatId']}:timeline-{timeline_index:03d}"
+            expanded["timelineBoundary"] = True
+            expanded["dateStart"] = normalize_optional_string(timeline_entry.get("dateStart")) or entry.get("dateStart")
+            expanded["dateEnd"] = normalize_optional_string(timeline_entry.get("dateEnd"))
+            expanded["timeWindow"] = normalize_optional_string(timeline_entry.get("timeWindow"))
+            expanded["shortSummary"] = required_string(timeline_entry, "shortSummary", expanded["timelineEntryId"])
+            expanded["longSummary"] = required_string(timeline_entry, "longSummary", expanded["timelineEntryId"])
+            for field_name in ("locationRefs", "npcRefs", "organizationRefs", "itemRefs"):
+                values = timeline_entry.get(field_name)
+                if isinstance(values, list):
+                    expanded[field_name] = unique_flatten([[normalize_optional_string(value)] for value in values])
+            combat_beat_ids = timeline_entry.get("combatBeatIds")
+            if isinstance(combat_beat_ids, list):
+                expanded["timelineCombatBeatIds"] = unique_flatten(
+                    [[normalize_optional_string(value)] for value in combat_beat_ids]
+                )
+            timeline_entries.append(expanded)
+    return timeline_entries
 
 
 def build_timeline_blocks(combined: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -226,6 +259,8 @@ def build_timeline_blocks(combined: Sequence[Dict[str, Any]]) -> List[Dict[str, 
 
 
 def should_merge_timeline_entry(previous: Dict[str, Any], current: Dict[str, Any]) -> bool:
+    if previous.get("timelineBoundary") or current.get("timelineBoundary"):
+        return False
     if previous["dateStart"] is None or current["dateStart"] is None:
         return previous["dateStart"] is None and current["dateStart"] is None and previous.get("timeWindow") == current.get("timeWindow")
     return (
@@ -247,14 +282,20 @@ def make_timeline_block(index: int, entries: Sequence[Dict[str, Any]]) -> Dict[s
         "dateEnd": date_end,
         "timeWindow": time_window,
         "resolution": infer_resolution(date_start, effective_date_end(last), time_window),
-        "beatIds": [entry["beatId"] for entry in entries],
+        "beatIds": unique_flatten([[entry["beatId"]] for entry in entries]),
         "locationRefs": unique_flatten(entry["locationRefs"] for entry in entries),
         "npcRefs": unique_flatten(entry["npcRefs"] for entry in entries),
         "organizationRefs": unique_flatten(entry["organizationRefs"] for entry in entries),
         "itemRefs": unique_flatten(entry["itemRefs"] for entry in entries),
-        "combatBeatIds": [entry["beatId"] for entry in entries if entry["combat"].get("isCombat")],
+        "combatBeatIds": unique_flatten(
+            [
+                entry.get("timelineCombatBeatIds", [entry["beatId"]] if entry["combat"].get("isCombat") else [])
+                for entry in entries
+            ]
+        ),
         "sourceShortSummaries": [entry["shortSummary"] for entry in entries],
         "sourceLongSummaries": [entry["longSummary"] for entry in entries],
+        "sourceEntries": [build_source_entry(entry) for entry in entries],
     }
 
 
@@ -267,7 +308,7 @@ def build_recap_blocks(combined: Sequence[Dict[str, Any]]) -> List[Dict[str, Any
         if current["combat"].get("isCombat"):
             group = [current]
             position += 1
-            while position < len(combined) and combined[position]["combat"].get("isCombat"):
+            while position < len(combined) and should_merge_combat_recap_entry(group[-1], combined[position]):
                 group.append(combined[position])
                 position += 1
             blocks.append(make_recap_block(index, "combat", group))
@@ -276,6 +317,19 @@ def build_recap_blocks(combined: Sequence[Dict[str, Any]]) -> List[Dict[str, Any
             position += 1
         index += 1
     return blocks
+
+
+def should_merge_combat_recap_entry(previous: Dict[str, Any], current: Dict[str, Any]) -> bool:
+    return (
+        previous["combat"].get("isCombat")
+        and current["combat"].get("isCombat")
+        and combat_phase(previous) != "full"
+        and combat_phase(current) != "full"
+    )
+
+
+def combat_phase(entry: Dict[str, Any]) -> Optional[str]:
+    return normalize_optional_string(entry.get("combat", {}).get("phase"))
 
 
 def make_recap_block(index: int, kind: str, entries: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
@@ -307,6 +361,7 @@ def make_recap_block(index: int, kind: str, entries: Sequence[Dict[str, Any]]) -
         ),
         "sourceShortSummaries": [entry["shortSummary"] for entry in entries],
         "sourceLongSummaries": [entry["longSummary"] for entry in entries],
+        "sourceEntries": [build_source_entry(entry) for entry in entries],
     }
 
 
@@ -499,6 +554,92 @@ def extract_encountered_entity_names(entities: Sequence[Dict[str, Any]]) -> List
 
 def extract_location_context_hint(location: Dict[str, Any]) -> Optional[str]:
     return normalize_optional_string(location.get("context"))
+
+
+def build_source_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+    source_entry: Dict[str, Any] = {
+        "beatId": entry["beatId"],
+        "title": entry["title"],
+        "boundaryReason": entry.get("boundaryReason"),
+        "dateStart": entry.get("dateStart"),
+        "dateEnd": entry.get("dateEnd"),
+        "timeWindow": entry.get("timeWindow"),
+        "sourceRange": dict(entry["sourceRange"]),
+        "shortSummary": entry["shortSummary"],
+        "longSummary": entry["longSummary"],
+    }
+
+    location_hints = compact_location_hints(entry)
+    if location_hints:
+        source_entry["locationHints"] = location_hints
+
+    npc_details = compact_entity_details(entry.get("npcs", []))
+    if npc_details:
+        source_entry["npcDetails"] = npc_details
+
+    item_details = compact_entity_details(entry.get("items", []))
+    if item_details:
+        source_entry["itemDetails"] = item_details
+
+    organization_details = compact_entity_details(entry.get("organizations", []))
+    if organization_details:
+        source_entry["organizationDetails"] = organization_details
+
+    combat_hints = compact_combat_hints(entry.get("combat", {}))
+    if combat_hints:
+        source_entry["combatHints"] = combat_hints
+
+    return source_entry
+
+
+def compact_location_hints(entry: Dict[str, Any]) -> Dict[str, Any]:
+    hints: Dict[str, Any] = {}
+    location_refs = entry.get("locationRefs", [])
+    if location_refs:
+        hints["refs"] = list(location_refs)
+    context = normalize_optional_string(entry.get("locationContextHint"))
+    if context is not None:
+        hints["context"] = context
+    notes = normalize_optional_string(entry.get("locationNotes"))
+    if notes is not None:
+        hints["notes"] = notes
+    return hints
+
+
+def compact_entity_details(entities: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    details: List[Dict[str, Any]] = []
+    for entity in entities:
+        name = normalize_optional_string(entity.get("name"))
+        if name is None:
+            continue
+        compact: Dict[str, Any] = {"name": name}
+        role = normalize_optional_string(entity.get("role"))
+        if role is not None:
+            compact["role"] = role
+        context = normalize_optional_string(entity.get("context"))
+        if context is not None:
+            compact["context"] = context
+        notes = normalize_optional_string(entity.get("notes"))
+        if notes is not None:
+            compact["notes"] = notes
+        details.append(compact)
+    return details
+
+
+def compact_combat_hints(combat: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(combat, dict) or not combat.get("isCombat"):
+        return {}
+    hints: Dict[str, Any] = {"isCombat": True}
+    phase = normalize_optional_string(combat.get("phase"))
+    if phase is not None:
+        hints["phase"] = phase
+    enemy_details = compact_entity_details(combat.get("mainEnemies", []))
+    if enemy_details:
+        hints["mainEnemies"] = enemy_details
+    notes = normalize_optional_string(combat.get("notes"))
+    if notes is not None:
+        hints["notes"] = notes
+    return hints
 
 
 def extract_location_data(location: Dict[str, Any]) -> Tuple[List[str], List[str], List[Dict[str, str]], Optional[str]]:

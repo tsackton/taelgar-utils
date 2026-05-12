@@ -291,7 +291,6 @@ def normalize_session_note_config(value: Any) -> Optional[Dict[str, str]]:
     normalized = {
         "templatePath": str(value.get("templatePath", "")).strip(),
         "generatedRoot": str(value.get("generatedRoot", "")).strip(),
-        "publishedNotePath": str(value.get("publishedNotePath", "")).strip(),
     }
     missing = [key for key, item in normalized.items() if not item]
     if missing:

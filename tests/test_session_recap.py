@@ -138,6 +138,30 @@ class BuildSessionSummaryContextTest(SessionRecapBase):
         self.assertEqual(payload["recapBlocks"][0]["kind"], "combat")
         self.assertEqual(payload["recapBlocks"][0]["beatIds"], ["beat-001", "beat-002"])
 
+    def test_adjacent_full_combat_beats_stay_separate_recap_blocks(self) -> None:
+        workspace = self.make_workspace()
+        beats = self.load_json(workspace / "beats.json")
+        facts = self.load_json(workspace / "beat-facts.json")
+        for index in (0, 1):
+            beats["beats"][index]["containsCombat"] = True
+            facts["facts"][index]["combat"] = {
+                "isCombat": True,
+                "phase": "full",
+                "mainEnemies": [{"name": "Ice wraiths", "role": "encountered"}],
+            }
+        self.write_json(workspace / "beats.json", beats)
+        self.write_json(workspace / "beat-facts.json", facts)
+
+        result = self.run_context_builder(workspace)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = self.load_json(workspace / "out" / "test-session-007-session-summary-context.json")
+        self.assertEqual(payload["recapBlocks"][0]["kind"], "combat")
+        self.assertEqual(payload["recapBlocks"][0]["beatIds"], ["beat-001"])
+        self.assertEqual(payload["recapBlocks"][1]["kind"], "combat")
+        self.assertEqual(payload["recapBlocks"][1]["beatIds"], ["beat-002"])
+
+
     def test_recap_refs_exclude_mentioned_entities(self) -> None:
         workspace = self.make_workspace()
         facts = self.load_json(workspace / "beat-facts.json")
@@ -165,6 +189,7 @@ class BuildSessionRecapTest(SessionRecapBase):
         self.assertTrue(recap_text.startswith("# Session Recap\n"))
         self.assertIn("## Session Header", recap_text)
         self.assertIn("- Title: TODO", recap_text)
+        self.assertIn("- Desc Title: TODO", recap_text)
         self.assertIn("- Tagline: TODO", recap_text)
         self.assertIn("- One-Sentence Summary: TODO", recap_text)
         self.assertIn("- DM: Maris", recap_text)
@@ -180,6 +205,29 @@ class BuildSessionRecapTest(SessionRecapBase):
         self.assertIn("#### Intermediate", recap_text)
         self.assertIn("## Source Files", recap_text)
         self.assertIn("source.cleaned.md", recap_text)
+
+    def test_multi_day_timeline_key_includes_dr_end(self) -> None:
+        workspace = self.make_workspace()
+        result = self.run_context_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        context_path = workspace / "out" / "test-session-007-session-summary-context.json"
+        context = self.load_json(context_path)
+        context["timelineBlocks"][0]["dateEnd"] = "1730-01-27"
+        self.write_json(context_path, context)
+
+        result = self.run_recap_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        recap_path = workspace / "recap" / "test-session-007-session-recap.md"
+        recap_text = recap_path.read_text(encoding="utf-8")
+        self.assertIn("- Timeline Key: (DR:: 1730-01-25) - (DR_end:: 1730-01-27), afternoon", recap_text)
+
+        recap_text = recap_text.replace("TODO", "Drafted text.")
+        recap_text = recap_text.replace("- Tagline: Drafted text.", "- Tagline: in which the party descends.")
+        recap_path.write_text(recap_text, encoding="utf-8")
+
+        result = self.run_recap_validator(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_undated_blocks_render_cleanly(self) -> None:
         workspace = self.make_workspace()
@@ -219,9 +267,13 @@ class BuildSessionRecapTest(SessionRecapBase):
         recap_text = (workspace / "recap" / "test-session-007-session-recap.md").read_text(encoding="utf-8")
         self.assertIn("- Kalima (companion): frightened guide", recap_text)
         self.assertIn("  - Zeyfa's Labyrinth, 1730-01-25", recap_text)
-        self.assertIn("- Zeyfa's Labyrinth: descending from the ice bridge and probing the first forked passages within the labyrinth", recap_text)
-        self.assertIn("  - traveled-through on 1730-01-25", recap_text)
-        self.assertIn("  - visited on 1730-01-25", recap_text)
+        self.assertIn("- Zeyfa's Labyrinth", recap_text)
+        self.assertIn("  - Summary: TODO", recap_text)
+        self.assertIn(
+            "  - Sublocations: descending from the ice bridge and probing the first forked passages within the labyrinth",
+            recap_text,
+        )
+        self.assertIn("  - Date Visited: 1730-01-25", recap_text)
 
     def test_scaffold_combat_section_is_structured(self) -> None:
         workspace = self.make_workspace()
