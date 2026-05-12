@@ -96,6 +96,7 @@ def parse_header_section(lines: Sequence[str], errors: List[str]) -> Dict[str, s
     data = parse_keyed_bullets(lines, label="Session Header", errors=errors)
     required = [
         "Title",
+        "Desc Title",
         "Tagline",
         "One-Sentence Summary",
         "Campaign",
@@ -364,20 +365,68 @@ def parse_location_entries(lines: Sequence[str], label: str, errors: List[str]) 
             if current is None:
                 errors.append(f"{label} contains a visit line before any entry: {raw_line.strip()}")
                 continue
+            detail = parse_location_detail_line(raw_line[4:].strip())
+            if detail is not None:
+                key, value = detail
+                current[key] = value
+                continue
             parsed_visit = parse_visit_line(raw_line[4:].strip(), label, errors)
             if parsed_visit is not None:
                 current["visits"].append(parsed_visit)
+                if current.get("dateVisited") is None:
+                    current["dateVisited"] = parsed_visit["date"]
             continue
         if not raw_line.startswith("- "):
             errors.append(f"{label} contains an unparseable line: {raw_line.strip()}")
             continue
-        entry = parse_named_entry(raw_line.strip()[2:], label, errors, allow_relation=False)
-        if entry is None:
+        body = raw_line.strip()[2:]
+        if ":" in body:
+            entry = parse_named_entry(body, label, errors, allow_relation=False)
+            if entry is None:
+                continue
+            current = {
+                "name": entry["name"],
+                "summary": entry["context"],
+                "sublocations": None,
+                "dateVisited": None,
+                "visits": [],
+                "legacyFormat": True,
+            }
+        else:
+            current = {
+                "name": normalize_wikilink_name(body.strip()),
+                "summary": None,
+                "sublocations": None,
+                "dateVisited": None,
+                "visits": [],
+                "legacyFormat": False,
+            }
+        entries.append(current)
+    for entry in entries:
+        if entry.get("legacyFormat"):
             continue
-        entry["visits"] = []
-        entries.append(entry)
-        current = entry
+        if normalize_optional_string(entry.get("summary")) is None:
+            errors.append(f"{label} entry '{entry['name']}' is missing Summary.")
+        if normalize_optional_string(entry.get("sublocations")) is None:
+            errors.append(f"{label} entry '{entry['name']}' is missing Sublocations.")
+        if normalize_optional_string(entry.get("dateVisited")) is None:
+            errors.append(f"{label} entry '{entry['name']}' is missing Date Visited.")
     return entries
+
+
+def parse_location_detail_line(body: str) -> Optional[Tuple[str, str]]:
+    if ":" not in body:
+        return None
+    key, value = body.split(":", 1)
+    normalized_key = key.strip().lower()
+    mapped = {
+        "summary": "summary",
+        "sublocations": "sublocations",
+        "date visited": "dateVisited",
+    }.get(normalized_key)
+    if mapped is None:
+        return None
+    return mapped, value.strip()
 
 
 def parse_named_entry(
@@ -395,7 +444,7 @@ def parse_named_entry(
         errors.append(f"{label} entry is malformed: {body}")
         return None
     return {
-        "name": match.group("name").strip(),
+        "name": normalize_wikilink_name(match.group("name").strip()),
         "relation": (match.groupdict().get("relation") or "").strip(),
         "context": match.group("context").strip(),
     }
@@ -408,7 +457,7 @@ def parse_history_line(body: str, label: str, errors: List[str]) -> Optional[Dic
     location, date_text = body.rsplit(", ", 1)
     return {
         "raw": body,
-        "location": location.strip(),
+        "location": normalize_wikilink_name(location.strip()),
         "date": date_text.strip(),
     }
 
@@ -431,4 +480,19 @@ def parse_name_list(value: Optional[str]) -> List[str]:
     stripped = value.strip()
     if not stripped or stripped == "none":
         return []
-    return [item.strip() for item in stripped.split(",") if item.strip()]
+    return [normalize_wikilink_name(item.strip()) for item in stripped.split(",") if item.strip()]
+
+
+def normalize_wikilink_name(value: str) -> str:
+    text = value.strip()
+    match = re.fullmatch(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]", text)
+    if not match:
+        return text
+    return (match.group(1) or "").strip()
+
+
+def normalize_optional_string(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None

@@ -97,6 +97,7 @@ def validate_session_header(lines: Sequence[str], session_payload: Dict[str, Any
     header_heading = "## Arc Header" if normalize_optional_string(session_payload.get("scope")) == "arc" else "## Session Header"
     required_fields = {
         "Title": None,
+        "Desc Title": None,
         "Tagline": None,
         "One-Sentence Summary": None,
         "DM": None,
@@ -209,7 +210,10 @@ def validate_timeline_heading_and_key(lines: Sequence[str], context_block: Dict[
     if heading != expected_heading:
         errors.append(f"timeline {context_block['blockId']} heading does not match required display date format.")
     key_line = next((line.strip() for line in lines if line.startswith("- Timeline Key: ")), None)
-    expected_key = f"- Timeline Key: {format_timeline_key(context_block.get('dateStart'), context_block.get('timeWindow'))}"
+    expected_key = (
+        f"- Timeline Key: "
+        f"{format_timeline_key(context_block.get('dateStart'), context_block.get('dateEnd'), context_block.get('timeWindow'))}"
+    )
     if key_line != expected_key:
         errors.append(f"timeline {context_block['blockId']} Timeline Key does not match context.")
 
@@ -319,12 +323,15 @@ def format_time_window(value: Optional[str]) -> str:
     return f" ({value})" if normalize_optional_string(value) else ""
 
 
-def format_timeline_key(date_start: Optional[str], time_window: Optional[str]) -> str:
+def format_timeline_key(date_start: Optional[str], date_end: Optional[str], time_window: Optional[str]) -> str:
     if not date_start:
         return "undated"
+    key = f"(DR:: {date_start})"
+    if normalize_optional_string(date_end) and date_end != date_start:
+        key += f" - (DR_end:: {date_end})"
     if normalize_optional_string(time_window):
-        return f"(DR:: {date_start}), {time_window}"
-    return f"(DR:: {date_start})"
+        key += f", {time_window}"
+    return key
 
 
 def format_display_date_span(date_start: Optional[str], date_end: Optional[str]) -> str:
