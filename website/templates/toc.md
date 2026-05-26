@@ -46,8 +46,8 @@
                 - {glob: things/artifacts-of-power}
             - Books of Taelgar
                 - {glob: things/books}
-- [People](creatures/creatures-of-taelgar.md)
-    - [Humans](creatures/species/humans.md)
+- People
+    - Humans
         - Chardonians
             - {glob: people/chardonians/}
         - Deno'qai
@@ -66,22 +66,20 @@
             - {glob: people/addermarians}
         - Other Humans
             - {glob: people/other-humans/;people/maseauns;people/tyrwinghans;people/aurbeze;flatten}
-    - [Elves](creatures/species/elves.md)
+    - Elves
         - {glob: people/elves/}
-    - [Dwarves](creatures/species/dwarves.md)
+    - Dwarves
         - {glob: people/dwarves/}
-    - [Halflings](creatures/species/halflings.md)
+    - Halflings
         - {glob: people/halflings/}
-    - [Lizardfolk](creatures/species/lizardfolk.md)
+    - Lizardfolk
         - {glob: people/lizardfolk/}
-    - [Stoneborn](creatures/species/stoneborn.md)
-        - [Umli](people/other-nonhumans/umli.md)
-    - [Orcs](creatures/species/orcs.md)
+    - Orcs
         - {glob: people/orcs/}
-    - [Fey](creatures/fey/fey.md)
+    - Fey
         - {glob: people/fey}
     - Other Nonhumans
-        - {glob: people/other-nonhumans;people/giants;people/kenku, exclude: umli.md}
+        - {glob: people/other-nonhumans;people/giants;people/kenku}
     - Extraplanar Powers
         - {glob: people/extraplanar-powers/}
     - Organizations
