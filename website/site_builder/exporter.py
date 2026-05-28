@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -20,12 +21,30 @@ from .scanner import SourceEntry, scan_source
 from .transform import LinkIssue, NoteTransformer
 
 
+CONTENT_WARNING_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("placeholder species token", re.compile(r"\(XXX\)", re.IGNORECASE)),
+    ("placeholder short description", re.compile(r"SHORT DESCRIPTION", re.IGNORECASE)),
+    ("placeholder character section", re.compile(r"Creating Your\s+\(XXX\)", re.IGNORECASE)),
+    ("Excalidraw source marker", re.compile(r"Switch to EXCALIDRAW|Excalidraw Data", re.IGNORECASE)),
+    ("TODO marker", re.compile(r"\bTODO\b")),
+    ("FIXME marker", re.compile(r"\bFIXME\b")),
+)
+
+
 class CustomDumper(yaml.SafeDumper):
     def represent_none(self, _: Any) -> yaml.nodes.Node:
         return self.represent_scalar("tag:yaml.org,2002:null", "")
 
 
 CustomDumper.add_representer(type(None), CustomDumper.represent_none)
+
+
+@dataclass
+class ContentWarning:
+    source: str
+    line: int
+    kind: str
+    excerpt: str
 
 
 @dataclass
@@ -40,6 +59,7 @@ class ExportStats:
     unresolved_links: list[LinkIssue] = field(default_factory=list)
     ambiguous_links: list[LinkIssue] = field(default_factory=list)
     nav_warnings: list[str] = field(default_factory=list)
+    content_warnings: list[ContentWarning] = field(default_factory=list)
 
 
 def export_site(config: WebsiteConfig) -> ExportStats:
@@ -76,6 +96,8 @@ def export_site(config: WebsiteConfig) -> ExportStats:
     for entry in [item for item in scan.entries if item.is_markdown]:
         previous = previous_manifest.get(entry.id)
         target_path = config.docs_dir / entry.target_path
+        if entry.note:
+            stats.content_warnings.extend(scan_content_warnings(entry.note.clean_text, entry.relative_path.as_posix()))
         if can_skip_entry(previous, entry, target_path, config_digest, index_digest):
             stats.skipped_notes += 1
             generated.add(entry.target_path.as_posix())
@@ -97,6 +119,7 @@ def export_site(config: WebsiteConfig) -> ExportStats:
 
     if config.home_source:
         home_note = parse_markdown_note(config.home_source, config)
+        stats.content_warnings.extend(scan_content_warnings(home_note.clean_text, config.home_source.as_posix()))
         home_result = transformer.transform_note(home_note, config.home_dest, config.home_source.as_posix())
         stats.unresolved_links.extend(home_result.unresolved_links)
         stats.ambiguous_links.extend(home_result.ambiguous_links)
@@ -111,7 +134,7 @@ def export_site(config: WebsiteConfig) -> ExportStats:
     if config.nav_source:
         nav_result = MkDocsNavigationGenerator(config.nav_source, scan.entries, config).process_template()
         stats.nav_warnings.extend(nav_result.warnings)
-        write_text_if_changed(config.docs_dir / config.nav_dest, "\n".join(nav_result.lines) + "\n")
+        write_text_if_changed(config.docs_dir / config.nav_dest, render_nav_file(nav_result.lines))
         generated.add(config.nav_dest.as_posix())
 
     linked_asset_ids.update(resolve_always_include_assets(config, index))
@@ -134,6 +157,7 @@ def export_site(config: WebsiteConfig) -> ExportStats:
 
     stats.deleted_stale_outputs = delete_stale_outputs(config.docs_dir, manifest.generated, generated)
     manifest.save(new_manifest, generated)
+    write_warning_report(config.warning_report_path, stats.content_warnings)
     print_summary(stats, time.perf_counter() - start)
     return stats
 
@@ -169,6 +193,47 @@ def render_note(note: MarkdownNote | None, body: str, config: WebsiteConfig) -> 
         width=2000,
     )
     return "---\n" + frontmatter + "---\n" + body
+
+
+def render_nav_file(lines: list[str]) -> str:
+    frontmatter = yaml.dump(
+        {"title": "Toc", "search": {"exclude": True}},
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
+        Dumper=CustomDumper,
+        width=2000,
+    )
+    return "---\n" + frontmatter + "---\n" + "\n".join(lines) + "\n"
+
+
+def scan_content_warnings(text: str, source: str) -> list[ContentWarning]:
+    warnings: list[ContentWarning] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        for kind, pattern in CONTENT_WARNING_PATTERNS:
+            if pattern.search(line):
+                warnings.append(
+                    ContentWarning(
+                        source=source,
+                        line=line_number,
+                        kind=kind,
+                        excerpt=line.strip()[:160],
+                    )
+                )
+    return warnings
+
+
+def write_warning_report(path: Path, warnings: list[ContentWarning]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["# Export Warnings", ""]
+    if not warnings:
+        lines.append("No content warnings.")
+    else:
+        lines.append(f"{len(warnings)} content warning(s) found.")
+        lines.append("")
+        for warning in warnings:
+            lines.append(f"- `{warning.source}:{warning.line}` [{warning.kind}] {warning.excerpt}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def can_skip_entry(
@@ -271,7 +336,13 @@ def print_summary(stats: ExportStats, elapsed: float) -> None:
         "Checks: "
         f"{len(stats.unresolved_links)} unresolved link(s), "
         f"{len(stats.ambiguous_links)} ambiguous link(s), "
-        f"{len(stats.nav_warnings)} nav warning(s)"
+        f"{len(stats.nav_warnings)} nav warning(s), "
+        f"{len(stats.content_warnings)} content warning(s)"
     )
+    if stats.content_warnings:
+        print("Content warnings:")
+        for warning in stats.content_warnings[:40]:
+            print(f"  - {warning.source}:{warning.line}: {warning.kind}: {warning.excerpt}")
+        if len(stats.content_warnings) > 40:
+            print(f"  - ... {len(stats.content_warnings) - 40} more")
     print(f"Done in {elapsed:.2f}s")
-

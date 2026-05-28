@@ -129,6 +129,8 @@ def should_skip_note(note: MarkdownNote, config: Any) -> bool:
         return True
     if note.is_future_dated:
         return True
+    if set(config.exclude_tags).intersection(note_tag_parts(note)):
+        return True
     campaign_exclusion = note.metadata.get("excludePublish")
     if isinstance(campaign_exclusion, str):
         exclusions = [item.strip().lower() for item in campaign_exclusion.split(",")]
@@ -146,6 +148,22 @@ def note_is_unlisted(note: MarkdownNote, config: Any) -> bool:
     return (note.is_unnamed and config.unnamed_files == "unlist") or (note.is_stub and config.stub_files == "unlist")
 
 
+def note_tag_parts(note: MarkdownNote) -> set[str]:
+    tags = note.metadata.get("tags", [])
+    if isinstance(tags, str):
+        tags = [tags]
+    if not isinstance(tags, list):
+        return set()
+    parts: set[str] = set()
+    for tag in tags:
+        text = str(tag).strip()
+        if not text:
+            continue
+        parts.add(text)
+        parts.update(part for part in text.split("/") if part)
+    return parts
+
+
 def target_path_for(relative_path: Path, should_slugify: bool) -> Path:
     if not should_slugify:
         return relative_path
@@ -155,4 +173,3 @@ def target_path_for(relative_path: Path, should_slugify: bool) -> Path:
     stem = relative_path.name[: -len(suffixes)] if suffixes else relative_path.name
     target_name = slugify(stem) + suffixes.lower()
     return Path(*parts, target_name)
-

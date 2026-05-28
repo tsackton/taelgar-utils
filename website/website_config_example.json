@@ -41,9 +41,11 @@
   "hide_toc_tags": ["person", "item"],
   "hide_nav_tags": [],
   "hide_backlinks_tags": [],
+  "exclude_tags": ["excalidraw"],
   "unnamed_files": "unlist",
   "stub_files": "skip",
   "skip_future_dated": true,
   "always_include_assets": [],
-  "manifest_path": ".website-build/export-manifest.json"
+  "manifest_path": ".website-build/export-manifest.json",
+  "warning_report_path": ".website-build/export-warnings.md"
 }

@@ -120,6 +120,62 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertTrue(is_resize_excluded(entries["assets/taelgar-world-map.png"], config))
             self.assertFalse(is_resize_excluded(entries["assets/portrait.png"], config))
 
+    def test_exclude_tags_skip_source_notes(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "Drawing.md", "---\ntags: [excalidraw]\n---\n# Excalidraw Data\n")
+            write_note(site.source / "Public.md", "---\nname: Public\n---\nvisible\n")
+            update_config(site.config_path, {"exclude_tags": ["excalidraw"]})
+            config = load_config(site.config_path)
+
+            entries = {entry.relative_path.as_posix(): entry for entry in scan_source(config).entries}
+            self.assertNotIn("Drawing.md", entries)
+            self.assertIn("Public.md", entries)
+
+            export_site(config)
+            self.assertFalse((site.docs / "drawing.md").exists())
+            self.assertTrue((site.docs / "public.md").exists())
+
+    def test_export_writes_content_warning_report_after_campaign_filtering(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Warning.md",
+                "---\nname: Warning\n---\nVisible TODO\n%%^Campaign:none%%\n# (XXX) Species Details\n%%^End%%\n",
+            )
+
+            stats = export_site(site.config)
+            report = site.root / ".website-build" / "export-warnings.md"
+            text = report.read_text(encoding="utf-8")
+
+            self.assertEqual(len(stats.content_warnings), 1)
+            self.assertIn("Warning.md:1", text)
+            self.assertIn("TODO marker", text)
+            self.assertNotIn("(XXX)", text)
+
+    def test_ignore_file_omits_metadata_files(self) -> None:
+        with fixture_site() as site:
+            (site.source / "Thumbs.db").write_bytes(b"metadata")
+            ignore_file = site.root / "ignore.txt"
+            ignore_file.write_text("Thumbs.db\n", encoding="utf-8")
+            update_config(site.config_path, {"ignore_file": "ignore.txt"})
+            config = load_config(site.config_path)
+
+            entries = {entry.relative_path.as_posix(): entry for entry in scan_source(config).entries}
+            self.assertNotIn("Thumbs.db", entries)
+
+    def test_exported_nav_file_is_excluded_from_search(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "One.md", "---\nname: One\n---\none\n")
+            nav_template = site.root / "nav.md"
+            nav_template.write_text("- {glob: .}\n", encoding="utf-8")
+            update_config(site.config_path, {"nav_source": "nav.md"})
+            config = load_config(site.config_path)
+
+            export_site(config)
+            text = (site.docs / "toc.md").read_text(encoding="utf-8")
+
+            self.assertTrue(text.startswith("---\ntitle: Toc\nsearch:\n  exclude: true\n---\n"))
+            self.assertIn("- [One](one.md)", text)
+
 
 class FixtureSite:
     def __init__(self, root: Path) -> None:
@@ -167,11 +223,13 @@ def write_config(path: Path) -> None:
         "hide_toc_tags": [],
         "hide_nav_tags": [],
         "hide_backlinks_tags": [],
+        "exclude_tags": [],
         "unnamed_files": "unlist",
         "stub_files": "skip",
         "skip_future_dated": True,
         "always_include_assets": [],
         "manifest_path": ".website-build/export-manifest.json",
+        "warning_report_path": ".website-build/export-warnings.md",
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
 

@@ -46,7 +46,7 @@
                 - {glob: things/artifacts-of-power}
             - Books of Taelgar
                 - {glob: things/books}
-- People
+- [People](people/people.md)
     - Humans
         - Chardonians
             - {glob: people/chardonians/}
@@ -85,7 +85,7 @@
     - Organizations
         - {glob: groups/}
     - [Languages](background/languages.md)
-- [Gazetteer](background/player-s-guide.md)
+- [Gazetteer](gazetteer/geography-of-taelgar.md)
     - [World of Taelgar](gazetteer/geography-of-taelgar.md)
         - {glob: gazetteer, exclude: green-sea.md;geography-of-taelgar.md;gazetteer.md;endless-ocean.md;sentinel-range.md}
         - [Green Sea](gazetteer/green-sea.md)

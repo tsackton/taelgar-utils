@@ -1,0 +1,18 @@
+{% extends "main.html" %}
+
+{% block content %}
+  {% set base_path = config.base_path if config.base_path is not none else "/" %}
+  {% if not base_path.endswith("/") %}
+    {% set base_path = base_path ~ "/" %}
+  {% endif %}
+  <h1>Page Not Found</h1>
+  <p>The page may have moved, been renamed, or been removed from the public site.</p>
+  <ul>
+    <li><a href="{{ base_path }}">Home</a></li>
+    <li><a href="{{ base_path }}background/player-s-guide/">Player's Guide</a></li>
+    <li><a href="{{ base_path }}gazetteer/geography-of-taelgar/">Geography of Taelgar</a></li>
+    <li><a href="{{ base_path }}gazetteer/world-of-taelgar/">World Map</a></li>
+    <li><a href="{{ base_path }}people/people/">People</a></li>
+    <li><a href="{{ base_path }}history/history/">History</a></li>
+  </ul>
+{% endblock %}

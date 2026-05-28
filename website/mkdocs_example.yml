@@ -1,4 +1,5 @@
 site_name: TaelgarVerse
+site_url: https://tsackton.github.io/taelgarverse/
 ## Base path for backlinks ##
 base_path: /taelgarverse/
 theme:
@@ -87,7 +88,7 @@ home_button1_theme: md-button # Options: "md-button", "md-button md-button--prim
 home_button1_title: Information about the Dunmari Frontier campaign
 
 home_button2_name: Gazetteer   # Comment this parameter out to remove the button.
-home_button2_url: campaigns/player-s-guide/    # This path starts at your root mkdocs directory.
+home_button2_url: gazetteer/geography-of-taelgar/    # This path starts at your root mkdocs directory.
 home_button2_theme: md-button # Options: "md-button", "md-button md-button--primary"
 home_button2_title: Learn about the world of Taelgar
 

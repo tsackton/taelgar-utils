@@ -40,11 +40,13 @@ ALLOWED_KEYS = {
     "hide_toc_tags",
     "hide_nav_tags",
     "hide_backlinks_tags",
+    "exclude_tags",
     "unnamed_files",
     "stub_files",
     "skip_future_dated",
     "always_include_assets",
     "manifest_path",
+    "warning_report_path",
 }
 
 
@@ -81,11 +83,13 @@ class WebsiteConfig:
     hide_toc_tags: tuple[str, ...] = ()
     hide_nav_tags: tuple[str, ...] = ()
     hide_backlinks_tags: tuple[str, ...] = ()
+    exclude_tags: tuple[str, ...] = ()
     unnamed_files: str = "unlist"
     stub_files: str = "skip"
     skip_future_dated: bool = True
     always_include_assets: tuple[str, ...] = ()
     manifest_path: Path = Path(".website-build/export-manifest.json")
+    warning_report_path: Path = Path(".website-build/export-warnings.md")
 
     def digest_payload(self) -> dict[str, Any]:
         return {
@@ -102,6 +106,7 @@ class WebsiteConfig:
             "hide_toc_tags": self.hide_toc_tags,
             "hide_nav_tags": self.hide_nav_tags,
             "hide_backlinks_tags": self.hide_backlinks_tags,
+            "exclude_tags": self.exclude_tags,
             "unnamed_files": self.unnamed_files,
             "stub_files": self.stub_files,
             "skip_future_dated": self.skip_future_dated,
@@ -205,10 +210,14 @@ def load_config(config_path: str | Path = "website.json") -> WebsiteConfig:
         hide_toc_tags=string_tuple("hide_toc_tags"),
         hide_nav_tags=string_tuple("hide_nav_tags"),
         hide_backlinks_tags=string_tuple("hide_backlinks_tags"),
+        exclude_tags=string_tuple("exclude_tags"),
         unnamed_files=unnamed_files,
         stub_files=stub_files,
         skip_future_dated=bool_value("skip_future_dated", True),
         always_include_assets=string_tuple("always_include_assets"),
         manifest_path=path_value("manifest_path", ".website-build/export-manifest.json") or root_dir
         / ".website-build/export-manifest.json",
+        warning_report_path=path_value("warning_report_path", ".website-build/export-warnings.md")
+        or root_dir
+        / ".website-build/export-warnings.md",
     )

@@ -19,6 +19,10 @@
   margin-bottom: 0.15rem;
 }
 
+.md-sidebar--secondary:not(:has(.taelgar-secondary-nav)) {
+  display: none;
+}
+
 
 /* Generic Grid Layout */
 /* See home.html template for example usage setting up buttons */
