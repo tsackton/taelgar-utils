@@ -11,6 +11,5 @@ from website.site_builder.cli import main
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:] or ["build"]
-    raise SystemExit(main(args))
+    raise SystemExit(main())
 

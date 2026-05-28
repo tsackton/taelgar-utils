@@ -120,9 +120,8 @@ Both option 2 and option 3 will likely share some audio preprocessing steps, and
   and `runner_utils.py` keep file-system, timestamp, and manifest logic in one
   place.
 - **`taelgar_lib/`** – small collection of shared Obsidian helpers. `ObsNote`
-  wraps vault Markdown metadata, `TaelgarDate` keeps the in-world calendar
-  consistent, and `WikiLinkReplacer` plus friends provide wikilink
-  normalization that the vault/export scripts rely on.
+  wraps vault Markdown metadata, and `TaelgarDate` keeps the in-world calendar
+  consistent.
 
 ---
 
@@ -153,10 +152,10 @@ Scripts used to curate and publish the campaign Obsidian vault.
   metadata-aware sorting.
 - **`merge_markdown.py`** – merge multiple Markdown files into a single document
   while inlining key metadata.
-- **`export_vault.py`** – helper invoked by the build scripts to export the
-  vault for publication.
-- **`website/build_mkdocs_site.py`** – orchestration script that triggers an
-  Obsidian templater export and then builds the MkDocs site.
+- **`export_vault.py`** – compatibility launcher for the website export CLI.
+- **`website/build_site.py`** – strict MkDocs export/build/check CLI that reads
+  `taelgar-static` and writes `docs/` without opening Obsidian or touching
+  submodules.
 
 ---
 

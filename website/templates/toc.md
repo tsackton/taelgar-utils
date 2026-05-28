@@ -1,8 +1,8 @@
 - [Home](index.md)
 - [Current Campaigns](people/pcs/pcs.md)
-    - [Lost in the Feywild]
+    - Lost in the Feywild
       - {glob: campaigns/one-shots/lost-in-the-feywild}
-    - [Into the Chasm](campaigns/one-shots/into-the-chasm/characters-and-backstory.md)
+    - Into the Chasm
       - {glob: campaigns/one-shots/into-the-chasm}
     - [Mawar](campaigns/mawar-adventures/mawar-adventures.md)
         - Characters
