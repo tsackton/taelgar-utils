@@ -114,6 +114,7 @@ class WebsiteConfig:
             "resize_exclude_assets": self.resize_exclude_assets,
             "max_image_width": self.max_image_width,
             "max_image_height": self.max_image_height,
+            "markdown_normalizer_version": 1,
         }
 
 

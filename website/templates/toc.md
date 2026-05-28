@@ -1,51 +1,84 @@
 - [Home](index.md)
-- [Current Campaigns](people/pcs/pcs.md)
-    - Lost in the Feywild
-        - {glob: campaigns/one-shots/lost-in-the-feywild}
-    - Into the Chasm
-        - {glob: campaigns/one-shots/into-the-chasm}
-    - [Mawar](campaigns/mawar-adventures/mawar-adventures.md)
-        - Characters
-            - {glob: people/pcs/mawar}
-        - {glob: campaigns/mawar-adventures/, exclude: mawar-adventures.md}
-    - [Great Library](campaigns/great-library-campaign/great-library-campaign.md)
-        - {glob: campaigns/great-library-campaign/, exclude: great-library-campaign.md}
-    - [Addermarch](campaigns/addermarch-campaign/addermarch-campaign.md)
-        - {glob: campaigns/addermarch-campaign, exclude: addermarch-campaign.md}
-- Finished Campaigns
-    - [Great War](people/pcs/great-war/heroes-of-the-great-war.md)
-        - {glob: people/pcs/great-war/, exclude: heroes-of-the-great-war.md}
-    - [Labyrinths of the Lost](campaigns/one-shots/labyrinths-of-the-lost/labyrinths-of-the-lost.md)
-        - {glob: campaigns/one-shots/labyrinths-of-the-lost, exclude: labyrinths-of-the-lost.md}
-    - [Dunmar Campaign](campaigns/dunmari-frontier-campaign/dunmari-frontier-campaign.md)
-        - [Characters](people/pcs/dunmar-fellowship/dunmar-fellowship.md)
-            - {glob: people/pcs/dunmar-fellowship/, exclude: dunmar-fellowship.md}
-        - [Timeline](campaigns/dunmari-frontier-campaign/dunmari-frontier-timeline.md)
-        - Session Info
-            - [Session Notes](campaigns/dunmari-frontier-campaign/sessions.md)
-            - [Mirror Visions](campaigns/dunmari-frontier-campaign/mirror-visions.md)
-            - Kenzo's Collected Stories
-                - {glob: campaigns/dunmari-frontier-campaign/collected-stories/}
-            - Letters and Notes
-                - {glob: campaigns/dunmari-frontier-campaign/letters-and-notes/}
-            - Tales and Stories
-                - {glob: campaigns/dunmari-frontier-campaign/tales-and-stories}
-            - Dreams and Visions
-                - {glob: campaigns/dunmari-frontier-campaign/dreams-and-visions/}
-            - Scrying
-                - {glob: campaigns/dunmari-frontier-campaign/scrying-and-spying/}
-            - Treasure Hoards
-                - {glob: campaigns/dunmari-frontier-campaign/hoards/}
-        - [Treasure](campaigns/dunmari-frontier-campaign/party-treasure.md)
-            - [Vindristjarna](things/ships/vindristjarna.md)
-                - [Bastion Facilities](campaigns/dunmari-frontier-campaign/vindristjarna-bastion-rules.md)
-                - [Mechanics](campaigns/dunmari-frontier-campaign/vindristjarna-mechanics.md)
-            - Dunmari Frontier Items
-                - {glob: campaigns/dunmari-frontier-campaign/treasure/;things/magic-items/;flatten}
-            - Artifacts of Power
-                - {glob: things/artifacts-of-power}
-            - Books of Taelgar
-                - {glob: things/books}
+- [Campaigns](campaigns/campaigns.md)
+    - [Current Games](campaigns/current-games.md)
+        - [Addermarch](campaigns/addermarch-campaign/addermarch-campaign.md)
+            - [Player Characters](people/pcs/addermarch/addermarch-mercenaries.md)
+                - {glob: people/pcs/addermarch/, exclude: addermarch-mercenaries.md}
+            - [Timeline](campaigns/addermarch-campaign/addermarch-campaign-timeline.md)
+            - Session Notes and Handouts
+                - {glob: campaigns/addermarch-campaign, exclude: addermarch-campaign.md;addermarch-campaign-timeline.md}
+        - [Great Library](campaigns/great-library-campaign/great-library-campaign.md)
+            - [Player Characters](people/pcs/silver-tempests/silver-tempests.md)
+                - {glob: people/pcs/silver-tempests/, exclude: silver-tempests.md}
+            - [Chronicles](campaigns/great-library-campaign/great-library-adventures.md)
+            - Session Notes
+                - {glob: campaigns/great-library-campaign/session-notes/}
+            - [Timeline](campaigns/great-library-campaign/great-library-timeline.md)
+            - [Tempest Towers](campaigns/great-library-campaign/tempest-towers.md)
+            - Handouts
+                - {glob: campaigns/great-library-campaign/handouts/}
+            - Treasure
+                - {glob: campaigns/great-library-campaign/treasure/}
+        - [Mawar](campaigns/mawar-adventures/mawar-adventures.md)
+            - [Player Characters](people/pcs/mawar/adventurers-of-mawar.md)
+                - {glob: people/pcs/mawar/, exclude: adventurers-of-mawar.md}
+            - Episodes
+                - {glob: campaigns/mawar-adventures/episodes/}
+            - [Timeline](campaigns/mawar-adventures/mawar-adventures-timeline.md)
+            - Items and Treasure
+                - {glob: campaigns/mawar-adventures/items-and-treasure/}
+            - Notes
+                - {glob: campaigns/mawar-adventures/notes/}
+        - [Lost in the Feywild](campaigns/one-shots/lost-in-the-feywild/lost-in-the-feywild.md)
+            - [Player Characters](people/pcs/other-pcs/tollen-misfits/tollen-misfits.md)
+                - {glob: people/pcs/other-pcs/tollen-misfits/, exclude: tollen-misfits.md}
+            - Session Notes
+                - {glob: campaigns/one-shots/lost-in-the-feywild, exclude: lost-in-the-feywild.md}
+    - [Campaign Archive](campaigns/campaign-archive.md)
+        - [Dunmari Frontier](campaigns/dunmari-frontier-campaign/dunmari-frontier-campaign.md)
+            - [Player Characters](people/pcs/dunmar-fellowship/dunmar-fellowship.md)
+                - {glob: people/pcs/dunmar-fellowship/, exclude: dunmar-fellowship.md}
+            - [Timeline](campaigns/dunmari-frontier-campaign/dunmari-frontier-timeline.md)
+            - Session Info
+                - [Session Index](campaigns/dunmari-frontier-campaign/sessions.md)
+                - [Mirror Visions](campaigns/dunmari-frontier-campaign/mirror-visions.md)
+                - Kenzo's Collected Stories
+                    - {glob: campaigns/dunmari-frontier-campaign/collected-stories/}
+                - Letters and Notes
+                    - {glob: campaigns/dunmari-frontier-campaign/letters-and-notes/}
+                - Tales and Stories
+                    - {glob: campaigns/dunmari-frontier-campaign/tales-and-stories}
+                - Dreams and Visions
+                    - {glob: campaigns/dunmari-frontier-campaign/dreams-and-visions/}
+                - Scrying
+                    - {glob: campaigns/dunmari-frontier-campaign/scrying-and-spying/}
+                - Treasure Hoards
+                    - {glob: campaigns/dunmari-frontier-campaign/hoards/}
+            - [Treasure](campaigns/dunmari-frontier-campaign/party-treasure.md)
+                - [Vindristjarna](things/ships/vindristjarna.md)
+                    - [Bastion Facilities](campaigns/dunmari-frontier-campaign/vindristjarna-bastion-rules.md)
+                    - [Mechanics](campaigns/dunmari-frontier-campaign/vindristjarna-mechanics.md)
+                - Dunmari Frontier Items
+                    - {glob: campaigns/dunmari-frontier-campaign/treasure/;things/magic-items/;flatten}
+                - Artifacts of Power
+                    - {glob: things/artifacts-of-power}
+                - Books of Taelgar
+                    - {glob: things/books}
+        - [Great War](campaigns/great-war-campaign/great-war-campaign.md)
+            - [Player Characters](people/pcs/great-war/heroes-of-the-great-war.md)
+                - {glob: people/pcs/great-war/, exclude: heroes-of-the-great-war.md}
+        - [Labyrinths of the Lost](campaigns/one-shots/labyrinths-of-the-lost/labyrinths-of-the-lost.md)
+            - [Player Characters](people/pcs/other-pcs/labyrinth-prisoners/labyrinth-prisoners.md)
+            - Session Notes and Background
+                - {glob: campaigns/one-shots/labyrinths-of-the-lost, exclude: labyrinths-of-the-lost.md}
+        - [Into the Chasm](campaigns/one-shots/into-the-chasm/into-the-chasm.md)
+            - [Player Characters](people/pcs/into-the-chasm/chasm-explorers.md)
+                - {glob: people/pcs/into-the-chasm/, exclude: chasm-explorers.md}
+            - Episodes
+                - {glob: campaigns/one-shots/into-the-chasm, exclude: into-the-chasm.md}
+        - [Oskar in Tharn Todor](campaigns/one-shots/oskar-s-adventures/oskar-in-tharn-todor.md)
+            - [Player Characters](people/pcs/other-pcs/oskar-s-companions/oskar-s-companions.md)
+                - {glob: people/pcs/other-pcs/oskar-s-companions/, exclude: oskar-s-companions.md}
 - [People](people/people.md)
     - Humans
         - Chardonians

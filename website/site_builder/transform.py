@@ -51,6 +51,7 @@ class NoteTransformer:
         result.text = self._replace_audio_tags(result.text, source_label, result)
         result.text = re.sub(WIKILINK_RE, lambda match: self._replace_wikilink(match, page_path, source_label, result), result.text)
         result.text = self._rewrite_and_collect_direct_asset_links(result.text, source_label, result)
+        result.text = normalize_loose_lists(result.text)
         return result
 
     def _clean_code_blocks(self, text: str, page_path: Path, source_label: str, result: TransformResult) -> str:
@@ -195,3 +196,45 @@ def relative_url(from_path: Path, to_path: Path) -> str:
 
 def markdown_link(label: str, url: str) -> str:
     return f"[{label}](<{url}>)"
+
+
+LIST_MARKER_RE = re.compile(r"^(?P<indent>[ \t]{0,3})(?:[-+*]|\d+[.)])\s+\S")
+FENCE_RE = re.compile(r"^[ \t]{0,3}(```|~~~)")
+
+
+def normalize_loose_lists(text: str) -> str:
+    """Add blank lines before paragraph-adjacent lists for Python-Markdown."""
+    lines = text.splitlines(keepends=True)
+    output: list[str] = []
+    in_fence = False
+
+    for line in lines:
+        body = line.rstrip("\r\n")
+        if FENCE_RE.match(body):
+            in_fence = not in_fence
+            output.append(line)
+            continue
+
+        if not in_fence and LIST_MARKER_RE.match(body) and output and previous_line_needs_list_break(output[-1]):
+            output.append("\n")
+        output.append(line)
+
+    return "".join(output)
+
+
+def previous_line_needs_list_break(line: str) -> bool:
+    body = line.rstrip("\r\n")
+    stripped = body.strip()
+    if not stripped:
+        return False
+    if LIST_MARKER_RE.match(body):
+        return False
+    if FENCE_RE.match(body):
+        return False
+    if body.startswith(("    ", "\t")):
+        return False
+    if stripped.startswith(("#", ">", "|", "<")):
+        return False
+    if re.match(r"^[*_-]{3,}$", stripped):
+        return False
+    return True

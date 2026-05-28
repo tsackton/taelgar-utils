@@ -176,6 +176,81 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertTrue(text.startswith("---\ntitle: Toc\nsearch:\n  exclude: true\n---\n"))
             self.assertIn("- [One](one.md)", text)
 
+    def test_export_normalizes_paragraph_adjacent_lists(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Lists.md",
+                "---\nname: Lists\n---\n"
+                "Intro:\n"
+                "- first\n"
+                "- second\n\n"
+                "Steps:\n"
+                "1. one\n"
+                "2. two\n\n"
+                "Already valid:\n\n"
+                "- valid\n\n"
+                "```text\n"
+                "Code:\n"
+                "- not a list\n"
+                "```\n",
+            )
+
+            export_site(site.config)
+            text = (site.docs / "lists.md").read_text(encoding="utf-8")
+
+            self.assertIn("Intro:\n\n- first\n- second", text)
+            self.assertIn("Steps:\n\n1. one\n2. two", text)
+            self.assertIn("Already valid:\n\n- valid", text)
+            self.assertNotIn("Already valid:\n\n\n- valid", text)
+            self.assertIn("```text\nCode:\n- not a list\n```", text)
+
+    def test_campaign_nav_template_owns_pc_navigation(self) -> None:
+        with fixture_site() as site:
+            for path in [
+                "Campaigns/Campaigns.md",
+                "Campaigns/Current Games.md",
+                "Campaigns/Campaign Archive.md",
+                "Campaigns/Addermarch Campaign/Addermarch Campaign.md",
+                "Campaigns/Great Library Campaign/Great Library Campaign.md",
+                "People/PCs/Addermarch/Addermarch Mercenaries.md",
+                "People/PCs/Addermarch/Drou.md",
+                "People/PCs/Silver Tempests/Silver Tempests.md",
+                "People/PCs/Silver Tempests/Adrik.md",
+            ]:
+                write_note(site.source / path, f"---\nname: {Path(path).stem}\n---\nbody\n")
+
+            config = load_config(site.config_path)
+            scan = scan_source(config)
+            nav = MkDocsNavigationGenerator(
+                UTILS_ROOT / "website" / "templates" / "toc.md",
+                scan.entries,
+                config,
+            ).process_template()
+            top_level = [line for line in nav.lines if line.startswith("- ")]
+            text = "\n".join(nav.lines)
+            people_section = text.split("- [People](people/people.md)", 1)[1].split(
+                "- [Gazetteer](gazetteer/geography-of-taelgar.md)",
+                1,
+            )[0]
+
+            self.assertEqual(top_level.count("- [Campaigns](campaigns/campaigns.md)"), 1)
+            self.assertNotIn("- [Current Campaigns](people/pcs/pcs.md)", top_level)
+            self.assertNotIn("- Finished Campaigns", top_level)
+            self.assertIn("- [Current Games](campaigns/current-games.md)", text)
+            self.assertIn("- [Campaign Archive](campaigns/campaign-archive.md)", text)
+            self.assertIn(
+                "- [Player Characters](people/pcs/addermarch/addermarch-mercenaries.md)",
+                text,
+            )
+            self.assertIn("- [Drou](people/pcs/addermarch/drou.md)", text)
+            self.assertIn(
+                "- [Player Characters](people/pcs/silver-tempests/silver-tempests.md)",
+                text,
+            )
+            self.assertIn("- [Adrik](people/pcs/silver-tempests/adrik.md)", text)
+            self.assertNotIn("people/pcs", people_section)
+            self.assertNotIn("people/pcs/cleenseau", text)
+
 
 class FixtureSite:
     def __init__(self, root: Path) -> None:
