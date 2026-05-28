@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from taelgar_lib.TaelgarDate import TaelgarDate
+from taelgar_utils.vault.taelgar_date import TaelgarDate
 
 
 WIKILINK_RE = r"""\[\[([^\|\]\#\\]+)(\#.*?)?(?:\\?\|([^\|\]]*))?(?:\\?\|([^\|\]]*))?(?:\\?\|([^\|\]]*))?\]\]"""
