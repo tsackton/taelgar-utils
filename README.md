@@ -67,4 +67,4 @@ python website/build_site.py --help
 - `cli/vault.py`: compatibility wrapper around the website export/build CLI.
 - `cli/discord-export.py`: DiscordChatExporter wrapper plus JSON-to-markdown
   conversion.
-- `website/build_site.py`: strict website check/export/build/serve/deploy CLI.
+- `website/build_site.py`: strict website check/export/build/serve/deploy/publish CLI.

@@ -14,9 +14,11 @@ python taelgar-utils/website/build_site.py export
 python taelgar-utils/website/build_site.py build
 python taelgar-utils/website/build_site.py serve
 python taelgar-utils/website/build_site.py deploy
+python taelgar-utils/website/build_site.py publish
 ```
 
-`autobuild_website.sh` remains only as a thin launcher for the same CLI.
+`autobuild_website.sh` is the website-repo wrapper for composing the
+materializer with this CLI.
 
 ## Refreshing `taelgar-static`
 
@@ -65,7 +67,11 @@ the source vault.
    that must remain untouched.
 4. `.website-build/export-manifest.json` tracks generated outputs so later runs
    can skip unchanged notes/assets and remove stale generated files.
-5. `build` and `serve` run the export first, then call MkDocs.
+5. `build` runs the export first, then calls MkDocs.
+6. `serve` runs the export first, checks `mkdocs build`, then starts
+   `mkdocs serve`.
+7. `publish` runs MkDocs and pushes the current generated site files without
+   refreshing `taelgar-static` or exporting `docs`.
 
 ## Configuration
 

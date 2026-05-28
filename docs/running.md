@@ -448,6 +448,7 @@ python taelgar-utils/website/build_site.py export
 python taelgar-utils/website/build_site.py build
 python taelgar-utils/website/build_site.py serve
 python taelgar-utils/website/build_site.py deploy --message "autobuild"
+python taelgar-utils/website/build_site.py publish --message "autobuild"
 ```
 
 Equivalent explicit-config form:
@@ -463,9 +464,11 @@ Command behavior:
 - `export`: read `taelgar-static`, transform notes and assets, and write
   MkDocs-ready files into `docs/`.
 - `build`: run `export`, then `mkdocs build`.
-- `serve`: run `export`, then `mkdocs serve`.
+- `serve`: run `export`, `mkdocs build`, then `mkdocs serve`.
 - `deploy`: run `export`, `mkdocs build`, `git add`, `git commit`, and
   `git push` in the website repository.
+- `publish`: run `mkdocs build`, `git add`, `git commit`, and `git push`
+  without running `export` first.
 
 The canonical config example is `website/website_config_example.json`, and the
 MkDocs example is `website/mkdocs_example.yml`.
