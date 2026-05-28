@@ -9,10 +9,9 @@ It summarizes:
 - what exists as a draft skill or helper
 - what is still pending
 
-Related planning docs:
+Related docs:
 
-- [Planning Notes](planning/notes.md)
-- [Planning Tasks](planning/tasks.md)
+- [Running Taelgar Utils](running.md)
 
 ## Current Pipeline Shape
 
