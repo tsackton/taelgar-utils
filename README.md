@@ -15,6 +15,7 @@ The repo currently has four maintained surfaces:
 
 - [Running everything](docs/running.md): setup, requirements, CLI commands, and
   end-to-end workflows.
+- [Installation](docs/install.md): venv, mamba, and Pixi setup options.
 - [Session pipeline overview](docs/session-pipeline-overview.md): current
   artifact design and stage status.
 - [Website build instructions](website/website_build_instructions.md): detailed
@@ -22,13 +23,7 @@ The repo currently has four maintained surfaces:
 
 ## Install
 
-```sh
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
+See [Installation](docs/install.md) for venv, mamba, and Pixi setup options.
 Audio commands also require `ffmpeg` on `PATH`.
 
 ## Common Commands

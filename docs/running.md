@@ -17,25 +17,10 @@ cd /Users/tim/RPGs/taelgar-utils
 
 ## Setup
 
-Use Python 3.11 or 3.12 if you plan to install the full ML/audio stack. The
-lightweight tests and website exporter may also run on newer Python versions,
-but packages such as `torch`, `pyannote.audio`, and `speechbrain` are the most
-likely to lag behind new Python releases.
+Install dependencies with one of the supported environment managers in
+[Installation](install.md). That doc covers venv, mamba, and Pixi.
 
-Create an environment and install the direct dependencies:
-
-```sh
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-Audio commands require `ffmpeg` on `PATH`. On macOS:
-
-```sh
-brew install ffmpeg
-```
+Audio commands require `ffmpeg` on `PATH`.
 
 The CLI wrappers in `cli/` set `PYTHONPATH=src` for you. When you run modules
 directly with `python -m`, set `PYTHONPATH` yourself:
