@@ -17,10 +17,10 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("check", help="Validate config, links, assets, and nav without writing files")
     subparsers.add_parser("export", help="Export taelgar-static into docs")
     subparsers.add_parser("build", help="Export, then run mkdocs build")
-    subparsers.add_parser("serve", help="Export, run mkdocs build, then run mkdocs serve")
-    publish_parser = subparsers.add_parser("publish", help="Run mkdocs build, commit generated site files, and push")
+    subparsers.add_parser("serve", help="Export, then run mkdocs serve")
+    publish_parser = subparsers.add_parser("publish", help="Commit generated site files and push")
     publish_parser.add_argument("--message", default="autobuild", help="Commit message for publish")
-    deploy_parser = subparsers.add_parser("deploy", help="Export, build, stage generated files, commit, and push")
+    deploy_parser = subparsers.add_parser("deploy", help="Export, stage generated files, commit, and push")
     deploy_parser.add_argument("--message", default="autobuild", help="Commit message for deploy")
 
     args = parser.parse_args(argv)
@@ -41,20 +41,11 @@ def main(argv: list[str] | None = None) -> int:
         return run_command(["mkdocs", "build"], config.root_dir)
     if args.command == "serve":
         export_site(config)
-        rc = run_command(["mkdocs", "build"], config.root_dir)
-        if rc != 0:
-            return rc
         return run_command(["mkdocs", "serve"], config.root_dir)
     if args.command == "publish":
-        rc = run_command(["mkdocs", "build"], config.root_dir)
-        if rc != 0:
-            return rc
         return publish_site(config, args.message)
     if args.command == "deploy":
         export_site(config)
-        rc = run_command(["mkdocs", "build"], config.root_dir)
-        if rc != 0:
-            return rc
         return publish_site(config, args.message)
     return 2
 
