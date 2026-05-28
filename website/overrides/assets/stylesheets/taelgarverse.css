@@ -23,6 +23,12 @@
   display: none;
 }
 
+@media screen and (min-width: 76.25em) {
+  .md-sidebar--primary:not(:has(.md-nav__item--active)):not(:has(.md-nav__link--active)) {
+    display: none;
+  }
+}
+
 
 /* Generic Grid Layout */
 /* See home.html template for example usage setting up buttons */
