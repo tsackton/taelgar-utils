@@ -18,7 +18,7 @@ Related docs:
 The intended flow is now beat-first:
 
 1. raw session source
-2. raw transcript generation
+2. source preparation
 3. prepared session bundle
 4. cleaned transcript
 5. beat segmentation
@@ -40,7 +40,7 @@ The final deterministic note-generation stage is still pending.
 
 | Stage | Purpose | Status |
 | --- | --- | --- |
-| Raw data -> raw transcript | Normalize Zoom / diarized inputs into a transcript | Partial |
+| Raw data -> transcript | Produce a transcript outside this pipeline | Out of scope |
 | Session bundle prep | Archive inputs and generate a prepared bundle | Implemented |
 | Transcript cleanup | Clean ASR / glossary / punctuation issues | Draft but usable |
 | Beat segmentation | Split cleaned transcript into ordered beats | Draft but usable |
@@ -203,7 +203,6 @@ Current files:
 - [`_templates/json/README.md`](../_templates/json/README.md)
 - [`_templates/json/session-manifest.schema.json`](../_templates/json/session-manifest.schema.json)
 - [`_templates/json/speaker-stats.schema.json`](../_templates/json/speaker-stats.schema.json)
-- [`_templates/json/normalized-transcript.schema.json`](../_templates/json/normalized-transcript.schema.json)
 - [`_templates/json/cleanup-report.schema.json`](../_templates/json/cleanup-report.schema.json)
 - [`_templates/json/session-corrections.schema.json`](../_templates/json/session-corrections.schema.json)
 - [`_templates/json/beats.schema.json`](../_templates/json/beats.schema.json)
@@ -321,4 +320,4 @@ The next highest-value gaps are probably:
 2. deterministic parsing from reviewed `session-recap.md` into downstream note artifacts
 3. final note assembly from parsed recap artifacts
 4. iterative recap prompt/style tightening based on real-session review
-5. cleanup / docs polish for the raw-transcript generation side
+5. cleanup / docs polish as real-session testing exposes gaps

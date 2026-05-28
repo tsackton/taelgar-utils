@@ -3,7 +3,7 @@
 This repo is a collection of command-line utilities and Codex skills for the
 Taelgar RPG workflow. The main maintained areas are:
 
-- session source preparation, transcription normalization, and recap artifact
+- session source preparation, audio transcription helpers, and recap artifact
   generation
 - website export/build tooling for the Taelgarverse MkDocs site
 - small markdown and Discord export helpers
@@ -77,10 +77,6 @@ Session pipeline commands:
 python cli/session.py --help
 python cli/session.py prepare-source --help
 python cli/session.py normalize-source --help
-python cli/session.py normalize --help
-python cli/session.py synchronize --help
-python cli/session.py clean-speakers --help
-python cli/session.py process-zoom --help
 python cli/session.py preprocess-audio --help
 python cli/session.py transcribe-whisper --help
 python cli/session.py transcribe-elevenlabs --help
@@ -181,116 +177,20 @@ python cli/session.py normalize-source \
 That writes `cleaned/<bundle-stem>-source-cleaned.md` plus normalization
 artifacts.
 
-## Transcript Normalization
+For transcript sessions, the current note pipeline expects `prepare-source` to
+ingest the transcript directly. The supported transcript formats are WebVTT and
+speaker-line text; set `transcriptFormat` to `auto`, `vtt`, or `speaker_lines`
+in the source-prep config.
 
-`normalize` converts raw transcript formats into canonical normalized JSON.
-Supported input formats are:
-
-- `vtt_speaker`: WebVTT cues that include speaker names.
-- `vtt_voice`: WebVTT voice-tag format.
-- `plain_text`: simple text input.
-- `elevenlabs_json`: ElevenLabs speech-to-text JSON.
-- `whisper_diarization`: Whisper JSON plus diarization JSON.
-
-Example for a Zoom/WebVTT transcript:
-
-```sh
-python cli/session.py normalize /path/to/session.vtt \
-  --input-format vtt_speaker \
-  --session-id dufr-138 \
-  --source-id zoom-session-138 \
-  --output /tmp/dufr-138.zoom.normalized.json
-```
-
-Example for Whisper output with a diarization file:
-
-```sh
-python cli/session.py normalize /path/to/whisper.json \
-  --input-format whisper_diarization \
-  --diarization /path/to/diarization.json \
-  --session-id dufr-138 \
-  --source-id whisper-raw \
-  --word-gap-seconds 1.2 \
-  --output /tmp/dufr-138.whisper.normalized.json
-```
-
-If multiple audio files make up one session, compute offsets first:
+If multiple audio files make up one session, `prepare-source` does not combine
+them. Use the offsets helper only when you need a quick duration/offset record
+for manual source preparation:
 
 ```sh
 PYTHONPATH=src python -m taelgar_utils.audio.offsets \
   /path/to/part1.m4a /path/to/part2.m4a \
   --output /tmp/audio-offsets.json
 ```
-
-Then pass the offsets to `normalize`:
-
-```sh
-python cli/session.py normalize /path/to/session.vtt \
-  --input-format vtt_speaker \
-  --session-id dufr-138 \
-  --source-id zoom-session-138 \
-  --offsets-json /tmp/audio-offsets.json \
-  --audio-path /path/to/part2.m4a \
-  --output /tmp/dufr-138.part2.normalized.json
-```
-
-## Synchronizing And Naming Speakers
-
-Use `synchronize` to aggregate one or more normalized transcript files under a
-session/method directory:
-
-```sh
-python cli/session.py synchronize \
-  --session-id dufr-138 \
-  --out-dir /path/to/sessions \
-  --method zoom-session-138 /tmp/dufr-138.zoom.normalized.json \
-  --speaker-guesses /path/to/speaker-roster.json
-```
-
-The output is written under:
-
-```text
-/path/to/sessions/dufr-138/zoom-session-138/
-```
-
-Then use `clean-speakers` to apply or confirm canonical names:
-
-```sh
-python cli/session.py clean-speakers \
-  /path/to/sessions/dufr-138 \
-  --method zoom-session-138 \
-  --roster /path/to/speaker-roster.json \
-  --non-interactive
-```
-
-Drop `--non-interactive` if you want to answer prompts for unresolved speakers.
-
-## Zoom Batch Workflow
-
-`process-zoom` wraps normalization, synchronization, and speaker cleanup for
-Zoom export directories. Each Zoom directory should contain a usable transcript
-matching `GMT*.transcript.vtt`.
-
-Process a single Zoom directory:
-
-```sh
-python cli/session.py process-zoom \
-  --zoom-dir /path/to/Zoom/Session\ 138 \
-  --sessions-root /path/to/sessions \
-  --speaker-roster /path/to/speaker-roster.json
-```
-
-Process every Zoom session directory under a root:
-
-```sh
-python cli/session.py process-zoom \
-  --zoom-root /path/to/Zoom \
-  --sessions-root /path/to/sessions \
-  --speaker-roster /path/to/speaker-roster.json \
-  --session-prefix dufr-
-```
-
-Use `--dry-run` to inspect the planned operations without writing outputs.
 
 ## Audio Preprocessing And Transcription
 
@@ -344,6 +244,10 @@ Outputs are written to:
   chunk_transcripts/
   <method>.whisper.json
 ```
+
+These transcription helpers produce service-output JSON. They are retained as
+standalone upstream helpers; the current session-note pipeline starts once you
+have a transcript that `prepare-source` can ingest.
 
 Transcribe through ElevenLabs:
 

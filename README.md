@@ -4,8 +4,8 @@ Utilities for the Taelgar RPG workflow.
 
 The repo currently has four maintained surfaces:
 
-1. Session tooling for source preparation, transcript normalization, audio
-   transcription, speaker cleanup, beat artifacts, and recap generation.
+1. Session tooling for source preparation, audio transcription, beat artifacts,
+   and recap generation.
 2. Website tooling for exporting `taelgar-static` into the Taelgarverse MkDocs
    site.
 3. Small markdown and Discord export utilities.
@@ -60,8 +60,8 @@ python website/build_site.py --help
 
 ## Main Entry Points
 
-- `cli/session.py`: session prep, transcript normalization, audio processing,
-  transcription, synchronization, speaker cleanup, and Zoom batch workflow.
+- `cli/session.py`: session prep, non-transcript source normalization, audio
+  processing, and transcription helpers.
 - `cli/markdown-utils.py`: markdown merge, front matter extraction, and index
   generation.
 - `cli/vault.py`: compatibility wrapper around the website export/build CLI.
