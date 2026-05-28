@@ -35,9 +35,15 @@ From the website repository root:
 node "/Users/tim/Library/Mobile Documents/iCloud~md~obsidian/Documents/Taelgar/_scripts/materialize-dataview/materialize-dataview.mjs" \
   --vault "/Users/tim/Library/Mobile Documents/iCloud~md~obsidian/Documents/Taelgar" \
   --out "/Users/tim/RPGs/taelgarverse/taelgar-static" \
+  --header-type website \
   --no-strict \
-  --timeout 300
+  --timeout 600
 ```
+
+`--header-type website` regenerates page headers with the website-specific
+`OutputHandler.generateWebsiteHeader` output before Dataview blocks are
+materialized. Use `--header-type static` for the older static Obsidian callout
+header, or `--header-type none` to leave existing headers in place.
 
 `--no-strict` writes the static vault even if a small number of unsupported or
 errored DataviewJS blocks remain; those issues are listed in
