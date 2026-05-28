@@ -16,14 +16,14 @@ python-dotenv>=1.0.0
 
 # Website build tooling
 beautifulsoup4>=4.11.1
-mkdocs>=1.6.1
+mkdocs==1.5.3
 mkdocs-backlinks>=0.9.1
-mkdocs-callouts>=1.16.1
-mkdocs-glightbox>=0.5.2
-mkdocs-literate-nav>=0.6.3
-mkdocs-material>=9.7.6
-mkdocs-section-index>=0.3.12
-pymdown-extensions>=10.21.3
+mkdocs-callouts==1.10.0
+mkdocs-glightbox==0.3.6
+mkdocs-literate-nav==0.6.1
+mkdocs-material==9.5.3
+mkdocs-section-index==0.3.8
+pymdown-extensions==10.7
 watchdog>=2.0
 
 # Experimental speaker-classifier and analysis tooling
