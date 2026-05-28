@@ -4,8 +4,10 @@ import sys
 
 
 UTILS_ROOT = Path(__file__).resolve().parents[1]
-if str(UTILS_ROOT) not in sys.path:
-    sys.path.insert(0, str(UTILS_ROOT))
+SRC_ROOT = UTILS_ROOT / "src"
+for path in (UTILS_ROOT, SRC_ROOT):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from website.site_builder.cli import main
 
@@ -13,4 +15,3 @@ from website.site_builder.cli import main
 if __name__ == "__main__":
     args = sys.argv[1:] or ["build"]
     raise SystemExit(main(args))
-
