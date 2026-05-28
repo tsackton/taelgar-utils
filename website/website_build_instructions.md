@@ -18,6 +18,36 @@ python taelgar-utils/website/build_site.py deploy
 
 `autobuild_website.sh` remains only as a thin launcher for the same CLI.
 
+## Refreshing `taelgar-static`
+
+Before running `export`, `build`, `serve`, or `deploy`, refresh `taelgar-static`
+from the Obsidian vault when the source notes or Dataview materialization code
+have changed.
+
+The materializer is run from the command line, but the rendering happens inside
+Obsidian through the official Obsidian CLI. Obsidian must have the CLI enabled,
+and the Taelgar vault must have the `taelgar-dataview-materializer`, Dataview,
+and CustomJS plugins enabled.
+
+From the website repository root:
+
+```sh
+node "/Users/tim/Library/Mobile Documents/iCloud~md~obsidian/Documents/Taelgar/_scripts/materialize-dataview/materialize-dataview.mjs" \
+  --vault "/Users/tim/Library/Mobile Documents/iCloud~md~obsidian/Documents/Taelgar" \
+  --out "/Users/tim/RPGs/taelgarverse/taelgar-static" \
+  --no-strict \
+  --timeout 300
+```
+
+`--no-strict` writes the static vault even if a small number of unsupported or
+errored DataviewJS blocks remain; those issues are listed in
+`taelgar-static/.dataview-materialization-report.json`. Use `--strict` when the
+remaining errors should fail the run.
+
+The materializer does not rewrite the source vault. Write mode requires an
+output path, rejects in-place materialization, and rejects output paths inside
+the source vault.
+
 ## Pipeline
 
 1. A separate upstream process generates or refreshes `taelgar-static`.
