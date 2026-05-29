@@ -105,6 +105,7 @@
     var minNativeZoom = tileConfig.minNativeZoom || 0;
     var maxNativeZoom = tileConfig.maxNativeZoom || 0;
     var baseUrl = tileConfig.baseUrl;
+    var cacheKey = tileConfig.cacheKey;
     var extension = tileConfig.extension || "webp";
     var width = tileConfig.width;
     var height = tileConfig.height;
@@ -120,7 +121,11 @@
         if (col < 0 || col >= xCount || row < 0 || row >= yCount) {
           return blankTile;
         }
-        return baseUrl + "/" + zoom + "/" + col + "/" + row + "." + extension;
+        var url = baseUrl + "/" + zoom + "/" + col + "/" + row + "." + extension;
+        if (cacheKey) {
+          url += "?v=" + encodeURIComponent(cacheKey);
+        }
+        return url;
       }
     });
 

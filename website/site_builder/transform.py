@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
@@ -301,6 +302,7 @@ class NoteTransformer:
         if tiled:
             config["tile"] = {
                 "baseUrl": self.absolute_url(tile_base_path(target.target_path)),
+                "cacheKey": self._tile_cache_key(),
                 "extension": tile_extension(self.config),
                 "tileSize": self.config.map_tile_size,
                 "width": bounds.width,
@@ -311,6 +313,10 @@ class NoteTransformer:
         else:
             config["image"] = {"url": self.absolute_url(target.target_path)}
         return config
+
+    def _tile_cache_key(self) -> str:
+        payload = json.dumps(self.config.digest_payload(), sort_keys=True, default=str)
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:10]
 
     def _render_inline_tile_map(self, target: SourceEntry, bounds: TileBounds) -> str:
         map_id = "tile-map-" + re.sub(r"[^a-z0-9_-]+", "-", target.target_path.stem.lower()).strip("-")

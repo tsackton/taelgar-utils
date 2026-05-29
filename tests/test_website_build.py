@@ -261,6 +261,7 @@ class WebsiteBuildTests(unittest.TestCase):
 
             self.assertIn("taelgar-leaflet-map", text)
             self.assertEqual(map_config["tile"]["baseUrl"], "/assets/tiles/map")
+            self.assertRegex(map_config["tile"]["cacheKey"], r"^[0-9a-f]{10}$")
             self.assertEqual(map_config["tile"]["maxNativeZoom"], 0)
             self.assertNotIn("imageOverlay", text)
             self.assertTrue((site.docs / "assets" / "tiles" / "map" / "0" / "0" / "0.webp").exists())
