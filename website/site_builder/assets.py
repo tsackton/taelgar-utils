@@ -104,16 +104,22 @@ def generate_map_tiles(entry: SourceEntry, docs_dir: Path, bounds: TileBounds, c
             display = source_image.resize((display_width, display_height), resampling)
             x_count = ceil(display_width / tile_size)
             y_count = ceil(display_height / tile_size)
+            y_padding = y_count * tile_size - display_height
             with display:
                 for x in range(x_count):
                     for y in range(y_count):
                         left = x * tile_size
-                        upper = y * tile_size
-                        crop = display.crop(
-                            (left, upper, min(left + tile_size, display_width), min(upper + tile_size, display_height))
+                        source_upper = y * tile_size - y_padding
+                        source_lower = source_upper + tile_size
+                        crop_box = (
+                            left,
+                            max(0, source_upper),
+                            min(left + tile_size, display_width),
+                            min(source_lower, display_height),
                         )
+                        crop = display.crop(crop_box)
                         tile = Image.new("RGB", (tile_size, tile_size), "white")
-                        tile.paste(crop, (0, 0))
+                        tile.paste(crop, (0, max(0, -source_upper)))
                         target = docs_dir / relative_paths[tiles_written]
                         if config.map_tile_format == "webp":
                             tile.save(target, "WEBP", quality=config.map_tile_quality, method=6)

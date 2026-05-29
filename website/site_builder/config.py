@@ -140,7 +140,7 @@ class WebsiteConfig:
             "map_tile_size": self.map_tile_size,
             "map_tile_format": self.map_tile_format,
             "map_tile_quality": self.map_tile_quality,
-            "map_tile_transform_version": 3,
+            "map_tile_transform_version": 4,
             "audio_embed_transform_version": 1,
             "markdown_normalizer_version": 1,
             "search_exclude_tags": self.search_exclude_tags,

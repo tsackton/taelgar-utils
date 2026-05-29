@@ -332,6 +332,46 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertTrue((site.docs / "assets" / "tiles" / "map" / "1" / "4" / "2.webp").exists())
             self.assertEqual(stats.map_tiles_written, 21)
 
+    def test_tile_map_pads_top_edge_for_simple_crs_alignment(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Map.md",
+                "---\nname: Map\n---\n"
+                "```leaflet\n"
+                "id: test-map\n"
+                "image: [[assets/map.png]]\n"
+                "bounds:\n"
+                "- [0, 0]\n"
+                "- [12, 20]\n"
+                "height: 400px\n"
+                "lat: 6\n"
+                "long: 10\n"
+                "```\n",
+            )
+            write_top_band_png(site.source / "assets" / "map.png", (20, 12))
+            update_config(
+                site.config_path,
+                {
+                    "clean_code_blocks": True,
+                    "codeblock_template_dir": str(UTILS_ROOT / "website" / "templates"),
+                    "tile_map_assets": ["assets/map.png"],
+                    "map_tile_format": "png",
+                    "map_tile_size": 8,
+                },
+            )
+            config = load_config(site.config_path)
+
+            export_site(config)
+
+            try:
+                from PIL import Image
+            except ModuleNotFoundError as error:
+                raise unittest.SkipTest("Pillow is required for image export tests") from error
+            with Image.open(site.docs / "assets" / "tiles" / "map" / "0" / "0" / "0.png") as tile:
+                self.assertEqual(tile.getpixel((0, 0)), (255, 255, 255))
+                self.assertEqual(tile.getpixel((0, 3)), (255, 255, 255))
+                self.assertEqual(tile.getpixel((0, 4)), (255, 0, 0))
+
     def test_export_normalizes_paragraph_adjacent_lists(self) -> None:
         with fixture_site() as site:
             write_note(
@@ -501,6 +541,19 @@ def write_rgb_png(path: Path, size: tuple[int, int], color: str) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", size, color).save(path)
+
+
+def write_top_band_png(path: Path, size: tuple[int, int]) -> None:
+    try:
+        from PIL import Image
+    except ModuleNotFoundError as error:
+        raise unittest.SkipTest("Pillow is required for image export tests") from error
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img = Image.new("RGB", size, "blue")
+    for x in range(size[0]):
+        img.putpixel((x, 0), (255, 0, 0))
+    img.save(path)
 
 
 if __name__ == "__main__":
