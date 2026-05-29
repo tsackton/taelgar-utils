@@ -18,6 +18,8 @@
   "ignore_file": "ignore_spec.txt",
   "asset_dir": "assets",
   "resize_images": true,
+  "optimize_images": true,
+  "webp_quality": 82,
   "resize_exclude_assets": [
     "assets/*map*.png",
     "assets/*map*.jpg",
@@ -34,6 +36,12 @@
   ],
   "max_image_width": 1600,
   "max_image_height": 1600,
+  "tile_map_assets": [
+    "assets/taelgar-world-map.png"
+  ],
+  "map_tile_size": 512,
+  "map_tile_format": "webp",
+  "map_tile_quality": 82,
   "delete_unlinked_assets": true,
   "base_path": "/taelgarverse/",
   "clean_code_blocks": true,
@@ -42,10 +50,14 @@
   "hide_nav_tags": [],
   "hide_backlinks_tags": [],
   "exclude_tags": ["excalidraw"],
+  "search_exclude_tags": ["search/exclude"],
   "unnamed_files": "unlist",
   "stub_files": "skip",
   "skip_future_dated": true,
   "always_include_assets": [],
   "manifest_path": ".website-build/export-manifest.json",
-  "warning_report_path": ".website-build/export-warnings.md"
+  "warning_report_path": ".website-build/export-warnings.md",
+  "asset_report_path": ".website-build/asset-report.md",
+  "asset_report_top_n": 30,
+  "asset_warning_size_bytes": 5000000
 }

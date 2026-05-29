@@ -33,6 +33,12 @@ ALLOWED_KEYS = {
     "resize_exclude_assets",
     "max_image_width",
     "max_image_height",
+    "optimize_images",
+    "webp_quality",
+    "tile_map_assets",
+    "map_tile_size",
+    "map_tile_format",
+    "map_tile_quality",
     "delete_unlinked_assets",
     "base_path",
     "clean_code_blocks",
@@ -41,12 +47,16 @@ ALLOWED_KEYS = {
     "hide_nav_tags",
     "hide_backlinks_tags",
     "exclude_tags",
+    "search_exclude_tags",
     "unnamed_files",
     "stub_files",
     "skip_future_dated",
     "always_include_assets",
     "manifest_path",
     "warning_report_path",
+    "asset_report_path",
+    "asset_report_top_n",
+    "asset_warning_size_bytes",
 }
 
 
@@ -76,6 +86,12 @@ class WebsiteConfig:
     resize_exclude_assets: tuple[str, ...] = ()
     max_image_width: int = 1600
     max_image_height: int = 1600
+    optimize_images: bool = False
+    webp_quality: int = 82
+    tile_map_assets: tuple[str, ...] = ()
+    map_tile_size: int = 512
+    map_tile_format: str = "webp"
+    map_tile_quality: int = 82
     delete_unlinked_assets: bool = True
     base_path: str = "/"
     clean_code_blocks: bool = True
@@ -84,12 +100,16 @@ class WebsiteConfig:
     hide_nav_tags: tuple[str, ...] = ()
     hide_backlinks_tags: tuple[str, ...] = ()
     exclude_tags: tuple[str, ...] = ()
+    search_exclude_tags: tuple[str, ...] = ()
     unnamed_files: str = "unlist"
     stub_files: str = "skip"
     skip_future_dated: bool = True
     always_include_assets: tuple[str, ...] = ()
     manifest_path: Path = Path(".website-build/export-manifest.json")
     warning_report_path: Path = Path(".website-build/export-warnings.md")
+    asset_report_path: Path = Path(".website-build/asset-report.md")
+    asset_report_top_n: int = 30
+    asset_warning_size_bytes: int = 5_000_000
 
     def digest_payload(self) -> dict[str, Any]:
         return {
@@ -114,7 +134,16 @@ class WebsiteConfig:
             "resize_exclude_assets": self.resize_exclude_assets,
             "max_image_width": self.max_image_width,
             "max_image_height": self.max_image_height,
+            "optimize_images": self.optimize_images,
+            "webp_quality": self.webp_quality,
+            "tile_map_assets": self.tile_map_assets,
+            "map_tile_size": self.map_tile_size,
+            "map_tile_format": self.map_tile_format,
+            "map_tile_quality": self.map_tile_quality,
+            "map_tile_transform_version": 3,
+            "audio_embed_transform_version": 1,
             "markdown_normalizer_version": 1,
+            "search_exclude_tags": self.search_exclude_tags,
         }
 
 
@@ -179,6 +208,10 @@ def load_config(config_path: str | Path = "website.json") -> WebsiteConfig:
     if base_path and not base_path.endswith("/"):
         base_path += "/"
 
+    map_tile_format = raw.get("map_tile_format", "webp")
+    if map_tile_format not in {"webp", "png", "jpg", "jpeg"}:
+        raise ConfigError("map_tile_format must be one of: webp, png, jpg, jpeg")
+
     return WebsiteConfig(
         root_dir=root_dir,
         config_path=path,
@@ -204,6 +237,12 @@ def load_config(config_path: str | Path = "website.json") -> WebsiteConfig:
         resize_exclude_assets=string_tuple("resize_exclude_assets"),
         max_image_width=int_value("max_image_width", 1600),
         max_image_height=int_value("max_image_height", 1600),
+        optimize_images=bool_value("optimize_images", False),
+        webp_quality=int_value("webp_quality", 82),
+        tile_map_assets=string_tuple("tile_map_assets"),
+        map_tile_size=int_value("map_tile_size", 512),
+        map_tile_format=map_tile_format,
+        map_tile_quality=int_value("map_tile_quality", 82),
         delete_unlinked_assets=bool_value("delete_unlinked_assets", True),
         base_path=base_path,
         clean_code_blocks=bool_value("clean_code_blocks", True),
@@ -212,6 +251,7 @@ def load_config(config_path: str | Path = "website.json") -> WebsiteConfig:
         hide_nav_tags=string_tuple("hide_nav_tags"),
         hide_backlinks_tags=string_tuple("hide_backlinks_tags"),
         exclude_tags=string_tuple("exclude_tags"),
+        search_exclude_tags=string_tuple("search_exclude_tags"),
         unnamed_files=unnamed_files,
         stub_files=stub_files,
         skip_future_dated=bool_value("skip_future_dated", True),
@@ -221,4 +261,9 @@ def load_config(config_path: str | Path = "website.json") -> WebsiteConfig:
         warning_report_path=path_value("warning_report_path", ".website-build/export-warnings.md")
         or root_dir
         / ".website-build/export-warnings.md",
+        asset_report_path=path_value("asset_report_path", ".website-build/asset-report.md")
+        or root_dir
+        / ".website-build/asset-report.md",
+        asset_report_top_n=int_value("asset_report_top_n", 30),
+        asset_warning_size_bytes=int_value("asset_warning_size_bytes", 5_000_000),
     )

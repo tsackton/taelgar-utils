@@ -1,4 +1,6 @@
 import json
+import html
+import re
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -62,7 +64,10 @@ class WebsiteBuildTests(unittest.TestCase):
             export_site(site.config)
             self.assertTrue((site.docs / "pic.png").exists())
             self.assertTrue((site.docs / "assets" / "audio" / "song.mp3").exists())
-            self.assertIn("](/assets/audio/song.mp3)", (site.docs / "a.md").read_text(encoding="utf-8"))
+            text = (site.docs / "a.md").read_text(encoding="utf-8")
+            self.assertIn("<audio controls>", text)
+            self.assertIn('<source src="/assets/audio/song.mp3" type="audio/mpeg">', text)
+            self.assertNotIn("![Audio]", text)
             self.assertFalse((site.docs / "unused.png").exists())
 
             write_note(site.source / "A.md", "---\nname: A\n---\nNo asset now.\n")
@@ -175,6 +180,157 @@ class WebsiteBuildTests(unittest.TestCase):
 
             self.assertTrue(text.startswith("---\ntitle: Toc\nsearch:\n  exclude: true\n---\n"))
             self.assertIn("- [One](one.md)", text)
+
+    def test_search_exclude_tags_add_material_search_exclusion(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "Timeline.md", "---\nname: Timeline\ntags: [search/exclude]\n---\nrollup\n")
+            update_config(site.config_path, {"search_exclude_tags": ["search/exclude"]})
+            config = load_config(site.config_path)
+
+            export_site(config)
+            text = (site.docs / "timeline.md").read_text(encoding="utf-8")
+
+            self.assertIn("search:", text)
+            self.assertIn("exclude: true", text)
+
+    def test_asset_report_lists_linked_and_unlinked_assets(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "A.md", "---\nname: A\n---\n![[linked.png]]\n")
+            (site.source / "linked.png").write_bytes(b"linked")
+            (site.source / "unused.png").write_bytes(b"unused")
+
+            stats = export_site(site.config)
+            report = site.root / ".website-build" / "asset-report.md"
+            text = report.read_text(encoding="utf-8")
+
+            self.assertEqual(stats.asset_warnings, [])
+            self.assertIn("Linked assets: 1", text)
+            self.assertIn("`linked.png` -> `linked.png`", text)
+            self.assertIn("`unused.png` -> `unused.png`", text)
+            self.assertIn("copied", text)
+            self.assertIn("unlinked", text)
+
+    def test_export_converts_eligible_images_to_webp_and_rewrites_links(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "A.md", "---\nname: A\n---\n![[portrait.png]]\n")
+            write_rgb_png(site.source / "portrait.png", (24, 16), "red")
+            update_config(site.config_path, {"resize_images": True, "optimize_images": True})
+            config = load_config(site.config_path)
+
+            export_site(config)
+            text = (site.docs / "a.md").read_text(encoding="utf-8")
+
+            self.assertIn("](portrait.webp)", text)
+            self.assertTrue((site.docs / "portrait.webp").exists())
+            self.assertFalse((site.docs / "portrait.png").exists())
+
+    def test_leaflet_tile_map_generates_tiles_without_copying_full_image(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Map.md",
+                "---\nname: Map\n---\n"
+                "```leaflet\n"
+                "id: test-map\n"
+                "image: [[assets/map.png]]\n"
+                "bounds:\n"
+                "- [0, 0]\n"
+                "- [12, 20]\n"
+                "height: 400px\n"
+                "lat: 6\n"
+                "long: 10\n"
+                "minZoom: -1\n"
+                "maxZoom: 2\n"
+                "defaultZoom: 0\n"
+                "```\n",
+            )
+            write_rgb_png(site.source / "assets" / "map.png", (20, 12), "blue")
+            update_config(
+                site.config_path,
+                {
+                    "clean_code_blocks": True,
+                    "codeblock_template_dir": str(UTILS_ROOT / "website" / "templates"),
+                    "tile_map_assets": ["assets/map.png"],
+                    "map_tile_size": 8,
+                },
+            )
+            config = load_config(site.config_path)
+
+            stats = export_site(config)
+            text = (site.docs / "map.md").read_text(encoding="utf-8")
+            map_config = extract_leaflet_config(text)
+
+            self.assertIn("taelgar-leaflet-map", text)
+            self.assertEqual(map_config["tile"]["baseUrl"], "/assets/tiles/map")
+            self.assertEqual(map_config["tile"]["maxNativeZoom"], 0)
+            self.assertNotIn("imageOverlay", text)
+            self.assertTrue((site.docs / "assets" / "tiles" / "map" / "0" / "0" / "0.webp").exists())
+            self.assertTrue((site.docs / "assets" / "tiles" / "map" / "0" / "2" / "1.webp").exists())
+            self.assertFalse((site.docs / "assets" / "map.png").exists())
+            self.assertEqual(stats.map_tiles_written, 6)
+
+    def test_direct_tile_map_image_renders_leaflet_tiles(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "Guide.md", "---\nname: Guide\n---\n![[assets/player-map.png]]\n")
+            write_rgb_png(site.source / "assets" / "player-map.png", (20, 12), "green")
+            update_config(
+                site.config_path,
+                {
+                    "tile_map_assets": ["assets/player-map.png"],
+                    "map_tile_size": 8,
+                },
+            )
+            config = load_config(site.config_path)
+
+            stats = export_site(config)
+            text = (site.docs / "guide.md").read_text(encoding="utf-8")
+            map_config = extract_leaflet_config(text)
+
+            self.assertIn("taelgar-leaflet-map", text)
+            self.assertEqual(map_config["tile"]["baseUrl"], "/assets/tiles/player-map")
+            self.assertEqual(map_config["tile"]["maxNativeZoom"], 0)
+            self.assertNotIn("](assets/player-map.png)", text)
+            self.assertTrue((site.docs / "assets" / "tiles" / "player-map" / "0" / "2" / "1.webp").exists())
+            self.assertFalse((site.docs / "assets" / "player-map.png").exists())
+            self.assertEqual(stats.map_tiles_written, 6)
+
+    def test_tile_map_preserves_higher_source_resolution(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Map.md",
+                "---\nname: Map\n---\n"
+                "```leaflet\n"
+                "id: test-map\n"
+                "image: [[assets/map.png]]\n"
+                "bounds:\n"
+                "- [0, 0]\n"
+                "- [12, 20]\n"
+                "height: 400px\n"
+                "lat: 6\n"
+                "long: 10\n"
+                "minZoom: -1\n"
+                "maxZoom: 2\n"
+                "defaultZoom: 0\n"
+                "```\n",
+            )
+            write_rgb_png(site.source / "assets" / "map.png", (40, 24), "blue")
+            update_config(
+                site.config_path,
+                {
+                    "clean_code_blocks": True,
+                    "codeblock_template_dir": str(UTILS_ROOT / "website" / "templates"),
+                    "tile_map_assets": ["assets/map.png"],
+                    "map_tile_size": 8,
+                },
+            )
+            config = load_config(site.config_path)
+
+            stats = export_site(config)
+            text = (site.docs / "map.md").read_text(encoding="utf-8")
+            map_config = extract_leaflet_config(text)
+
+            self.assertEqual(map_config["tile"]["maxNativeZoom"], 1)
+            self.assertTrue((site.docs / "assets" / "tiles" / "map" / "1" / "4" / "2.webp").exists())
+            self.assertEqual(stats.map_tiles_written, 21)
 
     def test_export_normalizes_paragraph_adjacent_lists(self) -> None:
         with fixture_site() as site:
@@ -289,9 +445,15 @@ def write_config(path: Path) -> None:
         "nav_dest": "toc.md",
         "asset_dir": "assets",
         "resize_images": False,
+        "optimize_images": False,
+        "webp_quality": 82,
         "resize_exclude_assets": [],
         "max_image_width": 1600,
         "max_image_height": 1600,
+        "tile_map_assets": [],
+        "map_tile_size": 512,
+        "map_tile_format": "webp",
+        "map_tile_quality": 82,
         "delete_unlinked_assets": True,
         "base_path": "/",
         "clean_code_blocks": False,
@@ -299,12 +461,16 @@ def write_config(path: Path) -> None:
         "hide_nav_tags": [],
         "hide_backlinks_tags": [],
         "exclude_tags": [],
+        "search_exclude_tags": [],
         "unnamed_files": "unlist",
         "stub_files": "skip",
         "skip_future_dated": True,
         "always_include_assets": [],
         "manifest_path": ".website-build/export-manifest.json",
         "warning_report_path": ".website-build/export-warnings.md",
+        "asset_report_path": ".website-build/asset-report.md",
+        "asset_report_top_n": 30,
+        "asset_warning_size_bytes": 5000000,
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -318,6 +484,23 @@ def update_config(path: Path, updates: dict) -> None:
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload.update(updates)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def extract_leaflet_config(text: str) -> dict:
+    match = re.search(r'data-taelgar-leaflet="([^"]+)"', text)
+    if not match:
+        raise AssertionError("Missing leaflet data config")
+    return json.loads(html.unescape(match.group(1)))
+
+
+def write_rgb_png(path: Path, size: tuple[int, int], color: str) -> None:
+    try:
+        from PIL import Image
+    except ModuleNotFoundError as error:
+        raise unittest.SkipTest("Pillow is required for image export tests") from error
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", size, color).save(path)
 
 
 if __name__ == "__main__":

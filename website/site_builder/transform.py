@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -8,6 +10,15 @@ from typing import Any
 
 import yaml
 
+from .asset_policy import (
+    TileBounds,
+    image_tile_bounds,
+    is_tile_map_asset,
+    parse_tile_bounds,
+    tile_base_path,
+    tile_extension,
+    tile_native_max_zoom,
+)
 from .link_index import LinkIndex
 from .notes import ASSET_SUFFIXES, IMAGE_SUFFIXES, WIKILINK_RE, MarkdownNote, title_case
 from .scanner import SourceEntry
@@ -24,13 +35,20 @@ class LinkIssue:
 class TransformResult:
     text: str
     linked_assets: set[str] = field(default_factory=set)
+    tile_assets: dict[str, "TileRequest"] = field(default_factory=dict)
     unresolved_links: list[LinkIssue] = field(default_factory=list)
     ambiguous_links: list[LinkIssue] = field(default_factory=list)
 
     def extend(self, other: "TransformResult") -> None:
         self.linked_assets.update(other.linked_assets)
+        self.tile_assets.update(other.tile_assets)
         self.unresolved_links.extend(other.unresolved_links)
         self.ambiguous_links.extend(other.ambiguous_links)
+
+
+@dataclass(frozen=True)
+class TileRequest:
+    bounds: object
 
 
 class NoteTransformer:
@@ -50,6 +68,7 @@ class NoteTransformer:
             result.text = self._clean_code_blocks(result.text, page_path, source_label, result)
         result.text = self._replace_audio_tags(result.text, source_label, result)
         result.text = re.sub(WIKILINK_RE, lambda match: self._replace_wikilink(match, page_path, source_label, result), result.text)
+        result.text = self._replace_markdown_audio_links(result.text, source_label, result)
         result.text = self._rewrite_and_collect_direct_asset_links(result.text, source_label, result)
         result.text = normalize_loose_lists(result.text)
         return result
@@ -71,12 +90,26 @@ class NoteTransformer:
                 template_text = template_path.read_text(encoding="utf-8")
                 self.template_cache[template_path] = template_text
             template_content = yaml.safe_load(codeblock_content) or {}
+            if codeblock_type == "leaflet":
+                template_content["height"] = template_content.get("height", "600px")
+                template_content["mapConfigJson"] = self._missing_leaflet_config(template_content)
             if codeblock_type == "leaflet" and "image" in template_content:
                 image_name = str(template_content["image"][0]).replace("[", "").replace("]", "").replace("'", "")
                 image_resolution = self.index.resolve(image_name)
                 if image_resolution.status == "found" and image_resolution.entry:
-                    result.linked_assets.add(image_resolution.entry.id)
-                    template_content["image"] = self.absolute_url(image_resolution.entry.target_path)
+                    image_entry = image_resolution.entry
+                    bounds = parse_tile_bounds(template_content.get("bounds"))
+                    if bounds:
+                        if is_tile_map_asset(image_entry.relative_path, self.config):
+                            result.tile_assets[image_entry.id] = TileRequest(bounds=bounds)
+                        else:
+                            result.linked_assets.add(image_entry.id)
+                        template_content["mapConfigJson"] = self._leaflet_config_json(
+                            template_content,
+                            image_entry,
+                            bounds,
+                            tiled=is_tile_map_asset(image_entry.relative_path, self.config),
+                        )
                 elif image_resolution.status == "ambiguous":
                     result.ambiguous_links.append(LinkIssue(source_label, image_name, "Ambiguous leaflet image"))
                 else:
@@ -91,7 +124,7 @@ class NoteTransformer:
             resolution = self.index.resolve(file_name)
             if resolution.status == "found" and resolution.entry:
                 result.linked_assets.add(resolution.entry.id)
-                return f'<audio controls>\n    <source src="{self.absolute_url(resolution.entry.target_path)}">\n</audio>'
+                return self._audio_html(resolution.entry.target_path)
             if resolution.status == "ambiguous":
                 result.ambiguous_links.append(LinkIssue(source_label, file_name, "Ambiguous audio link"))
             else:
@@ -99,6 +132,26 @@ class NoteTransformer:
             return match.group(0)
 
         return re.sub(r"!\[\[(.*?\.mp3)\]\]", replace, text)
+
+    def _replace_markdown_audio_links(self, text: str, source_label: str, result: TransformResult) -> str:
+        pattern = re.compile(r"!\[[^\]]*\]\(\s*<?(?P<target>[^<>)\s]+\.mp3)>?\s*\)", re.IGNORECASE)
+
+        def replace(match: re.Match[str]) -> str:
+            raw_target = match.group("target")
+            resolution = self.index.resolve(self._clean_direct_target(raw_target))
+            if resolution.status == "found" and resolution.entry:
+                result.linked_assets.add(resolution.entry.id)
+                return self._audio_html(resolution.entry.target_path)
+            if resolution.status == "ambiguous":
+                result.ambiguous_links.append(LinkIssue(source_label, raw_target, "Ambiguous audio link"))
+            else:
+                result.unresolved_links.append(LinkIssue(source_label, raw_target, "Missing audio link"))
+            return match.group(0)
+
+        return pattern.sub(replace, text)
+
+    def _audio_html(self, target_path: Path) -> str:
+        return f'<audio controls>\n    <source src="{self.absolute_url(target_path)}" type="audio/mpeg">\n</audio>'
 
     def _replace_wikilink(
         self,
@@ -129,14 +182,17 @@ class NoteTransformer:
             return alias or filename
 
         target = resolution.entry
-        if target.is_asset:
-            result.linked_assets.add(target.id)
         rel_link_url = relative_url(page_path, target.target_path)
         if title:
             rel_link_url += "#" + gfm_anchor(title)
 
         image_link = target.target_path.suffix.lower() in IMAGE_SUFFIXES or alias in {"right", "left"} or bool(width or height)
         if image_link:
+            if is_tile_map_asset(target.relative_path, self.config):
+                bounds = image_tile_bounds(target.source_path)
+                if bounds:
+                    result.tile_assets[target.id] = TileRequest(bounds=bounds)
+                    return self._render_inline_tile_map(target, bounds)
             image_alias = title_case(Path(filename).stem.replace("-", " ").replace("_", " "))
             params = []
             if alias in {"right", "left"}:
@@ -146,7 +202,11 @@ class NoteTransformer:
             if height:
                 params.append(f'height="{height}"')
             attrs = "{" + "; ".join(params) + "}" if params else ""
+            if target.is_asset:
+                result.linked_assets.add(target.id)
             return f"[{image_alias}]({rel_link_url}){attrs}"
+        if target.is_asset:
+            result.linked_assets.add(target.id)
         return markdown_link(alias or filename + title, rel_link_url)
 
     def _rewrite_and_collect_direct_asset_links(self, text: str, source_label: str, result: TransformResult) -> str:
@@ -179,6 +239,101 @@ class NoteTransformer:
     def absolute_url(self, target_path: Path) -> str:
         return self.config.base_path + target_path.as_posix()
 
+    def _clean_direct_target(self, raw_target: str) -> str:
+        clean_target = raw_target
+        if clean_target.startswith(self.config.base_path):
+            clean_target = clean_target[len(self.config.base_path) :]
+        return clean_target.lstrip("/")
+
+    def _missing_leaflet_config(self, template_content: dict[str, Any]) -> str:
+        config = {
+            "id": str(template_content.get("id", "leaflet-map")),
+            "bounds": template_content.get("bounds") or [[0, 0], [1, 1]],
+        }
+        return html.escape(json.dumps(config, separators=(",", ":")), quote=True)
+
+    def _leaflet_config_json(
+        self,
+        template_content: dict[str, Any],
+        target: SourceEntry,
+        bounds: TileBounds,
+        *,
+        tiled: bool,
+    ) -> str:
+        config = self._leaflet_config(
+            str(template_content.get("id", "leaflet-map")),
+            target,
+            bounds,
+            tiled=tiled,
+            min_zoom=number_value(template_content.get("minZoom"), -3),
+            max_zoom=number_value(template_content.get("maxZoom"), 2),
+            default_zoom=number_value(template_content.get("defaultZoom"), 0),
+            lat=number_value(template_content.get("lat"), None),
+            long=number_value(template_content.get("long"), None),
+            fit_bounds=False,
+        )
+        return html.escape(json.dumps(config, separators=(",", ":")), quote=True)
+
+    def _leaflet_config(
+        self,
+        map_id: str,
+        target: SourceEntry,
+        bounds: TileBounds,
+        *,
+        tiled: bool,
+        min_zoom: float | None,
+        max_zoom: float | None,
+        default_zoom: float | None,
+        lat: float | None,
+        long: float | None,
+        fit_bounds: bool,
+    ) -> dict[str, Any]:
+        config: dict[str, Any] = {
+            "id": map_id,
+            "bounds": [[bounds.y0, bounds.x0], [bounds.y1, bounds.x1]],
+            "minZoom": min_zoom if min_zoom is not None else -3,
+            "maxZoom": max_zoom if max_zoom is not None else 2,
+            "defaultZoom": default_zoom if default_zoom is not None else 0,
+            "fitBounds": fit_bounds,
+        }
+        if lat is not None and long is not None:
+            config["center"] = [lat, long]
+        if tiled:
+            config["tile"] = {
+                "baseUrl": self.absolute_url(tile_base_path(target.target_path)),
+                "extension": tile_extension(self.config),
+                "tileSize": self.config.map_tile_size,
+                "width": bounds.width,
+                "height": bounds.height,
+                "minNativeZoom": 0,
+                "maxNativeZoom": tile_native_max_zoom(target.source_path, bounds),
+            }
+        else:
+            config["image"] = {"url": self.absolute_url(target.target_path)}
+        return config
+
+    def _render_inline_tile_map(self, target: SourceEntry, bounds: TileBounds) -> str:
+        map_id = "tile-map-" + re.sub(r"[^a-z0-9_-]+", "-", target.target_path.stem.lower()).strip("-")
+        config = self._leaflet_config(
+            map_id,
+            target,
+            bounds,
+            tiled=True,
+            min_zoom=-3,
+            max_zoom=2,
+            default_zoom=0,
+            lat=None,
+            long=None,
+            fit_bounds=True,
+        )
+        config_json = html.escape(json.dumps(config, separators=(",", ":")), quote=True)
+        return "\n".join(
+            [
+                f'<div id="{map_id}" class="ext-map-container taelgar-leaflet-map" '
+                f'style="height: 600px;" data-taelgar-leaflet="{config_json}"></div>',
+            ]
+        )
+
 
 def gfm_anchor(title: str) -> str:
     if not title:
@@ -186,6 +341,15 @@ def gfm_anchor(title: str) -> str:
     title = title.lstrip("#").strip().lower()
     title = re.sub(r"[^\w\u4e00-\u9fff\- ]", "", title)
     return re.sub(r" +", "-", title)
+
+
+def number_value(value: object, default: float | None) -> float | None:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def relative_url(from_path: Path, to_path: Path) -> str:

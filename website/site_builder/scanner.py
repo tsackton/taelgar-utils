@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .asset_policy import asset_target_path_for
 from .notes import MarkdownNote, is_asset, is_markdown, parse_markdown_note
 from .slugging import slugify
 
@@ -99,13 +100,17 @@ def scan_source(config: Any) -> ScanResult:
         if note and should_skip_note(note, config):
             skipped += 1
             continue
+        asset = is_asset(source_path)
+        target_path = target_path_for(relative_path, config.slugify)
+        if asset:
+            target_path = asset_target_path_for(source_path, relative_path, target_path, config)
         entries.append(
             SourceEntry(
                 source_path=source_path,
                 relative_path=relative_path,
-                target_path=target_path_for(relative_path, config.slugify),
+                target_path=target_path,
                 is_markdown=markdown,
-                is_asset=is_asset(source_path),
+                is_asset=asset,
                 note=note,
             )
         )

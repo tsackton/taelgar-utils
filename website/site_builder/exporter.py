@@ -11,14 +11,15 @@ from typing import Any
 
 import yaml
 
-from .assets import copy_asset, copy_tree_contents
+from .asset_policy import TileBounds, tile_paths
+from .assets import copy_asset, copy_tree_contents, generate_map_tiles
 from .config import WebsiteConfig
 from .link_index import LinkIndex
 from .manifest import Manifest
 from .nav import MkDocsNavigationGenerator
 from .notes import MarkdownNote, parse_markdown_note
-from .scanner import SourceEntry, scan_source
-from .transform import LinkIssue, NoteTransformer
+from .scanner import SourceEntry, note_tag_parts, scan_source
+from .transform import LinkIssue, NoteTransformer, TileRequest
 
 
 CONTENT_WARNING_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -55,11 +56,33 @@ class ExportStats:
     skipped_notes: int = 0
     copied_assets: int = 0
     resized_assets: int = 0
+    optimized_assets: int = 0
+    tiled_maps: int = 0
+    map_tiles_written: int = 0
     deleted_stale_outputs: int = 0
     unresolved_links: list[LinkIssue] = field(default_factory=list)
     ambiguous_links: list[LinkIssue] = field(default_factory=list)
     nav_warnings: list[str] = field(default_factory=list)
     content_warnings: list[ContentWarning] = field(default_factory=list)
+    asset_warnings: list["AssetWarning"] = field(default_factory=list)
+
+
+@dataclass
+class AssetWarning:
+    path: str
+    size_bytes: int
+    linked: bool
+    status: str
+
+
+@dataclass
+class AssetReportItem:
+    source: str
+    target: str
+    source_size: int
+    output_size: int
+    linked: bool
+    status: str
 
 
 def export_site(config: WebsiteConfig) -> ExportStats:
@@ -92,6 +115,7 @@ def export_site(config: WebsiteConfig) -> ExportStats:
     new_manifest: dict[str, dict[str, Any]] = {}
     generated: set[str] = set()
     linked_asset_ids: set[str] = set()
+    tile_requests: dict[str, TileRequest] = {}
 
     for entry in [item for item in scan.entries if item.is_markdown]:
         previous = previous_manifest.get(entry.id)
@@ -102,6 +126,10 @@ def export_site(config: WebsiteConfig) -> ExportStats:
             stats.skipped_notes += 1
             generated.add(entry.target_path.as_posix())
             linked_asset_ids.update(previous.get("linked_assets", []))
+            for asset_id, raw_request in previous.get("tile_assets", {}).items():
+                bounds = raw_request.get("bounds") if isinstance(raw_request, dict) else None
+                if isinstance(bounds, list):
+                    tile_requests[asset_id] = TileRequest(bounds=tile_bounds_from_manifest(bounds))
             new_manifest[entry.id] = previous
             continue
 
@@ -109,13 +137,14 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         stats.unresolved_links.extend(result.unresolved_links)
         stats.ambiguous_links.extend(result.ambiguous_links)
         linked_asset_ids.update(result.linked_assets)
+        tile_requests.update(result.tile_assets)
         output = render_note(entry.note, result.text, config)
         if write_text_if_changed(target_path, output):
             stats.exported_notes += 1
         else:
             stats.skipped_notes += 1
         generated.add(entry.target_path.as_posix())
-        new_manifest[entry.id] = manifest_record(entry, config_digest, index_digest, result.linked_assets)
+        new_manifest[entry.id] = manifest_record(entry, config_digest, index_digest, result.linked_assets, result.tile_assets)
 
     if config.home_source:
         home_note = parse_markdown_note(config.home_source, config)
@@ -124,6 +153,7 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         stats.unresolved_links.extend(home_result.unresolved_links)
         stats.ambiguous_links.extend(home_result.ambiguous_links)
         linked_asset_ids.update(home_result.linked_assets)
+        tile_requests.update(home_result.tile_assets)
         home_output = render_note(home_note, home_result.text, config)
         if write_text_if_changed(config.docs_dir / config.home_dest, home_output):
             stats.exported_notes += 1
@@ -139,6 +169,25 @@ def export_site(config: WebsiteConfig) -> ExportStats:
 
     linked_asset_ids.update(resolve_always_include_assets(config, index))
     asset_entries = {entry.id: entry for entry in scan.entries if entry.is_asset}
+    for asset_id, request in sorted(tile_requests.items()):
+        entry = asset_entries.get(asset_id)
+        if entry is None:
+            continue
+        bounds = request.bounds
+        if not isinstance(bounds, TileBounds):
+            continue
+        tile_rel_paths = tile_paths(entry.target_path, bounds, config, entry.source_path)
+        generated.update(path.as_posix() for path in tile_rel_paths)
+        manifest_id = tile_manifest_id(entry.id)
+        previous = previous_manifest.get(manifest_id)
+        if can_skip_tiles(previous, entry, config_digest, bounds, tile_rel_paths, config.docs_dir):
+            new_manifest[manifest_id] = previous
+            continue
+        tile_result = generate_map_tiles(entry, config.docs_dir, bounds, config)
+        stats.tiled_maps += 1
+        stats.map_tiles_written += tile_result.tiles_written
+        new_manifest[manifest_id] = tile_record(entry, config_digest, bounds, tile_rel_paths)
+
     for asset_id in sorted(linked_asset_ids):
         entry = asset_entries.get(asset_id)
         if entry is None:
@@ -152,12 +201,14 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         result = copy_asset(entry, target_path, config)
         stats.copied_assets += 1
         stats.resized_assets += 1 if result.resized else 0
+        stats.optimized_assets += 1 if result.optimized else 0
         generated.add(entry.target_path.as_posix())
         new_manifest[entry.id] = asset_record(entry, config_digest)
 
     stats.deleted_stale_outputs = delete_stale_outputs(config.docs_dir, manifest.generated, generated)
     manifest.save(new_manifest, generated)
     write_warning_report(config.warning_report_path, stats.content_warnings)
+    stats.asset_warnings = write_asset_report(config.asset_report_path, scan.entries, linked_asset_ids, tile_requests, config)
     print_summary(stats, time.perf_counter() - start)
     return stats
 
@@ -167,10 +218,7 @@ def render_note(note: MarkdownNote | None, body: str, config: WebsiteConfig) -> 
         raise ValueError("Cannot render missing note")
     metadata = dict(note.metadata)
     metadata["title"] = note.page_title
-    tags = metadata.get("tags", [])
-    if isinstance(tags, str):
-        tags = [tags]
-    tag_parts = {part for tag in tags for part in str(tag).split("/")}
+    tag_parts = note_tag_parts(note)
     hide_nav = bool(tag_parts.intersection(config.hide_nav_tags))
     hide_toc = bool(tag_parts.intersection(config.hide_toc_tags))
     hide_backlinks = bool(tag_parts.intersection(config.hide_backlinks_tags))
@@ -184,6 +232,11 @@ def render_note(note: MarkdownNote | None, body: str, config: WebsiteConfig) -> 
         metadata["hide"] = ["navigation"]
     elif hide_toc and metadata.get("hide_backlinks"):
         metadata["hide"] = ["toc"]
+    if tag_parts.intersection(config.search_exclude_tags):
+        search_metadata = metadata.get("search")
+        search_dict = dict(search_metadata) if isinstance(search_metadata, dict) else {}
+        search_dict["exclude"] = True
+        metadata["search"] = search_dict
     frontmatter = yaml.dump(
         metadata,
         sort_keys=False,
@@ -236,6 +289,94 @@ def write_warning_report(path: Path, warnings: list[ContentWarning]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def write_asset_report(
+    path: Path,
+    entries: list[SourceEntry],
+    linked_asset_ids: set[str],
+    tile_requests: dict[str, TileRequest],
+    config: WebsiteConfig,
+) -> list[AssetWarning]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tile_asset_ids = set(tile_requests)
+    items: list[AssetReportItem] = []
+    warnings: list[AssetWarning] = []
+    for entry in entries:
+        if not entry.is_asset:
+            continue
+        source_size = entry.source_path.stat().st_size
+        output_path = config.docs_dir / entry.target_path
+        output_size = output_path.stat().st_size if output_path.exists() else 0
+        linked = entry.id in linked_asset_ids or entry.id in tile_asset_ids
+        if entry.id in tile_asset_ids:
+            status = "tiled"
+        elif entry.target_path.suffix.lower() == ".webp" and entry.source_path.suffix.lower() != ".webp":
+            status = "optimized"
+        elif linked:
+            status = "copied"
+        else:
+            status = "unlinked"
+        item = AssetReportItem(
+            source=entry.relative_path.as_posix(),
+            target=entry.target_path.as_posix(),
+            source_size=source_size,
+            output_size=output_size,
+            linked=linked,
+            status=status,
+        )
+        items.append(item)
+        warning_size = output_size or source_size
+        if linked and warning_size >= config.asset_warning_size_bytes and status != "tiled":
+            warnings.append(AssetWarning(entry.target_path.as_posix(), warning_size, linked, status))
+
+    top_n = config.asset_report_top_n
+    linked_count = sum(1 for item in items if item.linked)
+    optimized_count = sum(1 for item in items if item.status == "optimized")
+    tiled_count = sum(1 for item in items if item.status == "tiled")
+    lines = [
+        "# Asset Report",
+        "",
+        f"- Source assets scanned: {len(items)}",
+        f"- Linked assets: {linked_count}",
+        f"- Optimized image assets: {optimized_count}",
+        f"- Tile-backed map assets: {tiled_count}",
+        f"- Warning threshold: {format_bytes(config.asset_warning_size_bytes)}",
+        "",
+        "## Warnings",
+        "",
+    ]
+    if warnings:
+        for warning in sorted(warnings, key=lambda item: item.size_bytes, reverse=True):
+            lines.append(f"- `{warning.path}`: {format_bytes(warning.size_bytes)} ({warning.status})")
+    else:
+        lines.append("No oversized linked assets.")
+
+    lines.extend(["", f"## Top {top_n} Source Assets", ""])
+    for item in sorted(items, key=lambda value: value.source_size, reverse=True)[:top_n]:
+        lines.append(
+            f"- `{item.source}` -> `{item.target}`: source {format_bytes(item.source_size)}, "
+            f"output {format_bytes(item.output_size)}, {item.status}"
+        )
+
+    lines.extend(["", f"## Top {top_n} Output Assets", ""])
+    for item in sorted(items, key=lambda value: value.output_size, reverse=True)[:top_n]:
+        lines.append(
+            f"- `{item.target}`: output {format_bytes(item.output_size)}, "
+            f"source {format_bytes(item.source_size)}, {item.status}"
+        )
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return warnings
+
+
+def format_bytes(size: int) -> str:
+    value = float(size)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} B"
+        value /= 1024
+    return f"{size} B"
+
+
 def can_skip_entry(
     previous: dict[str, Any] | None,
     entry: SourceEntry,
@@ -261,7 +402,13 @@ def can_skip_asset(previous: dict[str, Any] | None, entry: SourceEntry, target_p
     )
 
 
-def manifest_record(entry: SourceEntry, config_digest: str, index_digest: str, linked_assets: set[str]) -> dict[str, Any]:
+def manifest_record(
+    entry: SourceEntry,
+    config_digest: str,
+    index_digest: str,
+    linked_assets: set[str],
+    tile_assets: dict[str, TileRequest],
+) -> dict[str, Any]:
     return {
         "kind": "note",
         "source_signature": entry.source_signature,
@@ -269,6 +416,11 @@ def manifest_record(entry: SourceEntry, config_digest: str, index_digest: str, l
         "config_digest": config_digest,
         "index_digest": index_digest,
         "linked_assets": sorted(linked_assets),
+        "tile_assets": {
+            asset_id: {"bounds": tile_bounds_to_manifest(request.bounds)}
+            for asset_id, request in sorted(tile_assets.items())
+            if isinstance(request.bounds, TileBounds)
+        },
     }
 
 
@@ -279,6 +431,55 @@ def asset_record(entry: SourceEntry, config_digest: str) -> dict[str, Any]:
         "target": entry.target_path.as_posix(),
         "config_digest": config_digest,
     }
+
+
+def tile_manifest_id(asset_id: str) -> str:
+    return asset_id + "::tiles"
+
+
+def tile_record(entry: SourceEntry, config_digest: str, bounds: TileBounds, paths: list[Path]) -> dict[str, Any]:
+    return {
+        "kind": "tiles",
+        "source_signature": entry.source_signature,
+        "target": entry.target_path.as_posix(),
+        "config_digest": config_digest,
+        "bounds": tile_bounds_to_manifest(bounds),
+        "tiles": [path.as_posix() for path in paths],
+    }
+
+
+def can_skip_tiles(
+    previous: dict[str, Any] | None,
+    entry: SourceEntry,
+    config_digest: str,
+    bounds: TileBounds,
+    paths: list[Path],
+    docs_dir: Path,
+) -> bool:
+    return bool(
+        previous
+        and previous.get("source_signature") == entry.source_signature
+        and previous.get("config_digest") == config_digest
+        and previous.get("bounds") == tile_bounds_to_manifest(bounds)
+        and previous.get("tiles") == [path.as_posix() for path in paths]
+        and all((docs_dir / path).exists() for path in paths)
+    )
+
+
+def tile_bounds_to_manifest(bounds: object) -> list[list[float]]:
+    if not isinstance(bounds, TileBounds):
+        return []
+    return [[bounds.y0, bounds.x0], [bounds.y1, bounds.x1]]
+
+
+def tile_bounds_from_manifest(value: object) -> TileBounds:
+    if (
+        isinstance(value, list)
+        and len(value) == 2
+        and all(isinstance(item, list) and len(item) == 2 for item in value)
+    ):
+        return TileBounds(float(value[0][0]), float(value[0][1]), float(value[1][0]), float(value[1][1]))
+    return TileBounds(0, 0, 1, 1)
 
 
 def resolve_always_include_assets(config: WebsiteConfig, index: LinkIndex) -> set[str]:
@@ -330,6 +531,8 @@ def print_summary(stats: ExportStats, elapsed: float) -> None:
         f"{stats.skipped_notes} note(s) unchanged, "
         f"{stats.copied_assets} asset(s) copied, "
         f"{stats.resized_assets} resized, "
+        f"{stats.optimized_assets} optimized, "
+        f"{stats.map_tiles_written} map tile(s) written, "
         f"{stats.deleted_stale_outputs} stale output(s) removed"
     )
     print(
@@ -337,7 +540,8 @@ def print_summary(stats: ExportStats, elapsed: float) -> None:
         f"{len(stats.unresolved_links)} unresolved link(s), "
         f"{len(stats.ambiguous_links)} ambiguous link(s), "
         f"{len(stats.nav_warnings)} nav warning(s), "
-        f"{len(stats.content_warnings)} content warning(s)"
+        f"{len(stats.content_warnings)} content warning(s), "
+        f"{len(stats.asset_warnings)} asset warning(s)"
     )
     if stats.content_warnings:
         print("Content warnings:")
@@ -345,4 +549,10 @@ def print_summary(stats: ExportStats, elapsed: float) -> None:
             print(f"  - {warning.source}:{warning.line}: {warning.kind}: {warning.excerpt}")
         if len(stats.content_warnings) > 40:
             print(f"  - ... {len(stats.content_warnings) - 40} more")
+    if stats.asset_warnings:
+        print("Asset warnings:")
+        for warning in sorted(stats.asset_warnings, key=lambda item: item.size_bytes, reverse=True)[:20]:
+            print(f"  - {warning.path}: {format_bytes(warning.size_bytes)} ({warning.status})")
+        if len(stats.asset_warnings) > 20:
+            print(f"  - ... {len(stats.asset_warnings) - 20} more")
     print(f"Done in {elapsed:.2f}s")

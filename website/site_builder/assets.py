@@ -4,9 +4,11 @@ import fnmatch
 import shutil
 import warnings
 from dataclasses import dataclass
+from math import ceil
 from pathlib import Path
 from typing import Any
 
+from .asset_policy import TileBounds, is_resize_excluded_path, tile_native_max_zoom
 from .notes import IMAGE_SUFFIXES
 from .scanner import SourceEntry
 
@@ -15,6 +17,7 @@ from .scanner import SourceEntry
 class AssetCopyResult:
     copied: bool
     resized: bool
+    optimized: bool = False
 
 
 def copy_asset(entry: SourceEntry, target_path: Path, config: Any) -> AssetCopyResult:
@@ -36,12 +39,20 @@ def copy_asset(entry: SourceEntry, target_path: Path, config: Any) -> AssetCopyR
                     stacklevel=2,
                 )
         with img:
+            img.load()
             width, height = img.size
+            resized = False
             if width > config.max_image_width or height > config.max_image_height:
                 ratio = min(config.max_image_width / width, config.max_image_height / height)
                 new_size = (max(1, int(width * ratio)), max(1, int(height * ratio)))
                 resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
                 img = img.resize(new_size, resampling)
+                resized = True
+            if target_path.suffix.lower() == ".webp":
+                img = img.convert("RGB")
+                img.save(target_path, "WEBP", quality=config.webp_quality, method=6)
+                return AssetCopyResult(copied=True, resized=resized, optimized=True)
+            if resized:
                 img.save(target_path)
                 return AssetCopyResult(copied=True, resized=True)
     shutil.copy2(entry.source_path, target_path)
@@ -49,9 +60,71 @@ def copy_asset(entry: SourceEntry, target_path: Path, config: Any) -> AssetCopyR
 
 
 def is_resize_excluded(entry: SourceEntry, config: Any) -> bool:
-    relative_path = entry.relative_path.as_posix()
-    filename = entry.relative_path.name
-    return any(fnmatch.fnmatch(relative_path, pattern) or fnmatch.fnmatch(filename, pattern) for pattern in config.resize_exclude_assets)
+    return is_resize_excluded_path(entry.relative_path, config)
+
+
+@dataclass
+class TileGenerationResult:
+    generated: bool
+    paths: list[Path]
+    tiles_written: int
+    bytes_written: int
+
+
+def generate_map_tiles(entry: SourceEntry, docs_dir: Path, bounds: TileBounds, config: Any) -> TileGenerationResult:
+    try:
+        from PIL import Image
+    except ImportError as error:
+        raise RuntimeError("map tiling requires Pillow to be installed") from error
+
+    from .asset_policy import tile_paths
+
+    relative_paths = tile_paths(entry.target_path, bounds, config, entry.source_path)
+    target_paths = [docs_dir / path for path in relative_paths]
+    for target in target_paths:
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+    native_max_zoom = tile_native_max_zoom(entry.source_path, bounds)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+        with Image.open(entry.source_path) as img:
+            img.load()
+            resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+            source_image = img.convert("RGB")
+
+    tile_size = config.map_tile_size
+    bytes_written = 0
+    tiles_written = 0
+    with source_image:
+        for zoom in range(native_max_zoom + 1):
+            scale = 2**zoom
+            display_width = bounds.width * scale
+            display_height = bounds.height * scale
+            display = source_image.resize((display_width, display_height), resampling)
+            x_count = ceil(display_width / tile_size)
+            y_count = ceil(display_height / tile_size)
+            with display:
+                for x in range(x_count):
+                    for y in range(y_count):
+                        left = x * tile_size
+                        upper = y * tile_size
+                        crop = display.crop(
+                            (left, upper, min(left + tile_size, display_width), min(upper + tile_size, display_height))
+                        )
+                        tile = Image.new("RGB", (tile_size, tile_size), "white")
+                        tile.paste(crop, (0, 0))
+                        target = docs_dir / relative_paths[tiles_written]
+                        if config.map_tile_format == "webp":
+                            tile.save(target, "WEBP", quality=config.map_tile_quality, method=6)
+                        elif config.map_tile_format in {"jpg", "jpeg"}:
+                            tile.save(target, "JPEG", quality=config.map_tile_quality)
+                        else:
+                            tile.save(target, "PNG")
+                        bytes_written += target.stat().st_size
+                        tiles_written += 1
+
+    return TileGenerationResult(generated=True, paths=relative_paths, tiles_written=tiles_written, bytes_written=bytes_written)
 
 
 def copy_tree_contents(source: Path, dest: Path) -> list[Path]:
