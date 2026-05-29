@@ -2,8 +2,9 @@
 {% if config.mdx_configs.toc and config.mdx_configs.toc.title %}
 {% set title = config.mdx_configs.toc.title %}
 {% endif %}
-{% set toc_items = page.toc %}
-{% if toc_items and not page.meta.hide_toc %}
+{% set page_meta = page.meta if page is defined and page and page.meta else {} %}
+{% set toc_items = page.toc if page is defined and page and page.toc else [] %}
+{% if toc_items and not page_meta.hide_toc %}
   {% set first = toc_items | first %}
   {% if first and first.level == 1 %}
   {% set toc_items = first.children %}
@@ -11,8 +12,8 @@
 {% else %}
   {% set toc_items = [] %}
 {% endif %}
-{% set show_toc = toc_items and not page.meta.hide_toc %}
-{% set show_backlinks = backlinks and not page.meta.hide_backlinks %}
+{% set show_toc = toc_items and not page_meta.hide_toc %}
+{% set show_backlinks = backlinks is defined and backlinks and not page_meta.hide_backlinks %}
 {% if show_toc %}
 <nav class="md-nav md-nav--secondary taelgar-secondary-nav" aria-label="{{ title }}">
   <label class="md-nav__title" for="__toc">
@@ -21,20 +22,22 @@
   </label>
   <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
     {% for toc_item in toc_items %}
-    {% include "partials/toc-item.html" %}
+      {% include "partials/toc-item.html" %}
     {% endfor %}
   </ul>
 </nav>
 {% endif %}
 {% if show_backlinks %}
-<nav class="md-nav md-nav--secondary taelgar-secondary-nav" aria-label="Backlinks" style="{% if show_toc %}margin-top: 1em;{% endif %}">
+<nav class="md-nav md-nav--secondary taelgar-secondary-nav taelgar-backlinks" aria-label="Backlinks" style="{% if show_toc %}margin-top: 1em;{% endif %}">
   <label class="md-nav__title" for="__backlinks">
     <span class="md-nav__icon md-icon"></span>
     Backlinks
   </label>
   <ul class="md-nav__list" data-md-component="backlinks" data-md-scrollfix>
     {% set base_path = config.base_path if config.base_path is not none else "/" %}
+    {% set visible_backlinks = 12 %}
     {% for backlink in backlinks %}
+    {% if loop.index <= visible_backlinks %}
     <li class="md-nav__item">
       <a href="{{ base_path }}{{ backlink.url }}" class="md-nav__link">
         <span class="md-ellipsis">
@@ -42,7 +45,30 @@
         </span>
       </a>
     </li>
+    {% endif %}
     {% endfor %}
+    {% if backlinks | length > visible_backlinks %}
+    <li class="md-nav__item taelgar-backlinks__more">
+      <details>
+        <summary class="md-nav__link">
+          <span class="md-ellipsis">{{ (backlinks | length) - visible_backlinks }} more backlinks</span>
+        </summary>
+        <ul class="md-nav__list">
+          {% for backlink in backlinks %}
+          {% if loop.index > visible_backlinks %}
+          <li class="md-nav__item">
+            <a href="{{ base_path }}{{ backlink.url }}" class="md-nav__link">
+              <span class="md-ellipsis">
+                {{ backlink.title }}
+              </span>
+            </a>
+          </li>
+          {% endif %}
+          {% endfor %}
+        </ul>
+      </details>
+    </li>
+    {% endif %}
   </ul>
 </nav>
 {% endif %}

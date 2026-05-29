@@ -9,6 +9,24 @@
   grid-template-columns: 1fr;
 }
 
+.md-typeset .grid.cards.ext-one-column {
+  margin: 0.35rem 0 1rem;
+}
+
+.md-typeset .grid.cards.ext-one-column > ul {
+  gap: 0.5rem;
+}
+
+.md-typeset .grid.cards.ext-one-column > ul > li {
+  border-radius: 6px;
+  padding: 0.65rem 0.8rem;
+}
+
+.md-typeset .grid.cards.ext-one-column .bio {
+  color: var(--md-default-fg-color--light);
+  margin-top: 0.2rem;
+}
+
 /* margins */
 .md-typeset .ext-narrow-margin {
   margin-top: 0.25rem;
@@ -26,6 +44,91 @@
 @media screen and (min-width: 76.25em) {
   .md-sidebar--primary:not(:has(.md-nav__item--active)):not(:has(.md-nav__link--active)) {
     display: none;
+  }
+}
+
+.taelgar-backlinks .md-nav__link {
+  font-size: 0.64rem;
+  line-height: 1.25;
+  padding-bottom: 0.12rem;
+  padding-top: 0.12rem;
+}
+
+.taelgar-backlinks > .md-nav__list {
+  max-height: 48vh;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.taelgar-backlinks__more {
+  margin-top: 0.15rem;
+}
+
+.taelgar-backlinks__more summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.taelgar-backlinks__more summary::-webkit-details-marker {
+  display: none;
+}
+
+.taelgar-backlinks__more summary::before {
+  color: var(--md-default-fg-color--light);
+  content: "+";
+  display: inline-block;
+  font-weight: 700;
+  margin-right: 0.25rem;
+}
+
+.taelgar-backlinks__more details[open] summary::before {
+  content: "-";
+}
+
+.taelgar-backlinks__more .md-nav__list {
+  margin-left: 0.45rem;
+  margin-top: 0.15rem;
+}
+
+.md-typeset table:not([class]) {
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.md-typeset table:not([class]) th,
+.md-typeset table:not([class]) td {
+  padding: 0.45em 0.65em;
+  vertical-align: top;
+}
+
+.md-typeset table:has(img) th:first-child,
+.md-typeset table:has(img) td:first-child {
+  text-align: center;
+  width: 5rem;
+}
+
+.md-typeset table img {
+  display: block;
+  height: auto;
+  margin: 0 auto;
+  max-height: 4.5rem;
+  max-width: 4.5rem;
+  object-fit: contain;
+}
+
+.md-typeset table a[href*="dndbeyond.com"] {
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+@media screen and (max-width: 44.984375em) {
+  .md-typeset table:not([class]) {
+    font-size: 0.68rem;
+  }
+
+  .md-typeset table img {
+    max-height: 3.25rem;
+    max-width: 3.25rem;
   }
 }
 
