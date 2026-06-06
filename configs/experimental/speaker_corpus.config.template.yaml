@@ -1,0 +1,31 @@
+# Paths (fill in absolute or relative paths as needed)
+sessions_dir: /Users/tim/Documents/RPGs/sessions/dunmar
+recordings_dir: /Users/tim/Documents/RPGs/campaigns/Dunmar/recordings/zoom
+clips_dir: /Users/tim/RPGs/speaker-clips
+
+# Glob patterns are relative to sessions_dir
+diarization_glob: "**/zoom*/*.diarization.json"
+speaker_mapping_glob: "**/zoom*/*.speaker_mapping.json"
+
+# Only sample these players (exact names without "(Character)" suffixes)
+player_allowlist:
+  - Kate Sackton
+  - Mike Sackton
+  - Tim Sackton
+  - Eric Rosenbaum
+  - David Kong
+  - David Schwartz
+
+# Optional tuning knobs
+min_clip_seconds: 3.0
+max_session_minutes_per_speaker: 3.5
+target_minutes_per_speaker: 210.0  # 3.5 hours
+audio_profile: zoom-audio
+recording_subdir_pattern: "Session {number}"
+clip_format: wav
+sample_rate: 16000
+channels: 1
+max_clips_per_session:
+min_gap_ms: 500
+manifest_filename: manifest.jsonl
+stats_filename: manifest_stats.json
