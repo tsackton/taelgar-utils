@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -12,7 +14,7 @@ from typing import Any
 import yaml
 
 from .asset_policy import TileBounds, tile_paths
-from .assets import copy_asset, copy_tree_contents, generate_map_tiles
+from .assets import AssetCopyResult, copy_asset, copy_tree_contents, generate_map_tiles
 from .config import WebsiteConfig
 from .link_index import LinkIndex
 from .manifest import Manifest
@@ -220,6 +222,7 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         stats.map_tiles_written += tile_result.tiles_written
         new_manifest[manifest_id] = tile_record(entry, config_digest, bounds, tile_rel_paths)
 
+    asset_jobs: list[AssetCopyJob] = []
     for asset_id in sorted(linked_asset_ids):
         entry = asset_entries.get(asset_id)
         if entry is None:
@@ -230,7 +233,13 @@ def export_site(config: WebsiteConfig) -> ExportStats:
             generated.add(entry.target_path.as_posix())
             new_manifest[entry.id] = previous
             continue
-        result = copy_asset(entry, target_path, config)
+        asset_jobs.append(AssetCopyJob(entry, target_path))
+
+    asset_workers = asset_worker_count(len(asset_jobs))
+    if asset_jobs and asset_workers > 1:
+        print(f"Assets: processing {len(asset_jobs)} file(s) with {asset_workers} worker(s)")
+    for job, result in copy_assets(asset_jobs, config, asset_workers):
+        entry = job.entry
         stats.copied_assets += 1
         stats.resized_assets += 1 if result.resized else 0
         stats.optimized_assets += 1 if result.optimized else 0
@@ -521,6 +530,31 @@ def resolve_always_include_assets(config: WebsiteConfig, index: LinkIndex) -> se
             if entry.is_asset and entry.relative_path.match(pattern):
                 asset_ids.add(entry.id)
     return asset_ids
+
+
+@dataclass(frozen=True)
+class AssetCopyJob:
+    entry: SourceEntry
+    target_path: Path
+
+
+def copy_assets(
+    jobs: list[AssetCopyJob], config: WebsiteConfig, workers: int
+) -> list[tuple[AssetCopyJob, AssetCopyResult]]:
+    if not jobs:
+        return []
+    if workers <= 1:
+        return [(job, copy_asset(job.entry, job.target_path, config)) for job in jobs]
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(lambda job: (job, copy_asset(job.entry, job.target_path, config)), jobs))
+
+
+def asset_worker_count(job_count: int) -> int:
+    if job_count <= 1:
+        return 1
+    process_cpu_count = getattr(os, "process_cpu_count", None)
+    cpu_count = process_cpu_count() if process_cpu_count is not None else os.cpu_count()
+    return max(1, min(job_count, cpu_count or 1))
 
 
 def delete_stale_outputs(docs_dir: Path, previous: set[str], current: set[str]) -> int:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import shutil
+import threading
 import warnings
 from dataclasses import dataclass
 from math import ceil
@@ -11,6 +12,9 @@ from typing import Any
 from .asset_policy import TileBounds, is_resize_excluded_path, tile_native_max_zoom
 from .notes import IMAGE_SUFFIXES
 from .scanner import SourceEntry
+
+WEBP_METHOD = 2
+_WARNING_LOCK = threading.Lock()
 
 
 @dataclass
@@ -28,9 +32,10 @@ def copy_asset(entry: SourceEntry, target_path: Path, config: Any) -> AssetCopyR
             from PIL import Image
         except ImportError as error:
             raise RuntimeError("resize_images requires Pillow to be installed") from error
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", Image.DecompressionBombWarning)
-            img = Image.open(entry.source_path)
+        with _WARNING_LOCK:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", Image.DecompressionBombWarning)
+                img = Image.open(entry.source_path)
         for warning in caught:
             if issubclass(warning.category, Image.DecompressionBombWarning):
                 warnings.warn(
@@ -50,7 +55,7 @@ def copy_asset(entry: SourceEntry, target_path: Path, config: Any) -> AssetCopyR
                 resized = True
             if target_path.suffix.lower() == ".webp":
                 img = img.convert("RGB")
-                img.save(target_path, "WEBP", quality=config.webp_quality, method=6)
+                img.save(target_path, "WEBP", quality=config.webp_quality, method=WEBP_METHOD)
                 return AssetCopyResult(copied=True, resized=resized, optimized=True)
             if resized:
                 img.save(target_path)
@@ -122,7 +127,7 @@ def generate_map_tiles(entry: SourceEntry, docs_dir: Path, bounds: TileBounds, c
                         tile.paste(crop, (0, max(0, -source_upper)))
                         target = docs_dir / relative_paths[tiles_written]
                         if config.map_tile_format == "webp":
-                            tile.save(target, "WEBP", quality=config.map_tile_quality, method=6)
+                            tile.save(target, "WEBP", quality=config.map_tile_quality, method=WEBP_METHOD)
                         elif config.map_tile_format in {"jpg", "jpeg"}:
                             tile.save(target, "JPEG", quality=config.map_tile_quality)
                         else:
