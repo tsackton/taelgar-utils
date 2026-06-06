@@ -136,7 +136,8 @@ The Obsidian-facing note remains unchanged. During export, the website builder
 uses `session_artifact_roots` to locate the matching reviewed
 `session-recap.md`, slices the cleaned transcript by each recap block's Source
 Range, writes transcript data under `assets/session-zoom/`, and replaces only
-the published `## Narrative` section.
+the published `## Narrative` section. The generated scene titles are normal
+Markdown headings so MkDocs Material can provide the page table of contents.
 
 ### Links, Code Blocks, And Assets
 
