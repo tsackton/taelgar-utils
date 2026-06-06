@@ -14,6 +14,45 @@
 {% endif %}
 {% set show_toc = toc_items and not page_meta.hide_toc %}
 {% set show_backlinks = backlinks is defined and backlinks and not page_meta.hide_backlinks %}
+{% macro backlinks_list() %}
+<ul class="md-nav__list" data-md-component="backlinks" data-md-scrollfix>
+  {% set base_path = config.base_path if config.base_path is not none else "/" %}
+  {% set visible_backlinks = 12 %}
+  {% for backlink in backlinks %}
+  {% if loop.index <= visible_backlinks %}
+  <li class="md-nav__item">
+    <a href="{{ base_path }}{{ backlink.url }}" class="md-nav__link">
+      <span class="md-ellipsis">
+        {{ backlink.title }}
+      </span>
+    </a>
+  </li>
+  {% endif %}
+  {% endfor %}
+  {% if backlinks | length > visible_backlinks %}
+  <li class="md-nav__item taelgar-backlinks__more">
+    <details>
+      <summary class="md-nav__link">
+        <span class="md-ellipsis">{{ (backlinks | length) - visible_backlinks }} more backlinks</span>
+      </summary>
+      <ul class="md-nav__list">
+        {% for backlink in backlinks %}
+        {% if loop.index > visible_backlinks %}
+        <li class="md-nav__item">
+          <a href="{{ base_path }}{{ backlink.url }}" class="md-nav__link">
+            <span class="md-ellipsis">
+              {{ backlink.title }}
+            </span>
+          </a>
+        </li>
+        {% endif %}
+        {% endfor %}
+      </ul>
+    </details>
+  </li>
+  {% endif %}
+</ul>
+{% endmacro %}
 {% if show_toc %}
 <nav class="md-nav md-nav--secondary taelgar-secondary-nav" aria-label="{{ title }}">
   <label class="md-nav__title" for="__toc">
@@ -25,50 +64,20 @@
       {% include "partials/toc-item.html" %}
     {% endfor %}
   </ul>
+  {% if show_backlinks %}
+  <div class="taelgar-backlinks" aria-label="Backlinks">
+    <p class="taelgar-backlinks__title">Backlinks</p>
+    {{ backlinks_list() }}
+  </div>
+  {% endif %}
 </nav>
 {% endif %}
-{% if show_backlinks %}
+{% if show_backlinks and not show_toc %}
 <nav class="md-nav md-nav--secondary taelgar-secondary-nav taelgar-backlinks" aria-label="Backlinks" style="{% if show_toc %}margin-top: 1em;{% endif %}">
   <label class="md-nav__title" for="__backlinks">
     <span class="md-nav__icon md-icon"></span>
     Backlinks
   </label>
-  <ul class="md-nav__list" data-md-component="backlinks" data-md-scrollfix>
-    {% set base_path = config.base_path if config.base_path is not none else "/" %}
-    {% set visible_backlinks = 12 %}
-    {% for backlink in backlinks %}
-    {% if loop.index <= visible_backlinks %}
-    <li class="md-nav__item">
-      <a href="{{ base_path }}{{ backlink.url }}" class="md-nav__link">
-        <span class="md-ellipsis">
-          {{ backlink.title }}
-        </span>
-      </a>
-    </li>
-    {% endif %}
-    {% endfor %}
-    {% if backlinks | length > visible_backlinks %}
-    <li class="md-nav__item taelgar-backlinks__more">
-      <details>
-        <summary class="md-nav__link">
-          <span class="md-ellipsis">{{ (backlinks | length) - visible_backlinks }} more backlinks</span>
-        </summary>
-        <ul class="md-nav__list">
-          {% for backlink in backlinks %}
-          {% if loop.index > visible_backlinks %}
-          <li class="md-nav__item">
-            <a href="{{ base_path }}{{ backlink.url }}" class="md-nav__link">
-              <span class="md-ellipsis">
-                {{ backlink.title }}
-              </span>
-            </a>
-          </li>
-          {% endif %}
-          {% endfor %}
-        </ul>
-      </details>
-    </li>
-    {% endif %}
-  </ul>
+  {{ backlinks_list() }}
 </nav>
 {% endif %}
