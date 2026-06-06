@@ -297,7 +297,6 @@ def render_zoom_html(
     lines.extend(
         [
             "    </div>",
-            '    <button type="button" class="taelgar-session-zoom__cycle">Next: Intermediate</button>',
             "  </div>",
             "</div>",
         ]

@@ -61,15 +61,8 @@
     root.dataset.taelgarSessionZoomInitialized = "true";
 
     var levels = ["short", "intermediate", "long", "transcript"];
-    var labels = {
-      short: "Short",
-      intermediate: "Intermediate",
-      long: "Long",
-      transcript: "Transcript"
-    };
     var storageKey = "taelgar-session-zoom:" + window.location.pathname;
     var buttons = Array.prototype.slice.call(root.querySelectorAll("[data-set-session-zoom]"));
-    var cycleButton = root.querySelector(".taelgar-session-zoom__cycle");
     decorateSessionHeadings(root);
 
     function setZoom(level) {
@@ -86,9 +79,6 @@
       buttons.forEach(function (button) {
         button.setAttribute("aria-pressed", button.dataset.setSessionZoom === level ? "true" : "false");
       });
-      if (cycleButton) {
-        cycleButton.textContent = "Next: " + labels[levels[(levels.indexOf(level) + 1) % levels.length]];
-      }
       try {
         window.localStorage.setItem(storageKey, level);
       } catch (error) {}
@@ -102,13 +92,6 @@
         setZoom(button.dataset.setSessionZoom);
       });
     });
-    if (cycleButton) {
-      cycleButton.addEventListener("click", function () {
-        var current = root.dataset.zoom || "short";
-        setZoom(levels[(levels.indexOf(current) + 1) % levels.length]);
-      });
-    }
-
     var saved = "short";
     try {
       saved = window.localStorage.getItem(storageKey) || "short";

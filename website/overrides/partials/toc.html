@@ -6,7 +6,7 @@
 {% set toc_items = page.toc if page is defined and page and page.toc else [] %}
 {% if toc_items and not page_meta.hide_toc %}
   {% set first = toc_items | first %}
-  {% if first and first.level == 1 %}
+  {% if first and first.level == 1 and (toc_items | length) == 1 %}
   {% set toc_items = first.children %}
   {% endif %}
 {% else %}
