@@ -19,6 +19,11 @@ from .manifest import Manifest
 from .nav import MkDocsNavigationGenerator
 from .notes import MarkdownNote, parse_markdown_note
 from .scanner import SourceEntry, note_tag_parts, scan_source
+from .session_zoom import (
+    SessionArtifactIndex,
+    is_zoomable_session_note,
+    render_zoomable_session_note,
+)
 from .transform import LinkIssue, NoteTransformer, TileRequest
 
 
@@ -65,6 +70,7 @@ class ExportStats:
     nav_warnings: list[str] = field(default_factory=list)
     content_warnings: list[ContentWarning] = field(default_factory=list)
     asset_warnings: list["AssetWarning"] = field(default_factory=list)
+    zoomable_pages: list[Path] = field(default_factory=list)
 
 
 @dataclass
@@ -112,6 +118,7 @@ def export_site(config: WebsiteConfig) -> ExportStats:
     index_digest = index.digest()
     config_digest = digest(config.digest_payload())
     transformer = NoteTransformer(config, index)
+    session_artifacts = SessionArtifactIndex(config.session_artifact_roots)
     new_manifest: dict[str, dict[str, Any]] = {}
     generated: set[str] = set()
     linked_asset_ids: set[str] = set()
@@ -120,9 +127,10 @@ def export_site(config: WebsiteConfig) -> ExportStats:
     for entry in [item for item in scan.entries if item.is_markdown]:
         previous = previous_manifest.get(entry.id)
         target_path = config.docs_dir / entry.target_path
+        zoomable_session = is_zoomable_session_note(entry.note)
         if entry.note:
             stats.content_warnings.extend(scan_content_warnings(entry.note.clean_text, entry.relative_path.as_posix()))
-        if can_skip_entry(previous, entry, target_path, config_digest, index_digest):
+        if not zoomable_session and can_skip_entry(previous, entry, target_path, config_digest, index_digest):
             stats.skipped_notes += 1
             generated.add(entry.target_path.as_posix())
             linked_asset_ids.update(previous.get("linked_assets", []))
@@ -138,6 +146,30 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         stats.ambiguous_links.extend(result.ambiguous_links)
         linked_asset_ids.update(result.linked_assets)
         tile_requests.update(result.tile_assets)
+        if zoomable_session and entry.note is not None:
+            zoom_result = render_zoomable_session_note(
+                note=entry.note,
+                transformed_text=result.text,
+                page_path=entry.target_path,
+                config=config,
+                index=index,
+                artifact_index=session_artifacts,
+            )
+            if zoom_result.warning:
+                stats.content_warnings.append(
+                    ContentWarning(
+                        source=entry.relative_path.as_posix(),
+                        line=1,
+                        kind="zoomable session view",
+                        excerpt=zoom_result.warning,
+                    )
+                )
+            else:
+                result.text = zoom_result.text
+                stats.zoomable_pages.append(entry.target_path)
+                if zoom_result.transcript_asset_path is not None and zoom_result.transcript_json is not None:
+                    write_text_if_changed(config.docs_dir / zoom_result.transcript_asset_path, zoom_result.transcript_json)
+                    generated.add(zoom_result.transcript_asset_path.as_posix())
         output = render_note(entry.note, result.text, config)
         if write_text_if_changed(target_path, output):
             stats.exported_notes += 1

@@ -20,6 +20,7 @@ from website.site_builder.exporter import export_site
 from website.site_builder.link_index import LinkIndex
 from website.site_builder.nav import MkDocsNavigationGenerator
 from website.site_builder.scanner import scan_source
+from website.site_builder.session_zoom import TRANSCRIPT_COLLAPSE_LIMIT, SourceLine, collapse_transcript_lines
 
 
 class WebsiteBuildTests(unittest.TestCase):
@@ -192,6 +193,113 @@ class WebsiteBuildTests(unittest.TestCase):
 
             self.assertIn("search:", text)
             self.assertIn("exclude: true", text)
+
+    def test_config_accepts_session_artifact_roots(self) -> None:
+        with fixture_site() as site:
+            update_config(site.config_path, {"session_artifact_roots": ["sessions"]})
+            config = load_config(site.config_path)
+
+            self.assertEqual(config.session_artifact_roots, ((site.root / "sessions").resolve(),))
+
+    def test_zoomable_session_replaces_narrative_and_writes_lazy_transcript(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "Alden.md", "---\nname: Alden\n---\ncontact\n")
+            write_note(site.source / "Glass Key.md", "---\nname: Glass Key\n---\nitem\n")
+            write_note(
+                site.source / "Zoom.md",
+                "---\n"
+                "name: Zoom\n"
+                "sessionKey: test-campaign-session-7\n"
+                "websiteSessionView: zoomable\n"
+                "---\n"
+                "# Zoom\n\n"
+                "## Narrative\n\n"
+                "The long narrative links [[Alden]] and the [[Glass Key|key]].\n\n"
+                "## Cast\n\n"
+                "- Alden\n\n"
+                "## Narrative\n\n"
+                "A later duplicate heading remains untouched.\n",
+            )
+            write_zoom_session_artifacts(site.root / "sessions")
+            update_config(site.config_path, {"session_artifact_roots": ["sessions"]})
+            config = load_config(site.config_path)
+
+            export_site(config)
+            text = (site.docs / "zoom.md").read_text(encoding="utf-8")
+            transcript_path = site.docs / "assets" / "session-zoom" / "test-campaign-session-7.json"
+            transcript = json.loads(transcript_path.read_text(encoding="utf-8"))
+
+            self.assertIn("taelgar-session-zoom", text)
+            self.assertIn('<a href="alden.md">Alden</a>', text)
+            self.assertIn('<a href="glass-key.md">key</a>', text)
+            self.assertIn("turns the", text)
+            self.assertNotIn("DM first line", text)
+            self.assertNotIn("The long narrative links", text)
+            self.assertIn("A later duplicate heading remains untouched.", text)
+            self.assertTrue(transcript_path.exists())
+            self.assertEqual(
+                transcript["blocks"][0]["lines"],
+                [
+                    {"speaker": "DM", "text": "DM first line. DM second line."},
+                    {"speaker": "Mira", "text": "Mira replies. Mira continues."},
+                ],
+            )
+            self.assertNotIn("u0001", transcript_path.read_text(encoding="utf-8"))
+
+            write_note(
+                site.source / "Zoom.md",
+                "---\n"
+                "name: Zoom\n"
+                "sessionKey: test-campaign-session-7\n"
+                "---\n"
+                "# Zoom\n\n"
+                "## Narrative\n\n"
+                "The long narrative links [[Alden]] and the [[Glass Key|key]].\n",
+            )
+            export_site(config)
+
+            self.assertFalse(transcript_path.exists())
+
+    def test_zoomable_transcript_collapse_respects_cap(self) -> None:
+        collapsed = collapse_transcript_lines(
+            [
+                SourceLine("u0001", "DM", "a" * (TRANSCRIPT_COLLAPSE_LIMIT - 2)),
+                SourceLine("u0002", "DM", "b"),
+            ]
+        )
+        split = collapse_transcript_lines(
+            [
+                SourceLine("u0001", "DM", "a" * TRANSCRIPT_COLLAPSE_LIMIT),
+                SourceLine("u0002", "DM", "b"),
+            ]
+        )
+
+        self.assertEqual(len(collapsed), 1)
+        self.assertEqual(len(collapsed[0]["text"]), TRANSCRIPT_COLLAPSE_LIMIT)
+        self.assertEqual(len(split), 2)
+
+    def test_zoomable_session_missing_artifacts_preserves_original_narrative(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Zoom.md",
+                "---\n"
+                "name: Zoom\n"
+                "sessionKey: missing-session-key\n"
+                "websiteSessionView: zoomable\n"
+                "---\n"
+                "# Zoom\n\n"
+                "## Narrative\n\n"
+                "Keep this narrative.\n",
+            )
+            update_config(site.config_path, {"session_artifact_roots": ["sessions"]})
+            config = load_config(site.config_path)
+
+            stats = export_site(config)
+            text = (site.docs / "zoom.md").read_text(encoding="utf-8")
+
+            self.assertIn("Keep this narrative.", text)
+            self.assertNotIn("taelgar-session-zoom", text)
+            self.assertTrue(any(warning.kind == "zoomable session view" for warning in stats.content_warnings))
 
     def test_asset_report_lists_linked_and_unlinked_assets(self) -> None:
         with fixture_site() as site:
@@ -525,6 +633,50 @@ def update_config(path: Path, updates: dict) -> None:
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload.update(updates)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def write_zoom_session_artifacts(root: Path) -> None:
+    cleaned = root / "test-campaign-007" / "cleaned"
+    cleaned.mkdir(parents=True)
+    (cleaned / "test-campaign-007-session.yaml").write_text(
+        "campaign: Test Campaign\n"
+        "scope: session\n"
+        "sessionNumber: 7\n",
+        encoding="utf-8",
+    )
+    (cleaned / "test-campaign-007-beats.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": "1.0",
+                "sourceTranscriptPath": str(cleaned / "test-campaign-007-source-cleaned.md"),
+                "sessionPath": str(cleaned / "test-campaign-007-session.yaml"),
+                "beats": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (cleaned / "test-campaign-007-session-recap.md").write_text(
+        "# Session Recap\n\n"
+        "## Recap\n\n"
+        "### recap-001 | Opening the Door\n\n"
+        "- Kind: beat\n"
+        "- Beat IDs: beat-001\n"
+        "- Source Range: u0001 -> u0004\n\n"
+        "#### Short\n"
+        "Alden turns the key.\n\n"
+        "#### Intermediate\n"
+        "Alden turns the key while Mira waits.\n\n"
+        "#### Long\n"
+        "Alden turns the key and opens the door while Mira waits.\n",
+        encoding="utf-8",
+    )
+    (cleaned / "test-campaign-007-source-cleaned.md").write_text(
+        "[u0001 | 00:00:00-00:00:01 | DM] DM first line.\n"
+        "[u0002 | 00:00:01-00:00:02 | DM] DM second line.\n"
+        "[u0003 | 00:00:02-00:00:03 | Mira] Mira replies.\n"
+        "[u0004 | 00:00:03-00:00:04 | Mira] Mira continues.\n",
+        encoding="utf-8",
+    )
 
 
 def extract_leaflet_config(text: str) -> dict:

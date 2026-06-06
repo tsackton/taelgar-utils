@@ -52,6 +52,7 @@ ALLOWED_KEYS = {
     "stub_files",
     "skip_future_dated",
     "always_include_assets",
+    "session_artifact_roots",
     "manifest_path",
     "warning_report_path",
     "asset_report_path",
@@ -105,6 +106,7 @@ class WebsiteConfig:
     stub_files: str = "skip"
     skip_future_dated: bool = True
     always_include_assets: tuple[str, ...] = ()
+    session_artifact_roots: tuple[Path, ...] = ()
     manifest_path: Path = Path(".website-build/export-manifest.json")
     warning_report_path: Path = Path(".website-build/export-warnings.md")
     asset_report_path: Path = Path(".website-build/asset-report.md")
@@ -144,6 +146,7 @@ class WebsiteConfig:
             "audio_embed_transform_version": 1,
             "markdown_normalizer_version": 1,
             "search_exclude_tags": self.search_exclude_tags,
+            "session_artifact_roots": tuple(str(path) for path in self.session_artifact_roots),
         }
 
 
@@ -188,6 +191,18 @@ def load_config(config_path: str | Path = "website.json") -> WebsiteConfig:
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise ConfigError(f"{key} must be a list of strings")
         return tuple(value)
+
+    def path_tuple(key: str) -> tuple[Path, ...]:
+        value = raw.get(key, [])
+        if value is None:
+            return ()
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ConfigError(f"{key} must be a list of paths")
+        paths = []
+        for item in value:
+            candidate = Path(item)
+            paths.append(candidate if candidate.is_absolute() else root_dir / candidate)
+        return tuple(paths)
 
     source_dir = path_value("source_dir")
     docs_dir = path_value("docs_dir")
@@ -256,6 +271,7 @@ def load_config(config_path: str | Path = "website.json") -> WebsiteConfig:
         stub_files=stub_files,
         skip_future_dated=bool_value("skip_future_dated", True),
         always_include_assets=string_tuple("always_include_assets"),
+        session_artifact_roots=path_tuple("session_artifact_roots"),
         manifest_path=path_value("manifest_path", ".website-build/export-manifest.json") or root_dir
         / ".website-build/export-manifest.json",
         warning_report_path=path_value("warning_report_path", ".website-build/export-warnings.md")
