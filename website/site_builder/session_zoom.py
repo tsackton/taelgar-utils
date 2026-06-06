@@ -299,37 +299,30 @@ def render_zoom_html(
             "    </div>",
             '    <button type="button" class="taelgar-session-zoom__cycle">Next: Intermediate</button>',
             "  </div>",
-            '  <nav class="taelgar-session-zoom__nav" aria-label="Session beat navigation">',
+            "</div>",
         ]
     )
-    for index, block in enumerate(recap_blocks, start=1):
-        beat_id = display_beat_id(index)
-        lines.append(
-            f'    <a href="#zoom-{html.escape(block.block_id, quote=True)}">'
-            f"<span>{beat_id}</span>{html.escape(block.title)}</a>"
-        )
-    lines.extend(["  </nav>", '  <div class="taelgar-session-zoom__beats">'])
-    for index, block in enumerate(recap_blocks, start=1):
-        beat_id = display_beat_id(index)
+    for block in recap_blocks:
         lines.extend(
             [
-                f'    <section class="taelgar-session-zoom__beat" id="zoom-{html.escape(block.block_id, quote=True)}">',
-                '      <div class="taelgar-session-zoom__heading">',
-                f'        <span class="taelgar-session-zoom__beat-id">{beat_id}</span>',
-                f"        <h3>{html.escape(block.title)}</h3>",
-                "      </div>",
+                "",
+                f"### {html.escape(block.title, quote=False)}",
+                "",
+                (
+                    f'<div class="taelgar-session-zoom__beat" data-session-zoom-beat '
+                    f'data-session-zoom-key="{html.escape(session_key, quote=True)}" data-zoom="short">'
+                ),
                 render_level("short", block.short, link_map),
                 render_level("intermediate", block.intermediate, link_map),
                 render_level("long", block.long, link_map),
                 (
-                    f'      <div class="taelgar-session-zoom__level taelgar-session-zoom__transcript" '
+                    f'  <div class="taelgar-session-zoom__level taelgar-session-zoom__transcript" '
                     f'data-zoom-level="transcript" data-transcript-block="{html.escape(block.block_id, quote=True)}">'
                     '<p class="taelgar-session-zoom__loading">Transcript loads when selected.</p></div>'
                 ),
-                "    </section>",
+                "</div>",
             ]
         )
-    lines.extend(["  </div>", "</div>"])
     return "\n".join(lines)
 
 
@@ -340,7 +333,7 @@ def render_level(level: str, text: str, link_map: dict[str, str]) -> str:
         if block.strip()
     ]
     content = "\n".join(paragraphs) if paragraphs else "<p></p>"
-    return f'      <div class="taelgar-session-zoom__level" data-zoom-level="{level}">{content}</div>'
+    return f'  <div class="taelgar-session-zoom__level" data-zoom-level="{level}">{content}</div>'
 
 
 def build_local_link_map(narrative_text: str, page_path: Path, index: LinkIndex) -> dict[str, str]:
@@ -512,10 +505,6 @@ def speaker_from_header(header: str) -> str:
     if len(parts) >= 3 and parts[-1]:
         return parts[-1]
     return "Source"
-
-
-def display_beat_id(index: int) -> str:
-    return f"B{index:02d}"
 
 
 def normalize_optional_string(value: Any) -> str | None:

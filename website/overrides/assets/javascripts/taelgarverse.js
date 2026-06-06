@@ -70,12 +70,19 @@
     var storageKey = "taelgar-session-zoom:" + window.location.pathname;
     var buttons = Array.prototype.slice.call(root.querySelectorAll("[data-set-session-zoom]"));
     var cycleButton = root.querySelector(".taelgar-session-zoom__cycle");
+    decorateSessionHeadings(root);
 
     function setZoom(level) {
       if (levels.indexOf(level) === -1) {
         level = "short";
       }
       root.dataset.zoom = level;
+      getSessionBeats(root).forEach(function (beat) {
+        beat.dataset.zoom = level;
+      });
+      getSessionHeadings(root).forEach(function (heading) {
+        heading.dataset.zoom = level;
+      });
       buttons.forEach(function (button) {
         button.setAttribute("aria-pressed", button.dataset.setSessionZoom === level ? "true" : "false");
       });
@@ -107,6 +114,35 @@
       saved = window.localStorage.getItem(storageKey) || "short";
     } catch (error) {}
     setZoom(saved);
+  }
+
+  function sessionSelector(attribute, value) {
+    var escaped = window.CSS && window.CSS.escape ? window.CSS.escape(value) : String(value).replace(/"/g, '\\"');
+    return "[" + attribute + '="' + escaped + '"]';
+  }
+
+  function getSessionBeats(root) {
+    return Array.prototype.slice.call(
+      document.querySelectorAll(sessionSelector("data-session-zoom-key", root.dataset.sessionKey || ""))
+    );
+  }
+
+  function getSessionHeadings(root) {
+    return Array.prototype.slice.call(
+      document.querySelectorAll(sessionSelector("data-session-zoom-heading", root.dataset.sessionKey || ""))
+    );
+  }
+
+  function decorateSessionHeadings(root) {
+    var key = root.dataset.sessionKey || "";
+    getSessionBeats(root).forEach(function (beat) {
+      var heading = beat.previousElementSibling;
+      if (!heading || !/^H[2-6]$/.test(heading.tagName)) {
+        return;
+      }
+      heading.classList.add("taelgar-session-zoom__scene-heading");
+      heading.dataset.sessionZoomHeading = key;
+    });
   }
 
   function loadSessionTranscript(root) {
@@ -143,42 +179,46 @@
     (payload.blocks || []).forEach(function (block) {
       blocks[block.blockId] = block;
     });
-    root.querySelectorAll("[data-transcript-block]").forEach(function (container) {
-      var block = blocks[container.dataset.transcriptBlock];
-      container.innerHTML = "";
-      if (!block || !block.lines || !block.lines.length) {
-        var empty = document.createElement("p");
-        empty.className = "taelgar-session-zoom__loading";
-        empty.textContent = "No transcript lines are available for this beat.";
-        container.appendChild(empty);
-        return;
-      }
-      var list = document.createElement("ol");
-      list.className = "taelgar-session-zoom__transcript-list";
-      block.lines.forEach(function (line) {
-        var item = document.createElement("li");
-        item.className = "taelgar-session-zoom__transcript-line";
-        var speaker = document.createElement("span");
-        speaker.className = "taelgar-session-zoom__speaker";
-        speaker.textContent = line.speaker || "Speaker";
-        var text = document.createElement("span");
-        text.className = "taelgar-session-zoom__line-text";
-        text.textContent = line.text || "";
-        item.appendChild(speaker);
-        item.appendChild(text);
-        list.appendChild(item);
+    getSessionBeats(root).forEach(function (beat) {
+      beat.querySelectorAll("[data-transcript-block]").forEach(function (container) {
+        var block = blocks[container.dataset.transcriptBlock];
+        container.innerHTML = "";
+        if (!block || !block.lines || !block.lines.length) {
+          var empty = document.createElement("p");
+          empty.className = "taelgar-session-zoom__loading";
+          empty.textContent = "No transcript lines are available for this beat.";
+          container.appendChild(empty);
+          return;
+        }
+        var list = document.createElement("ol");
+        list.className = "taelgar-session-zoom__transcript-list";
+        block.lines.forEach(function (line) {
+          var item = document.createElement("li");
+          item.className = "taelgar-session-zoom__transcript-line";
+          var speaker = document.createElement("span");
+          speaker.className = "taelgar-session-zoom__speaker";
+          speaker.textContent = line.speaker || "Speaker";
+          var text = document.createElement("span");
+          text.className = "taelgar-session-zoom__line-text";
+          text.textContent = line.text || "";
+          item.appendChild(speaker);
+          item.appendChild(text);
+          list.appendChild(item);
+        });
+        container.appendChild(list);
       });
-      container.appendChild(list);
     });
   }
 
   function renderTranscriptError(root, message) {
-    root.querySelectorAll("[data-transcript-block]").forEach(function (container) {
-      container.innerHTML = "";
-      var error = document.createElement("p");
-      error.className = "taelgar-session-zoom__loading";
-      error.textContent = message;
-      container.appendChild(error);
+    getSessionBeats(root).forEach(function (beat) {
+      beat.querySelectorAll("[data-transcript-block]").forEach(function (container) {
+        container.innerHTML = "";
+        var error = document.createElement("p");
+        error.className = "taelgar-session-zoom__loading";
+        error.textContent = message;
+        container.appendChild(error);
+      });
     });
   }
 

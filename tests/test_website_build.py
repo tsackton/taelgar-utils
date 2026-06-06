@@ -230,6 +230,10 @@ class WebsiteBuildTests(unittest.TestCase):
             transcript = json.loads(transcript_path.read_text(encoding="utf-8"))
 
             self.assertIn("taelgar-session-zoom", text)
+            self.assertIn("### Opening the Door", text)
+            self.assertNotIn("B01", text)
+            self.assertNotIn("taelgar-session-zoom__nav", text)
+            self.assertNotIn("taelgar-session-zoom__beat-id", text)
             self.assertIn('<a href="alden.md">Alden</a>', text)
             self.assertIn('<a href="glass-key.md">key</a>', text)
             self.assertIn("turns the", text)
