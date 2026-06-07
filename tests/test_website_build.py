@@ -316,11 +316,19 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertEqual(
                 transcript["blocks"][0]["lines"],
                 [
-                    {"speaker": "DM", "text": "DM first line. DM second line."},
-                    {"speaker": "Mira", "text": "Mira replies. Mira continues."},
+                    {"speaker": "DM", "text": "Polished opening."},
+                    {"speaker": "Mira", "text": "Polished reply."},
+                ],
+            )
+            self.assertEqual(
+                transcript["blocks"][1]["lines"],
+                [
+                    {"speaker": "Mira", "text": "Mira crosses."},
+                    {"speaker": "DM", "text": "Alden watches."},
                 ],
             )
             self.assertNotIn("u0001", transcript_path.read_text(encoding="utf-8"))
+            self.assertNotIn("This comment block", transcript_path.read_text(encoding="utf-8"))
 
             write_note(
                 site.source / "Zoom.md",
@@ -737,7 +745,8 @@ def write_zoom_session_artifacts(root: Path) -> None:
         "### recap-001 | Opening the Door\n\n"
         "- Kind: beat\n"
         "- Beat IDs: beat-001\n"
-        "- Source Range: u0001 -> u0004\n\n"
+        "- Source Range: u0001 -> u0004\n"
+        "- Polished Transcript: beat-transcripts/test-campaign-007-recap-001-transcript.md\n"
         "- Image: opening-door.png\n"
         "- Image Placement: start\n"
         "- Image Render: right|400\n"
@@ -771,6 +780,24 @@ def write_zoom_session_artifacts(root: Path) -> None:
         "[u0004 | 00:00:03-00:00:04 | Mira] Mira continues.\n"
         "[u0005 | 00:00:04-00:00:05 | Mira] Mira crosses.\n"
         "[u0006 | 00:00:05-00:00:06 | DM] Alden watches.\n",
+        encoding="utf-8",
+    )
+    transcript_dir = cleaned / "beat-transcripts"
+    transcript_dir.mkdir()
+    (transcript_dir / "test-campaign-007-recap-001-transcript.md").write_text(
+        "# recap-001 | Opening the Door\n\n"
+        "- Recap Block: recap-001\n"
+        "- Beat IDs: beat-001\n"
+        "- Source Range: u0001 -> u0004\n"
+        "- Source Transcript: ../test-campaign-007-source-cleaned.md\n\n"
+        "## Transcript\n\n"
+        "%% u0001-u0002 %%\n"
+        "DM: Polished opening.\n\n"
+        "%%\n"
+        "This comment block is not visible.\n"
+        "%%\n"
+        "%% u0003-u0004 %%\n"
+        "Mira: Polished reply.\n",
         encoding="utf-8",
     )
 

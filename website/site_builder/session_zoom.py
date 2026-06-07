@@ -38,6 +38,7 @@ class RecapBlock:
     short: str
     intermediate: str
     long: str
+    polished_transcript_path: Path | None = None
     image: "RecapImage | None" = None
 
 
@@ -157,8 +158,9 @@ def render_zoomable_session_note(
 
     try:
         recap_blocks = parse_recap_blocks(record.recap_path)
-        transcript_path = transcript_path_from_beats(record.beats_path)
-        source_lines = read_source_lines(transcript_path)
+        source_lines = None
+        if any(block.polished_transcript_path is None for block in recap_blocks):
+            source_lines = read_source_lines(transcript_path_from_beats(record.beats_path))
         transcript_payload = build_transcript_payload(session_key, recap_blocks, source_lines)
         long_narrative = "\n\n".join([extract_heading_section(note.clean_text, "Narrative"), *(block.long for block in recap_blocks)])
         link_map = build_local_link_map(long_narrative, index, base_path=config.base_path)
@@ -217,6 +219,10 @@ def parse_recap_blocks(path: Path) -> list[RecapBlock]:
                 short=parse_required_subsection(block_lines, "#### Short", match.group("block_id")),
                 intermediate=parse_required_subsection(block_lines, "#### Intermediate", match.group("block_id")),
                 long=parse_required_subsection(block_lines, "#### Long", match.group("block_id")),
+                polished_transcript_path=resolve_polished_transcript_path(
+                    metadata.get("Polished Transcript"),
+                    path.parent,
+                ),
                 image=parse_recap_image(metadata),
             )
         )
@@ -261,25 +267,79 @@ def read_source_lines(path: Path) -> list[SourceLine]:
 def build_transcript_payload(
     session_key: str,
     recap_blocks: list[RecapBlock],
-    source_lines: list[SourceLine],
+    source_lines: list[SourceLine] | None,
 ) -> dict[str, Any]:
-    uid_to_index = {line.uid: index for index, line in enumerate(source_lines)}
+    uid_to_index = {line.uid: index for index, line in enumerate(source_lines or [])}
     payload_blocks = []
     for block in recap_blocks:
-        start_index = uid_to_index.get(block.source_start_uid)
-        end_index = uid_to_index.get(block.source_end_uid)
-        if start_index is None or end_index is None:
-            raise ValueError(f"{block.block_id} references missing transcript uid.")
-        if start_index > end_index:
-            raise ValueError(f"{block.block_id} has an inverted transcript source range.")
+        if block.polished_transcript_path is not None:
+            lines = read_polished_transcript_lines(block.polished_transcript_path)
+        else:
+            if source_lines is None:
+                raise ValueError(f"{block.block_id} requires a cleaned source transcript.")
+            start_index = uid_to_index.get(block.source_start_uid)
+            end_index = uid_to_index.get(block.source_end_uid)
+            if start_index is None or end_index is None:
+                raise ValueError(f"{block.block_id} references missing transcript uid.")
+            if start_index > end_index:
+                raise ValueError(f"{block.block_id} has an inverted transcript source range.")
+            lines = collapse_transcript_lines(source_lines[start_index : end_index + 1])
         payload_blocks.append(
             {
                 "blockId": block.block_id,
                 "title": block.title,
-                "lines": collapse_transcript_lines(source_lines[start_index : end_index + 1]),
+                "lines": lines,
             }
         )
     return {"schemaVersion": "1.0", "sessionKey": session_key, "blocks": payload_blocks}
+
+
+def resolve_polished_transcript_path(value: str | None, base_dir: Path) -> Path | None:
+    raw_path = normalize_optional_string(value)
+    if raw_path is None:
+        return None
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = base_dir / path
+    return path
+
+
+def read_polished_transcript_lines(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        raise ValueError(f"polished transcript not found: {path}")
+    text = strip_obsidian_comments(extract_transcript_body(path.read_text(encoding="utf-8")))
+    lines: list[dict[str, str]] = []
+    for line_number, raw in enumerate(text.splitlines(), start=1):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        match = re.match(r"^(?P<speaker>[^:\n]{1,120}):\s*(?P<text>.+)$", stripped)
+        if not match:
+            raise ValueError(f"invalid polished transcript line in {path}:{line_number}: {raw}")
+        lines.append({"speaker": match.group("speaker").strip(), "text": match.group("text").strip()})
+    return lines
+
+
+def extract_transcript_body(text: str) -> str:
+    lines = text.splitlines()
+    start_index = 0
+    for index, line in enumerate(lines):
+        if line.strip() == "## Transcript":
+            start_index = index + 1
+            break
+    end_index = len(lines)
+    for index in range(start_index, len(lines)):
+        if lines[index].startswith("## "):
+            end_index = index
+            break
+    return "\n".join(lines[start_index:end_index])
+
+
+def strip_obsidian_comments(text: str) -> str:
+    stripped = re.sub(r"%%.*?%%", "", text, flags=re.DOTALL)
+    if "%%" in stripped:
+        raise ValueError("polished transcript contains an unterminated Obsidian comment")
+    return stripped
 
 
 def collapse_transcript_lines(lines: list[SourceLine]) -> list[dict[str, str]]:
