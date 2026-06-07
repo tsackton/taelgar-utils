@@ -1,9 +1,10 @@
 import json
 import html
+import io
 import re
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 import sys
 
@@ -156,6 +157,22 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertIn("Warning.md:1", text)
             self.assertIn("TODO marker", text)
             self.assertNotIn("(XXX)", text)
+
+    def test_export_prints_phase_status_updates(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "A.md", "---\nname: A\n---\nbody\n")
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                export_site(site.config)
+            text = output.getvalue()
+
+            self.assertIn("Manifest:", text)
+            self.assertIn("Index: 1 markdown note(s), 0 asset(s)", text)
+            self.assertIn("Notes: transforming 1 markdown note(s)", text)
+            self.assertIn("Notes: processed 1 markdown note(s)", text)
+            self.assertIn("Assets: resolving 0 linked/always-include asset(s), 0 tile request(s)", text)
+            self.assertIn("Reports: writing manifest, warning report, and asset report", text)
 
     def test_ignore_file_omits_metadata_files(self) -> None:
         with fixture_site() as site:
