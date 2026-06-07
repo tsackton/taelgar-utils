@@ -202,6 +202,13 @@ class BuildSessionRecapTest(SessionRecapBase):
         self.assertIn("#### Long", recap_text)
         self.assertIn("## Recap", recap_text)
         self.assertIn("### recap-001 | Into the Labyrinth", recap_text)
+        self.assertIn(
+            "- Image:\n"
+            "- Image Placement:\n"
+            "- Image Render:\n"
+            "- Image Caption:",
+            recap_text,
+        )
         self.assertIn("#### Intermediate", recap_text)
         self.assertIn("## Source Files", recap_text)
         self.assertIn("source.cleaned.md", recap_text)
@@ -460,6 +467,10 @@ class ManageSessionRecapTest(SessionRecapBase):
             "- Organizations: none\n"
             "- Items: Romil's token\n"
             "- Enemies: none\n"
+            "- Image:\n"
+            "- Image Placement:\n"
+            "- Image Render:\n"
+            "- Image Caption:\n"
             "\n"
             "#### Short\n"
             "Drafted text.\n"
@@ -481,6 +492,10 @@ class ManageSessionRecapTest(SessionRecapBase):
             "- Organizations: none\n"
             "- Items: Romil's token\n"
             "- Enemies: none\n"
+            "- Image:\n"
+            "- Image Placement:\n"
+            "- Image Render:\n"
+            "- Image Caption:\n"
             "\n"
             "#### Short\n"
             "Drafted text.\n"

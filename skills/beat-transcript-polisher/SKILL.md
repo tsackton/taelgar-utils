@@ -23,6 +23,7 @@ For each recap block:
 3. Write the polished transcript to `cleaned/beat-transcripts/`.
 4. Add a `Polished Transcript` entry immediately after `Source Range` in the recap block metadata.
 5. Fill a transcript highlights summary for pull quotes and optional audio monologue candidates.
+6. Sync editable session-level pull quote and audio highlight candidate sections into `session-recap.md`.
 
 The recap block is the normal unit of work, because `session-summary-context.json` may combine adjacent beats into one `recap-*` block.
 If the user asks for one specific beat, map it to the recap block that contains that beat.
@@ -126,6 +127,27 @@ Audio monologue candidates are optional; include them only when a longer speech 
 Each audio monologue candidate must have a globally unique `ID`, preferably `audio-NNN`.
 If no monologues stand out, write `None identified.` under `## Audio Monologue Candidates`.
 
+After the highlights summary is filled, the helper also syncs selected-material candidates into `session-recap.md`:
+
+```markdown
+## Pull Quotes
+
+- ID: quote-beat-001-001
+  - Quote: "A short, punchy quote."
+  - Speaker: Wazir
+  - Source Lines: u0123-u0126
+
+## Audio Highlights
+
+- ID: audio-001
+  - Title: Short description of the monologue content.
+  - Speaker: DM
+  - Source Lines: u0230-u0268
+  - Output: audio-001.m4a
+```
+
+The full highlights summary remains the complete record. The recap sections are the human-reviewed selected set for the session note: delete candidates that should not appear and reorder the remaining entries as desired. Do not manually copy candidate text from the highlights file into the recap.
+
 ## Polishing Rules
 
 - Preserve every `uNNNN` UID in exactly one source comment and keep UID order unchanged.
@@ -170,7 +192,13 @@ python skills/beat-transcript-polisher/scripts/manage_beat_transcripts.py \
 4. Fill `<bundle-stem>-transcript-highlights.md`:
    - one or more pull quotes for each beat
    - optional audio monologue candidates across the whole session
-5. Run the helper again in validation mode:
+5. Run the helper again in normal mode to sync `## Pull Quotes` and `## Audio Highlights` into `session-recap.md`.
+   This does not overwrite existing transcript files unless `--overwrite` is passed.
+6. Review `session-recap.md`:
+   - delete pull quotes and audio highlights that should not appear in the final session note
+   - reorder the remaining entries if desired
+   - edit audio titles or output filenames if needed
+7. Run the helper again in validation mode:
 
 ```bash
 python skills/beat-transcript-polisher/scripts/manage_beat_transcripts.py \
@@ -182,7 +210,7 @@ python skills/beat-transcript-polisher/scripts/manage_beat_transcripts.py \
   --validate-only
 ```
 
-6. Fix any validation errors before handing off the polished transcript set.
+8. Fix any validation errors before handing off the polished transcript set.
 
 ## Single Block Work
 
@@ -211,6 +239,7 @@ If the user provides a `beatId` instead of a recap block id, inspect `session-su
 - never overwriting existing transcript files unless `--overwrite` is passed
 - creating `<bundle-stem>-transcript-highlights.md` if it is missing
 - inserting or updating `- Polished Transcript: ...` immediately after `- Source Range: ...`
+- syncing pull quote and audio highlight candidates from the transcript highlights summary into `session-recap.md`
 - validating that each polished transcript source comments preserve the exact UID list for its recap source range
 - validating that visible transcript lines use `Speaker: text` turn format and do not expose source headers
 - validating that the transcript highlights summary exists and has one section for each beat

@@ -21,6 +21,8 @@ TRANSCRIPT_HEADING = "## Transcript"
 PATH_KEY = "Polished Transcript"
 HIGHLIGHTS_HEADING = "## Pull Quotes"
 MONOLOGUES_HEADING = "## Audio Monologue Candidates"
+RECAP_PULL_QUOTES_HEADING = "## Pull Quotes"
+RECAP_AUDIO_HEADING = "## Audio Highlights"
 MAX_DRAFT_GROUP_LINES = 12
 
 
@@ -90,6 +92,7 @@ def main() -> int:
         sync_file_headings(plan)
         write_missing_summary_file(summary_path, plan, transcript_path=transcript_path, recap_path=recap_path)
         patch_session_recap(recap_path, plan)
+        sync_recap_review_media(recap_path, summary_path)
 
     errors, warnings = validate_outputs(recap_path, plan, summary_path=summary_path)
     for warning in warnings:
@@ -487,6 +490,150 @@ def patch_session_recap(recap_path: Path, plan: Sequence[Dict[str, Any]]) -> Non
     updated = "\n".join(patched).rstrip() + "\n"
     if updated != recap_path.read_text(encoding="utf-8"):
         recap_path.write_text(updated, encoding="utf-8")
+
+
+def sync_recap_review_media(recap_path: Path, summary_path: Path) -> None:
+    if not summary_path.exists():
+        return
+    summary_text = summary_path.read_text(encoding="utf-8")
+    pull_quotes = parse_summary_entries(level2_section_after_heading(summary_text, HIGHLIGHTS_HEADING))
+    audio_candidates = parse_summary_entries(level2_section_after_heading(summary_text, MONOLOGUES_HEADING))
+
+    recap_text = recap_path.read_text(encoding="utf-8")
+    updated = replace_level2_section(
+        recap_text,
+        RECAP_PULL_QUOTES_HEADING,
+        render_recap_pull_quotes_section(pull_quotes),
+    )
+    updated = replace_level2_section(
+        updated,
+        RECAP_AUDIO_HEADING,
+        render_recap_audio_section(audio_candidates),
+    )
+    if updated != recap_text:
+        recap_path.write_text(updated, encoding="utf-8")
+
+
+def parse_summary_entries(section_text: str) -> List[Dict[str, str]]:
+    entries: List[Dict[str, str]] = []
+    current: Optional[Dict[str, str]] = None
+    for raw in section_text.splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped in {"None identified.", "- None identified."}:
+            continue
+        id_match = HIGHLIGHT_ID_RE.match(raw)
+        if id_match:
+            current = {"ID": id_match.group("id")}
+            entries.append(current)
+            continue
+        if current is None or not stripped.startswith("- ") or ":" not in stripped:
+            continue
+        key, value = stripped[2:].split(":", 1)
+        current[key.strip()] = value.strip()
+    return entries
+
+
+def level2_section_after_heading(text: str, heading: str) -> str:
+    lines = text.splitlines()
+    capture = False
+    captured: List[str] = []
+    for raw in lines:
+        if raw.strip() == heading:
+            capture = True
+            continue
+        if capture and raw.startswith("## "):
+            break
+        if capture:
+            captured.append(raw)
+    return "\n".join(captured)
+
+
+def render_recap_pull_quotes_section(entries: Sequence[Dict[str, str]]) -> str:
+    rendered_entries = []
+    for entry in entries:
+        quote = entry.get("Quote", "").strip()
+        speaker = entry.get("Speaker", "").strip()
+        source_lines = entry.get("Source Lines", "").strip()
+        if not entry.get("ID") or not quote or not speaker or not source_lines:
+            continue
+        rendered_entries.extend(
+            [
+                f"- ID: {entry['ID']}",
+                f"  - Quote: {quote}",
+                f"  - Speaker: {speaker}",
+                f"  - Source Lines: {source_lines}",
+                "",
+            ]
+        )
+    return "\n".join(rendered_entries).rstrip()
+
+
+def render_recap_audio_section(entries: Sequence[Dict[str, str]]) -> str:
+    rendered_entries = []
+    for entry in entries:
+        entry_id = entry.get("ID", "").strip()
+        speaker = entry.get("Speaker", "").strip()
+        source_lines = entry.get("Source Lines", "").strip()
+        if not entry_id or not speaker or not source_lines:
+            continue
+        title = entry.get("Title", "").strip() or entry.get("Summary", "").strip() or entry_id
+        output = entry.get("Output", "").strip() or f"{entry_id}.m4a"
+        rendered_entries.extend(
+            [
+                f"- ID: {entry_id}",
+                f"  - Title: {title}",
+                f"  - Speaker: {speaker}",
+                f"  - Source Lines: {source_lines}",
+                f"  - Output: {output}",
+            ]
+        )
+        for optional_key in ("Summary", "Why Called Out"):
+            value = entry.get(optional_key, "").strip()
+            if value and value != title:
+                rendered_entries.append(f"  - {optional_key}: {value}")
+        rendered_entries.append("")
+    return "\n".join(rendered_entries).rstrip()
+
+
+def replace_level2_section(text: str, heading: str, body: str) -> str:
+    lines = text.splitlines()
+    start: Optional[int] = None
+    end = len(lines)
+    for index, raw in enumerate(lines):
+        if raw.strip() == heading:
+            start = index
+            continue
+        if start is not None and index > start and raw.startswith("## "):
+            end = index
+            break
+
+    if not body.strip():
+        if start is None:
+            return text
+        new_lines = list(lines[:start])
+        while new_lines and not new_lines[-1].strip():
+            new_lines.pop()
+        tail = list(lines[end:])
+        while tail and not tail[0].strip():
+            tail.pop(0)
+        if tail:
+            new_lines.extend(["", *tail])
+        return "\n".join(new_lines).rstrip() + "\n"
+
+    section_lines = [heading, "", *body.splitlines()]
+    if start is None:
+        base = text.rstrip()
+        separator = "\n\n" if base else ""
+        section_text = "\n".join(section_lines)
+        return f"{base}{separator}{section_text}\n"
+
+    new_lines = [*lines[:start], *section_lines]
+    tail = list(lines[end:])
+    while tail and not tail[0].strip():
+        tail.pop(0)
+    if tail:
+        new_lines.extend(["", *tail])
+    return "\n".join(new_lines).rstrip() + "\n"
 
 
 def validate_outputs(recap_path: Path, plan: Sequence[Dict[str, Any]], *, summary_path: Path) -> Tuple[List[str], List[str]]:
