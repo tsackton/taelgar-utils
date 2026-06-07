@@ -21,7 +21,7 @@ For each recap block:
 2. Polish that transcript excerpt into readable speaker turns without turning it into recap prose.
 3. Write the polished transcript to `cleaned/beat-transcripts/`.
 4. Add a `Polished Transcript` entry immediately after `Source Range` in the recap block metadata.
-5. Fill a transcript highlights summary for pull quotes and optional audio monologue candidates.
+5. Fill a transcript highlights summary for pull quotes and audio monologue candidates.
 6. Sync editable session-level pull quote and audio highlight candidate sections into `session-recap.md`.
 
 The recap block is the normal unit of work.
@@ -124,10 +124,12 @@ Use it to collect session-note callouts after the transcript files are polished:
 
 Pull quotes are required for each beat.
 Each pull quote must have a globally unique `ID`, preferably `quote-<beatId>-NNN`.
-Choose one or more lines that are punchy, interesting, emotionally revealing, funny, ominous, or otherwise useful as a session-note highlight.
-Audio monologue candidates are optional; include them only when a longer speech or narration is important enough to be interesting as audio.
+Choose 2-3 pull quotes per beat when the transcript has enough material.
+Prefer variety across speakers, moods, and story functions rather than picking several quotes that all do the same job.
+Choose lines that are punchy, interesting, emotionally revealing, funny, ominous, or otherwise useful as session-note highlights.
+Audio monologue candidates are expected across the session; include at least 2 when the transcript contains two worthwhile longer speeches, narrations, exchanges, or table moments, and include up to 5 when there are enough strong candidates.
 Each audio monologue candidate must have a globally unique `ID`, preferably `audio-NNN`.
-If no monologues stand out, write `None identified.` under `## Audio Monologue Candidates`.
+Only write `None identified.` under `## Audio Monologue Candidates` when no viable audio highlight exists, and report that constraint to the user.
 
 After the highlights summary is filled, the helper also syncs selected-material candidates into `session-recap.md`:
 
@@ -207,8 +209,8 @@ python skills/beat-transcript-polisher/scripts/manage_beat_transcripts.py \
    For long sessions, work one recap block at a time.
 4. Run the prose-quality review pass and fix any `rework` findings.
 5. Fill `<bundle-stem>-transcript-highlights.md`:
-   - one or more pull quotes for each beat
-   - optional audio monologue candidates across the whole session
+   - 2-3 pull quotes for each beat when enough material exists
+   - at least 2 and up to 5 audio monologue candidates across the whole session when enough material exists
 6. Run the helper again in normal mode to sync `## Pull Quotes` and `## Audio Highlights` into `session-recap.md`.
    This does not overwrite existing transcript files unless `--overwrite` is passed.
 7. Review `session-recap.md`:
