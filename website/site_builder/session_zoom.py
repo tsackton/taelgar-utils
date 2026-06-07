@@ -3,14 +3,14 @@ from __future__ import annotations
 import html
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from .link_index import LinkIndex
-from .notes import WIKILINK_RE, MarkdownNote
+from .notes import IMAGE_SUFFIXES, WIKILINK_RE, MarkdownNote, title_case
 from .slugging import slugify
 from .transform import relative_url
 
@@ -38,6 +38,22 @@ class RecapBlock:
     short: str
     intermediate: str
     long: str
+    image: "RecapImage | None" = None
+
+
+@dataclass(frozen=True)
+class RecapImage:
+    target: str
+    placement: str
+    render: str | None
+    caption: str | None
+
+
+@dataclass(frozen=True)
+class ImageRender:
+    align: str | None = None
+    width: str | None = None
+    height: str | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +68,8 @@ class ZoomRenderResult:
     text: str
     transcript_asset_path: Path | None = None
     transcript_json: str | None = None
+    linked_asset_ids: set[str] = field(default_factory=set)
+    warnings: list[str] = field(default_factory=list)
     warning: str | None = None
 
 
@@ -143,6 +161,8 @@ def render_zoomable_session_note(
         source_lines = read_source_lines(transcript_path)
         transcript_payload = build_transcript_payload(session_key, recap_blocks, source_lines)
         link_map = build_local_link_map(extract_heading_section(note.clean_text, "Narrative"), page_path, index)
+        linked_asset_ids: set[str] = set()
+        media_warnings: list[str] = []
         transcript_asset_path = TRANSCRIPT_ASSET_DIR / f"{session_key}.json"
         zoom_html = render_zoom_html(
             session_key=session_key,
@@ -150,6 +170,10 @@ def render_zoomable_session_note(
             transcript_asset_path=transcript_asset_path,
             base_path=config.base_path,
             link_map=link_map,
+            page_path=page_path,
+            index=index,
+            linked_asset_ids=linked_asset_ids,
+            warnings=media_warnings,
         )
         updated = replace_narrative_section(transformed_text, zoom_html)
     except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as error:
@@ -164,6 +188,8 @@ def render_zoomable_session_note(
         text=updated,
         transcript_asset_path=transcript_asset_path,
         transcript_json=json.dumps(transcript_payload, indent=2, ensure_ascii=False) + "\n",
+        linked_asset_ids=linked_asset_ids,
+        warnings=media_warnings,
     )
 
 
@@ -191,6 +217,7 @@ def parse_recap_blocks(path: Path) -> list[RecapBlock]:
                 short=parse_required_subsection(block_lines, "#### Short", match.group("block_id")),
                 intermediate=parse_required_subsection(block_lines, "#### Intermediate", match.group("block_id")),
                 long=parse_required_subsection(block_lines, "#### Long", match.group("block_id")),
+                image=parse_recap_image(metadata),
             )
         )
     if not blocks:
@@ -277,6 +304,10 @@ def render_zoom_html(
     transcript_asset_path: Path,
     base_path: str,
     link_map: dict[str, str],
+    page_path: Path,
+    index: LinkIndex,
+    linked_asset_ids: set[str],
+    warnings: list[str],
 ) -> str:
     transcript_src = base_path + transcript_asset_path.as_posix()
     lines = [
@@ -302,6 +333,15 @@ def render_zoom_html(
         ]
     )
     for block in recap_blocks:
+        image_html = render_recap_image(
+            block,
+            page_path=page_path,
+            index=index,
+            link_map=link_map,
+            linked_asset_ids=linked_asset_ids,
+            warnings=warnings,
+        )
+        placement = image_placement(block)
         lines.extend(
             [
                 "",
@@ -311,9 +351,15 @@ def render_zoom_html(
                     f'<div class="taelgar-session-zoom__beat" data-session-zoom-beat '
                     f'data-session-zoom-key="{html.escape(session_key, quote=True)}" data-zoom="short">'
                 ),
-                render_level("short", block.short, link_map),
-                render_level("intermediate", block.intermediate, link_map),
-                render_level("long", block.long, link_map),
+                render_level("short", block.short, link_map, image_html=image_html, image_placement=placement),
+                render_level(
+                    "intermediate",
+                    block.intermediate,
+                    link_map,
+                    image_html=image_html,
+                    image_placement=placement,
+                ),
+                render_level("long", block.long, link_map, image_html=image_html, image_placement=placement),
                 (
                     f'  <div class="taelgar-session-zoom__level taelgar-session-zoom__transcript" '
                     f'data-zoom-level="transcript" data-transcript-block="{html.escape(block.block_id, quote=True)}">'
@@ -325,14 +371,176 @@ def render_zoom_html(
     return "\n".join(lines)
 
 
-def render_level(level: str, text: str, link_map: dict[str, str]) -> str:
+def render_level(
+    level: str,
+    text: str,
+    link_map: dict[str, str],
+    *,
+    image_html: str | None = None,
+    image_placement: str | None = None,
+) -> str:
     paragraphs = [
         f"<p>{render_linked_text(block.strip(), link_map)}</p>"
         for block in re.split(r"\n\s*\n", text)
         if block.strip()
     ]
-    content = "\n".join(paragraphs) if paragraphs else "<p></p>"
+    parts: list[str] = []
+    if image_html and image_placement == "start":
+        parts.append(image_html)
+    parts.extend(paragraphs or ["<p></p>"])
+    if image_html and image_placement == "end":
+        parts.append(image_html)
+    content = "\n".join(parts)
     return f'  <div class="taelgar-session-zoom__level" data-zoom-level="{level}">{content}</div>'
+
+
+def parse_recap_image(metadata: dict[str, str]) -> RecapImage | None:
+    raw_image = normalize_optional_string(metadata.get("Image"))
+    if raw_image is None:
+        return None
+    target, inline_render = split_image_reference(raw_image)
+    target = normalize_optional_string(target)
+    if target is None:
+        return None
+    render = normalize_optional_string(metadata.get("Image Render")) or normalize_optional_string(inline_render)
+    return RecapImage(
+        target=target,
+        placement=normalize_image_placement(metadata.get("Image Placement")),
+        render=render,
+        caption=normalize_optional_string(metadata.get("Image Caption")),
+    )
+
+
+def split_image_reference(value: str) -> tuple[str, str | None]:
+    text = value.strip()
+    markdown_match = re.fullmatch(r"!?\[[^\]]*\]\(\s*<?(?P<target>[^>)]+)>?\s*\)", text)
+    if markdown_match:
+        return markdown_match.group("target").strip(), None
+    wikilink_match = re.fullmatch(r"!?\[\[(?P<body>[^\]]+)\]\]", text)
+    if wikilink_match:
+        parts = [part.strip() for part in wikilink_match.group("body").split("|")]
+        return parts[0], "|".join(part for part in parts[1:] if part) or None
+    return text, None
+
+
+def normalize_image_placement(value: str | None) -> str:
+    text = (value or "").strip().lower()
+    if text in {"end", "after", "bottom"}:
+        return "end"
+    return "start"
+
+
+def image_placement(block: RecapBlock) -> str | None:
+    return block.image.placement if block.image else None
+
+
+def render_recap_image(
+    block: RecapBlock,
+    *,
+    page_path: Path,
+    index: LinkIndex,
+    link_map: dict[str, str],
+    linked_asset_ids: set[str],
+    warnings: list[str],
+) -> str | None:
+    if block.image is None:
+        return None
+    target = block.image.target.strip()
+    if target.startswith(("http://", "https://")):
+        src = target
+    else:
+        resolution = index.resolve(target)
+        if resolution.status == "ambiguous":
+            candidates = ", ".join(entry.relative_path.as_posix() for entry in resolution.candidates)
+            warnings.append(f"{block.block_id} image {target!r} is ambiguous: {candidates}")
+            return None
+        if resolution.status != "found" or resolution.entry is None:
+            warnings.append(f"{block.block_id} image {target!r} could not be resolved.")
+            return None
+        entry = resolution.entry
+        if entry.target_path.suffix.lower() not in IMAGE_SUFFIXES:
+            warnings.append(f"{block.block_id} image {target!r} is not an image asset.")
+            return None
+        if entry.is_asset:
+            linked_asset_ids.add(entry.id)
+        src = relative_url(page_path, entry.target_path)
+
+    render = parse_image_render(block.image.render)
+    caption = block.image.caption
+    alt = plain_text_for_alt(caption) if caption else title_case(Path(target).stem.replace("-", " ").replace("_", " "))
+    classes = ["taelgar-session-zoom__image"]
+    if render.align:
+        classes.append(f"taelgar-session-zoom__image--{render.align}")
+    figure_attrs = [("class", " ".join(classes))]
+    figure_style = figure_style_for(render)
+    if figure_style:
+        figure_attrs.append(("style", figure_style))
+    img_attrs = [("src", src), ("alt", alt)]
+    if render.width and render.width.isdecimal():
+        img_attrs.append(("width", render.width))
+    if render.height and render.height.isdecimal():
+        img_attrs.append(("height", render.height))
+    if render.height and not render.height.isdecimal():
+        safe_height = safe_css_size(render.height)
+        if safe_height:
+            img_attrs.append(("style", f"height: {safe_height};"))
+
+    lines = [
+        f"<figure {render_attrs(figure_attrs)}>",
+        f"  <img {render_attrs(img_attrs)}>",
+    ]
+    if caption:
+        lines.append(f"  <figcaption>{render_linked_text(caption, link_map)}</figcaption>")
+    lines.append("</figure>")
+    return "\n".join(lines)
+
+
+def parse_image_render(value: str | None) -> ImageRender:
+    align: str | None = None
+    width: str | None = None
+    height: str | None = None
+    for raw in (value or "").split("|"):
+        token = raw.strip()
+        if not token:
+            continue
+        lowered = token.lower()
+        if lowered in {"left", "right", "center"}:
+            align = lowered
+        elif width is None:
+            width = token
+        elif height is None:
+            height = token
+    return ImageRender(align=align, width=width, height=height)
+
+
+def figure_style_for(render: ImageRender) -> str | None:
+    if render.width is None:
+        return None
+    safe_width = safe_css_size(render.width)
+    if safe_width is None:
+        return None
+    return f"width: {safe_width}; max-width: 100%;"
+
+
+def safe_css_size(value: str) -> str | None:
+    text = value.strip()
+    if re.fullmatch(r"\d{1,5}", text):
+        return f"{text}px"
+    if re.fullmatch(r"\d{1,5}(?:\.\d{1,3})?(?:px|rem|em|%)", text, flags=re.IGNORECASE):
+        return text
+    return None
+
+
+def render_attrs(attrs: list[tuple[str, str]]) -> str:
+    return " ".join(f'{name}="{html.escape(value, quote=True)}"' for name, value in attrs)
+
+
+def plain_text_for_alt(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        target = (match.group(1) or "").strip()
+        return (match.group(3) or Path(target.split("#", 1)[0]).stem).strip()
+
+    return re.sub(WIKILINK_RE, replace, text).strip()
 
 
 def build_local_link_map(narrative_text: str, page_path: Path, index: LinkIndex) -> dict[str, str]:

@@ -237,6 +237,8 @@ class WebsiteBuildTests(unittest.TestCase):
                 "## Narrative\n\n"
                 "A later duplicate heading remains untouched.\n",
             )
+            (site.source / "opening-door.png").write_bytes(b"opening image")
+            (site.source / "closing-door.png").write_bytes(b"closing image")
             write_zoom_session_artifacts(site.root / "sessions")
             update_config(site.config_path, {"session_artifact_roots": ["sessions"]})
             config = load_config(site.config_path)
@@ -255,11 +257,32 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertNotIn("Next: Intermediate", text)
             self.assertIn('<a href="alden.md">Alden</a>', text)
             self.assertIn('<a href="glass-key.md">key</a>', text)
+            self.assertIn("taelgar-session-zoom__image--right", text)
+            self.assertIn("taelgar-session-zoom__image--left", text)
+            self.assertIn('style="width: 400px; max-width: 100%;"', text)
+            self.assertIn('<img src="opening-door.png" alt="Alden turns the key" width="400">', text)
+            self.assertIn(
+                '<figcaption><a href="alden.md">Alden</a> turns the <a href="glass-key.md">key</a></figcaption>',
+                text,
+            )
+            self.assertIn('<img src="closing-door.png" alt="Mira waits with Alden" width="240">', text)
+            self.assertIn('<figcaption>Mira waits with <a href="alden.md">Alden</a></figcaption>', text)
             self.assertIn("turns the", text)
             self.assertNotIn("DM first line", text)
             self.assertNotIn("The long narrative links", text)
             self.assertIn("A later duplicate heading remains untouched.", text)
             self.assertTrue(transcript_path.exists())
+            self.assertTrue((site.docs / "opening-door.png").exists())
+            self.assertTrue((site.docs / "closing-door.png").exists())
+            self.assertLess(
+                text.index('<figure class="taelgar-session-zoom__image taelgar-session-zoom__image--right"'),
+                text.index('<p><a href="alden.md">Alden</a> turns the <a href="glass-key.md">key</a>.</p>'),
+            )
+            mira_paragraph = text.index("<p>Mira steps through.</p>")
+            self.assertGreater(
+                text.index('<figure class="taelgar-session-zoom__image taelgar-session-zoom__image--left"', mira_paragraph),
+                mira_paragraph,
+            )
             self.assertEqual(
                 transcript["blocks"][0]["lines"],
                 [
@@ -685,19 +708,39 @@ def write_zoom_session_artifacts(root: Path) -> None:
         "- Kind: beat\n"
         "- Beat IDs: beat-001\n"
         "- Source Range: u0001 -> u0004\n\n"
+        "- Image: opening-door.png\n"
+        "- Image Placement: start\n"
+        "- Image Render: right|400\n"
+        "- Image Caption: Alden turns the [[Glass Key|key]]\n\n"
         "#### Short\n"
         "Alden turns the key.\n\n"
         "#### Intermediate\n"
         "Alden turns the key while Mira waits.\n\n"
         "#### Long\n"
-        "Alden turns the key and opens the door while Mira waits.\n",
+        "Alden turns the key and opens the door while Mira waits.\n\n"
+        "### recap-002 | Crossing the Threshold\n\n"
+        "- Kind: beat\n"
+        "- Beat IDs: beat-002\n"
+        "- Source Range: u0005 -> u0006\n"
+        "- Image: closing-door.png\n"
+        "- Image Placement: end\n"
+        "- Image Render: left|240\n"
+        "- Image Caption: Mira waits with [[Alden]]\n\n"
+        "#### Short\n"
+        "Mira steps through.\n\n"
+        "#### Intermediate\n"
+        "Mira steps through while Alden watches.\n\n"
+        "#### Long\n"
+        "Mira steps through the doorway while Alden watches from the hall.\n",
         encoding="utf-8",
     )
     (cleaned / "test-campaign-007-source-cleaned.md").write_text(
         "[u0001 | 00:00:00-00:00:01 | DM] DM first line.\n"
         "[u0002 | 00:00:01-00:00:02 | DM] DM second line.\n"
         "[u0003 | 00:00:02-00:00:03 | Mira] Mira replies.\n"
-        "[u0004 | 00:00:03-00:00:04 | Mira] Mira continues.\n",
+        "[u0004 | 00:00:03-00:00:04 | Mira] Mira continues.\n"
+        "[u0005 | 00:00:04-00:00:05 | Mira] Mira crosses.\n"
+        "[u0006 | 00:00:05-00:00:06 | DM] Alden watches.\n",
         encoding="utf-8",
     )
 

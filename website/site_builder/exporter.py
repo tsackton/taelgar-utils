@@ -176,6 +176,16 @@ def export_site(config: WebsiteConfig) -> ExportStats:
                 )
             else:
                 result.text = zoom_result.text
+                linked_asset_ids.update(zoom_result.linked_asset_ids)
+                for warning in zoom_result.warnings:
+                    stats.content_warnings.append(
+                        ContentWarning(
+                            source=entry.relative_path.as_posix(),
+                            line=1,
+                            kind="zoomable session view",
+                            excerpt=warning,
+                        )
+                    )
                 stats.zoomable_pages.append(entry.target_path)
                 if zoom_result.transcript_asset_path is not None and zoom_result.transcript_json is not None:
                     write_text_if_changed(config.docs_dir / zoom_result.transcript_asset_path, zoom_result.transcript_json)

@@ -411,6 +411,97 @@ class ManageSessionRecapTest(SessionRecapBase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("recap recap-001 is missing subsection #### Intermediate.", result.stdout)
 
+    def test_validator_allows_human_omitted_context_blocks(self) -> None:
+        workspace = self.make_workspace()
+        beats = self.load_json(workspace / "beats.json")
+        facts = self.load_json(workspace / "beat-facts.json")
+        beats["beats"][2]["dateStart"] = "1730-01-26"
+        facts["facts"][2]["dateStart"] = "1730-01-26"
+        self.write_json(workspace / "beats.json", beats)
+        self.write_json(workspace / "beat-facts.json", facts)
+
+        result = self.run_context_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        result = self.run_recap_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        recap_path = workspace / "recap" / "test-session-007-session-recap.md"
+        recap_text = recap_path.read_text(encoding="utf-8").replace("TODO", "Drafted text.")
+        recap_text = recap_text.replace("- Tagline: Drafted text.", "- Tagline: in which the party descends.")
+        recap_text = recap_text.replace(
+            "\n### Jan 26th, 1730\n"
+            "\n"
+            "- Timeline Segment: timeline-002\n"
+            "- Timeline Key: (DR:: 1730-01-26)\n"
+            "- Resolution: day\n"
+            "- Beat IDs: beat-003\n"
+            "- Locations: Zeyfa's Labyrinth\n"
+            "- NPCs: Kalima\n"
+            "- Organizations: none\n"
+            "- Items: none\n"
+            "- Combat Beats: none\n"
+            "\n"
+            "#### Short\n"
+            "Drafted text: Jan 26th, 1730: one short event-log line.\n"
+            "\n"
+            "#### Long\n"
+            "Drafted text: one or two tighter event-log sentences covering the whole segment.\n",
+            "",
+        )
+        recap_text = recap_text.replace(
+            "\n### recap-002 | The Warm Fissure\n"
+            "\n"
+            "- Kind: beat\n"
+            "- Beat IDs: beat-002\n"
+            "- Date: 1730-01-25\n"
+            "- Time: afternoon\n"
+            "- Source Range: u0101 -> u0200\n"
+            "- Locations: Zeyfa's Labyrinth\n"
+            "- NPCs: Kalima\n"
+            "- Organizations: none\n"
+            "- Items: heating rune\n"
+            "- Enemies: none\n"
+            "- Image:\n"
+            "- Image Placement:\n"
+            "- Image Render:\n"
+            "- Image Caption:\n"
+            "\n"
+            "#### Short\n"
+            "Drafted text.\n"
+            "\n"
+            "#### Intermediate\n"
+            "Drafted text.\n"
+            "\n"
+            "#### Long\n"
+            "Drafted text.\n",
+            "",
+        )
+        recap_path.write_text(recap_text, encoding="utf-8")
+
+        result = self.run_recap_validator(workspace)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_unknown_recap_block_fails_validation(self) -> None:
+        workspace = self.make_workspace()
+        result = self.run_context_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        result = self.run_recap_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        recap_path = workspace / "recap" / "test-session-007-session-recap.md"
+        recap_text = recap_path.read_text(encoding="utf-8").replace("TODO", "Drafted text.")
+        recap_text = recap_text.replace("- Tagline: Drafted text.", "- Tagline: in which the party descends.")
+        recap_text = recap_text.replace("### recap-001 | Into the Labyrinth", "### recap-999 | Into the Labyrinth")
+        recap_path.write_text(recap_text, encoding="utf-8")
+
+        result = self.run_recap_validator(workspace)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Recap block recap-999 is not present in context.", result.stdout)
+
     def test_unfilled_title_fails_validation(self) -> None:
         workspace = self.make_workspace()
         result = self.run_context_builder(workspace)

@@ -156,11 +156,14 @@ def validate_timeline_blocks(context: Dict[str, Any], lines: Sequence[str], erro
     timeline_lines = get_section_lines(lines, "## Timeline")
     actual_blocks = collect_timeline_blocks(timeline_lines)
     actual_ids = [block_id for block_id, _, _ in actual_blocks]
-    if actual_ids != expected_ids:
-        errors.append("Timeline blocks in session-recap.md do not match context order.")
+    if expected_ids and not actual_ids:
+        errors.append("Timeline section must include at least one context timeline block.")
         return
+    validate_context_ordered_subset(actual_ids, expected_ids, "Timeline", errors)
     context_blocks = {block["blockId"]: block for block in context.get("timelineBlocks", [])}
     for block_id, start, end in actual_blocks:
+        if block_id not in context_blocks:
+            continue
         block_lines = timeline_lines[start:end]
         validate_timeline_heading_and_key(block_lines, context_blocks[block_id], errors)
         validate_subsection(block_lines, "#### Short", f"timeline {block_id}", errors)
@@ -172,9 +175,10 @@ def validate_recap_blocks(context: Dict[str, Any], lines: Sequence[str], errors:
     recap_lines = get_section_lines(lines, "## Recap")
     actual_blocks = collect_level3_blocks(recap_lines, "recap-")
     actual_ids = [block_id for block_id, _, _ in actual_blocks]
-    if actual_ids != expected_ids:
-        errors.append("Recap blocks in session-recap.md do not match context order.")
+    if expected_ids and not actual_ids:
+        errors.append("Recap section must include at least one context recap block.")
         return
+    validate_context_ordered_subset(actual_ids, expected_ids, "Recap", errors)
     for block_id, start, end in actual_blocks:
         block_lines = recap_lines[start:end]
         short_text = validate_subsection(block_lines, "#### Short", f"recap {block_id}", errors)
@@ -195,13 +199,40 @@ def validate_combat_blocks(context: Dict[str, Any], lines: Sequence[str], errors
     combat_lines = get_section_lines(lines, "## Combat")
     actual_blocks = collect_level3_blocks(combat_lines, "recap-")
     combat_ids = [block_id for block_id, _, _ in actual_blocks]
-    if combat_ids != expected_ids:
-        errors.append("Combat blocks in session-recap.md do not match context order.")
+    if not combat_ids:
+        errors.append("Combat section must include at least one context combat block.")
         return
+    validate_context_ordered_subset(combat_ids, expected_ids, "Combat", errors)
     context_blocks = {block["blockId"]: block for block in context.get("recapBlocks", []) if block.get("kind") == "combat"}
     for block_id, start, end in actual_blocks:
+        if block_id not in context_blocks:
+            continue
         block_lines = combat_lines[start:end]
         validate_combat_block(block_lines, context_blocks[block_id], errors)
+
+
+def validate_context_ordered_subset(
+    actual_ids: Sequence[str],
+    expected_ids: Sequence[str],
+    label: str,
+    errors: List[str],
+) -> None:
+    expected_positions = {block_id: index for index, block_id in enumerate(expected_ids)}
+    seen: set[str] = set()
+    last_position = -1
+    for block_id in actual_ids:
+        if block_id in seen:
+            errors.append(f"{label} block {block_id} appears more than once.")
+            continue
+        seen.add(block_id)
+        position = expected_positions.get(block_id)
+        if position is None:
+            errors.append(f"{label} block {block_id} is not present in context.")
+            continue
+        if position < last_position:
+            errors.append(f"{label} blocks in session-recap.md are not in context order.")
+            continue
+        last_position = position
 
 
 def validate_timeline_heading_and_key(lines: Sequence[str], context_block: Dict[str, Any], errors: List[str]) -> None:
