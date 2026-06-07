@@ -74,24 +74,27 @@ class WebsiteBuildTests(unittest.TestCase):
             text = (site.docs / "callouts.md").read_text(encoding="utf-8")
 
             self.assertIn('!!! info "Custom title"', text)
-            self.assertIn('!!! quote ""', text)
-            self.assertIn('!!! image ""', text)
+            self.assertIn('!!! quote " "', text)
+            self.assertIn('!!! image " "', text)
             self.assertNotIn("[!quote]", text)
             self.assertNotIn("[!image]", text)
 
     def test_asset_selection_and_stale_cleanup(self) -> None:
         with fixture_site() as site:
-            write_note(site.source / "A.md", "---\nname: A\n---\n![[pic.png]]\n![Audio](/assets/audio/song.mp3)\n")
+            write_note(site.source / "A.md", "---\nname: A\n---\n![[pic.png]]\n![Audio](/assets/audio/song.mp3)\n![[assets/audio/clip.m4a]]\n")
             (site.source / "pic.png").write_bytes(b"fake image bytes")
             (site.source / "assets" / "audio").mkdir(parents=True)
             (site.source / "assets" / "audio" / "song.mp3").write_bytes(b"audio")
+            (site.source / "assets" / "audio" / "clip.m4a").write_bytes(b"m4a")
             (site.source / "unused.png").write_bytes(b"unused")
             export_site(site.config)
             self.assertTrue((site.docs / "pic.png").exists())
             self.assertTrue((site.docs / "assets" / "audio" / "song.mp3").exists())
+            self.assertTrue((site.docs / "assets" / "audio" / "clip.m4a").exists())
             text = (site.docs / "a.md").read_text(encoding="utf-8")
             self.assertIn("<audio controls>", text)
             self.assertIn('<source src="/assets/audio/song.mp3" type="audio/mpeg">', text)
+            self.assertIn('<source src="/assets/audio/clip.m4a" type="audio/mp4">', text)
             self.assertNotIn("![Audio]", text)
             self.assertFalse((site.docs / "unused.png").exists())
 
@@ -278,18 +281,22 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertNotIn("taelgar-session-zoom__beat-id", text)
             self.assertNotIn("taelgar-session-zoom__cycle", text)
             self.assertNotIn("Next: Intermediate", text)
-            self.assertIn('<a href="alden.md">Alden</a>', text)
-            self.assertIn('<a href="glass-key.md">key</a>', text)
+            self.assertIn('<a href="/alden/">Alden</a>', text)
+            self.assertIn('<a href="/glass-key/">key</a>', text)
             self.assertIn("taelgar-session-zoom__image--right", text)
             self.assertIn("taelgar-session-zoom__image--left", text)
             self.assertIn('style="width: 400px; max-width: 100%;"', text)
-            self.assertIn('<img src="opening-door.png" alt="Alden turns the key" width="400">', text)
+            self.assertIn('<img src="/opening-door.png" alt="Alden turns the key" width="400">', text)
             self.assertIn(
-                '<figcaption><a href="alden.md">Alden</a> turns the <a href="glass-key.md">key</a></figcaption>',
+                '<figcaption><a href="/alden/">Alden</a> turns the <a href="/glass-key/">key</a></figcaption>',
                 text,
             )
-            self.assertIn('<img src="closing-door.png" alt="Mira waits with Alden" width="240">', text)
-            self.assertIn('<figcaption>Mira waits with <a href="alden.md">Alden</a></figcaption>', text)
+            self.assertIn('<img src="/closing-door.png" alt="Mira waits with Alden" width="240">', text)
+            self.assertIn('<figcaption>Mira waits with <a href="/alden/">Alden</a></figcaption>', text)
+            self.assertIn('<p><a href="/alden/">Alden</a> turns the <a href="/glass-key/">key</a>.</p>', text)
+            self.assertIn('<p><a href="/alden/">Alden</a> turns the <a href="/glass-key/">key</a> while Mira waits.</p>', text)
+            self.assertEqual(text.count('<img src="/opening-door.png"'), 1)
+            self.assertEqual(text.count('<img src="/closing-door.png"'), 1)
             self.assertIn("turns the", text)
             self.assertNotIn("DM first line", text)
             self.assertNotIn("The long narrative links", text)
@@ -299,9 +306,9 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertTrue((site.docs / "closing-door.png").exists())
             self.assertLess(
                 text.index('<figure class="taelgar-session-zoom__image taelgar-session-zoom__image--right"'),
-                text.index('<p><a href="alden.md">Alden</a> turns the <a href="glass-key.md">key</a>.</p>'),
+                text.index('<p><a href="/alden/">Alden</a> turns the <a href="/glass-key/">key</a> and opens the door while Mira waits.</p>'),
             )
-            mira_paragraph = text.index("<p>Mira steps through.</p>")
+            mira_paragraph = text.index('<p>Mira steps through the doorway while <a href="/alden/">Alden</a> watches from the hall.</p>')
             self.assertGreater(
                 text.index('<figure class="taelgar-session-zoom__image taelgar-session-zoom__image--left"', mira_paragraph),
                 mira_paragraph,
@@ -397,7 +404,7 @@ class WebsiteBuildTests(unittest.TestCase):
             export_site(config)
             text = (site.docs / "a.md").read_text(encoding="utf-8")
 
-            self.assertIn("](portrait.webp)", text)
+            self.assertIn("](/portrait.webp)", text)
             self.assertTrue((site.docs / "portrait.webp").exists())
             self.assertFalse((site.docs / "portrait.png").exists())
 

@@ -12,7 +12,7 @@ import yaml
 from .link_index import LinkIndex
 from .notes import IMAGE_SUFFIXES, WIKILINK_RE, MarkdownNote, title_case
 from .slugging import slugify
-from .transform import relative_url
+from .transform import gfm_anchor
 
 
 TRANSCRIPT_ASSET_DIR = Path("assets/session-zoom")
@@ -160,7 +160,8 @@ def render_zoomable_session_note(
         transcript_path = transcript_path_from_beats(record.beats_path)
         source_lines = read_source_lines(transcript_path)
         transcript_payload = build_transcript_payload(session_key, recap_blocks, source_lines)
-        link_map = build_local_link_map(extract_heading_section(note.clean_text, "Narrative"), page_path, index)
+        long_narrative = "\n\n".join([extract_heading_section(note.clean_text, "Narrative"), *(block.long for block in recap_blocks)])
+        link_map = build_local_link_map(long_narrative, index, base_path=config.base_path)
         linked_asset_ids: set[str] = set()
         media_warnings: list[str] = []
         transcript_asset_path = TRANSCRIPT_ASSET_DIR / f"{session_key}.json"
@@ -170,7 +171,6 @@ def render_zoomable_session_note(
             transcript_asset_path=transcript_asset_path,
             base_path=config.base_path,
             link_map=link_map,
-            page_path=page_path,
             index=index,
             linked_asset_ids=linked_asset_ids,
             warnings=media_warnings,
@@ -304,7 +304,6 @@ def render_zoom_html(
     transcript_asset_path: Path,
     base_path: str,
     link_map: dict[str, str],
-    page_path: Path,
     index: LinkIndex,
     linked_asset_ids: set[str],
     warnings: list[str],
@@ -335,7 +334,7 @@ def render_zoom_html(
     for block in recap_blocks:
         image_html = render_recap_image(
             block,
-            page_path=page_path,
+            base_path=base_path,
             index=index,
             link_map=link_map,
             linked_asset_ids=linked_asset_ids,
@@ -351,13 +350,11 @@ def render_zoom_html(
                     f'<div class="taelgar-session-zoom__beat" data-session-zoom-beat '
                     f'data-session-zoom-key="{html.escape(session_key, quote=True)}" data-zoom="short">'
                 ),
-                render_level("short", block.short, link_map, image_html=image_html, image_placement=placement),
+                render_level("short", block.short, link_map),
                 render_level(
                     "intermediate",
                     block.intermediate,
                     link_map,
-                    image_html=image_html,
-                    image_placement=placement,
                 ),
                 render_level("long", block.long, link_map, image_html=image_html, image_placement=placement),
                 (
@@ -437,7 +434,7 @@ def image_placement(block: RecapBlock) -> str | None:
 def render_recap_image(
     block: RecapBlock,
     *,
-    page_path: Path,
+    base_path: str,
     index: LinkIndex,
     link_map: dict[str, str],
     linked_asset_ids: set[str],
@@ -463,7 +460,7 @@ def render_recap_image(
             return None
         if entry.is_asset:
             linked_asset_ids.add(entry.id)
-        src = relative_url(page_path, entry.target_path)
+        src = site_url(base_path, entry.target_path)
 
     render = parse_image_render(block.image.render)
     caption = block.image.caption
@@ -543,7 +540,19 @@ def plain_text_for_alt(text: str) -> str:
     return re.sub(WIKILINK_RE, replace, text).strip()
 
 
-def build_local_link_map(narrative_text: str, page_path: Path, index: LinkIndex) -> dict[str, str]:
+def site_url(base_path: str, target_path: Path | str) -> str:
+    target = target_path.as_posix() if isinstance(target_path, Path) else str(target_path)
+    return base_path + target.lstrip("/")
+
+
+def markdown_page_url(target_path: Path) -> str:
+    if target_path.name == "index.md":
+        parent = target_path.parent.as_posix()
+        return "" if parent == "." else parent.rstrip("/") + "/"
+    return target_path.with_suffix("").as_posix().rstrip("/") + "/"
+
+
+def build_local_link_map(narrative_text: str, index: LinkIndex, *, base_path: str) -> dict[str, str]:
     links: dict[str, str] = {}
     ambiguous: set[str] = set()
     for match in re.finditer(WIKILINK_RE, narrative_text):
@@ -557,7 +566,9 @@ def build_local_link_map(narrative_text: str, page_path: Path, index: LinkIndex)
         resolution = index.resolve(target)
         if resolution.status != "found" or resolution.entry is None or not resolution.entry.is_markdown:
             continue
-        href = relative_url(page_path, resolution.entry.target_path)
+        href = site_url(base_path, markdown_page_url(resolution.entry.target_path))
+        if match.group(2):
+            href += "#" + gfm_anchor(match.group(2))
         for phrase in phrases:
             if not phrase:
                 continue

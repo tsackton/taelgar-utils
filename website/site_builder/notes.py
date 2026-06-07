@@ -12,7 +12,8 @@ from taelgar_utils.vault.taelgar_date import TaelgarDate
 
 WIKILINK_RE = r"""\[\[([^\|\]\#\\]+)(\#.*?)?(?:\\?\|([^\|\]]*))?(?:\\?\|([^\|\]]*))?(?:\\?\|([^\|\]]*))?\]\]"""
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"}
-ASSET_SUFFIXES = IMAGE_SUFFIXES | {".mp3", ".pdf"}
+AUDIO_SUFFIXES = {".mp3", ".m4a", ".wav", ".flac", ".ogg"}
+ASSET_SUFFIXES = IMAGE_SUFFIXES | AUDIO_SUFFIXES | {".pdf"}
 
 
 @dataclass
