@@ -56,6 +56,29 @@ class WebsiteBuildTests(unittest.TestCase):
             text = (site.docs / "a.md").read_text(encoding="utf-8")
             self.assertIn("[bee](<b.md>)", text)
 
+    def test_callouts_without_titles_hide_material_default_title(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Callouts.md",
+                "---\nname: Callouts\n---\n"
+                ">[!info] Custom title\n"
+                "> Body.\n\n"
+                "> [!quote]\n"
+                "> Quote body.\n\n"
+                "> [!image]\n"
+                "> ![[pic.png]]\n",
+            )
+            (site.source / "pic.png").write_bytes(b"fake image bytes")
+
+            export_site(site.config)
+            text = (site.docs / "callouts.md").read_text(encoding="utf-8")
+
+            self.assertIn('!!! info "Custom title"', text)
+            self.assertIn('!!! quote ""', text)
+            self.assertIn('!!! image ""', text)
+            self.assertNotIn("[!quote]", text)
+            self.assertNotIn("[!image]", text)
+
     def test_asset_selection_and_stale_cleanup(self) -> None:
         with fixture_site() as site:
             write_note(site.source / "A.md", "---\nname: A\n---\n![[pic.png]]\n![Audio](/assets/audio/song.mp3)\n")

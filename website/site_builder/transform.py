@@ -52,6 +52,26 @@ class TileRequest:
     bounds: object
 
 
+CALLOUT_BLOCK_RE = re.compile(r'^ ?(?P<markers>>+) *\[!(?P<type>[^\]]*)\](?P<fold>[-+]?)(?P<title>.*)?$')
+CALLOUT_CONTENT_RE = re.compile(r"^ ?(?P<markers>>+) ?")
+CALLOUT_ALIASES = {
+    "summary": "abstract",
+    "tldr": "abstract",
+    "hint": "tip",
+    "important": "tip",
+    "check": "success",
+    "done": "success",
+    "help": "question",
+    "faq": "question",
+    "caution": "warning",
+    "attention": "warning",
+    "fail": "failure",
+    "missing": "failure",
+    "error": "danger",
+    "cite": "quote",
+}
+
+
 class NoteTransformer:
     def __init__(self, config: Any, index: LinkIndex) -> None:
         self.config = config
@@ -71,6 +91,7 @@ class NoteTransformer:
         result.text = re.sub(WIKILINK_RE, lambda match: self._replace_wikilink(match, page_path, source_label, result), result.text)
         result.text = self._replace_markdown_audio_links(result.text, source_label, result)
         result.text = self._rewrite_and_collect_direct_asset_links(result.text, source_label, result)
+        result.text = convert_obsidian_callouts(result.text)
         result.text = normalize_loose_lists(result.text)
         return result
 
@@ -366,6 +387,52 @@ def relative_url(from_path: Path, to_path: Path) -> str:
 
 def markdown_link(label: str, url: str) -> str:
     return f"[{label}](<{url}>)"
+
+
+def convert_obsidian_callouts(text: str) -> str:
+    if "> [!" not in text and ">[!" not in text:
+        return text
+
+    lines: list[str] = []
+    active_callout = False
+    for line in text.split("\n"):
+        block_match = CALLOUT_BLOCK_RE.search(line)
+        if block_match:
+            active_callout = True
+            lines.append(render_material_callout_opening(block_match))
+            continue
+        content_match = CALLOUT_CONTENT_RE.search(line)
+        if active_callout and content_match:
+            indent = "\t" * content_match.group("markers").count(">")
+            lines.append(CALLOUT_CONTENT_RE.sub(indent, line, count=1))
+            continue
+        active_callout = False
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def render_material_callout_opening(match: re.Match[str]) -> str:
+    indent = "\t" * (match.group("markers").count(">") - 1)
+    callout_type = normalize_callout_type(match.group("type"))
+    syntax = {"-": "???", "+": "???+"}.get(match.group("fold"), "!!!")
+    title = (match.group("title") or "").strip()
+    if title:
+        return f'{indent}{syntax} {callout_type} "{escape_admonition_title(title)}"'
+    return f'{indent}{syntax} {callout_type} ""'
+
+
+def normalize_callout_type(value: str) -> str:
+    callout_type = value.lower()
+    callout_type = re.sub(r" *\| *(inline|left) *$", " inline", callout_type)
+    callout_type = re.sub(r" *\| *(inline end|right) *$", " inline end", callout_type)
+    callout_type = re.sub(r" *\|.*", "", callout_type)
+    first, separator, rest = callout_type.partition(" ")
+    first = CALLOUT_ALIASES.get(first, first)
+    return first + (separator + rest if separator else "")
+
+
+def escape_admonition_title(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 LIST_MARKER_RE = re.compile(r"^(?P<indent>[ \t]{0,3})(?:[-+*]|\d+[.)])\s+\S")
