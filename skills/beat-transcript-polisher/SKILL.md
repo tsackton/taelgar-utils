@@ -8,7 +8,6 @@ description: Polish recap-scoped RPG session transcript excerpts for zoomable se
 Use this optional skill after the normal session note pipeline has produced:
 
 - `cleaned/<bundle-stem>-source-cleaned.md`
-- `cleaned/<bundle-stem>-session-summary-context.json`
 - `cleaned/<bundle-stem>-session-recap.md`
 
 This skill is not part of default `session-note-prep`.
@@ -25,15 +24,18 @@ For each recap block:
 5. Fill a transcript highlights summary for pull quotes and optional audio monologue candidates.
 6. Sync editable session-level pull quote and audio highlight candidate sections into `session-recap.md`.
 
-The recap block is the normal unit of work, because `session-summary-context.json` may combine adjacent beats into one `recap-*` block.
+The recap block is the normal unit of work.
 If the user asks for one specific beat, map it to the recap block that contains that beat.
+
+`session-recap.md` is the sole source of truth for recap block IDs, titles, beat IDs, and source ranges.
+Do not read, trust, or reconcile `session-summary-context.json` for this skill; it may be stale after human recap editing.
+The helper owns `Polished Transcript` metadata as derived output and will insert or update it from the recap block identity.
 
 ## Allowed Inputs
 
 Primary evidence:
 
 - the current cleaned source transcript
-- `session-summary-context.json`
 - `session-recap.md`
 - optional glossary or dictionary explicitly provided for this polishing run
 
@@ -169,11 +171,26 @@ The full highlights summary remains the complete record. The recap sections are 
 - If a phrase remains suspicious but cannot be corrected with high confidence, mark only that phrase with `[[...]]`.
 - If any `[[...]]` markers remain, report them to the user with UID locations before treating the polished transcript as final.
 
+## Quality Review
+
+After polishing transcript files, run a separate prose-quality review pass before filling highlights or treating the transcript set as final.
+When a fast/low-effort review agent is available, use it for this pass.
+The reviewer must not edit files directly; it should return `pass` or `rework` with compact findings that cite transcript file, visible line, UID range, and issue type.
+
+The review pass should look specifically for text that still reads like joined ASR output:
+
+- stray punctuation and capitalization artifacts
+- obvious duplicated false starts, such as `how comp... How complex`
+- fragments joined across source-line boundaries without sentence repair
+- long same-speaker turns that preserve raw transcript rhythm instead of readable turns
+- filler and repeated phrases that no longer carry table voice or meaning
+
+If the review returns `rework`, revise only the cited transcript blocks, then rerun structural validation and prose review.
+
 ## Workflow
 
 1. Resolve the bundle paths:
    - `cleaned_transcript = cleaned/<bundle-stem>-source-cleaned.md`
-   - `context_json = cleaned/<bundle-stem>-session-summary-context.json`
    - `session_recap_md = cleaned/<bundle-stem>-session-recap.md`
    - `transcript_output_dir = cleaned/beat-transcripts`
 2. Run the deterministic helper to extract missing transcript files and patch recap metadata:
@@ -181,7 +198,6 @@ The full highlights summary remains the complete record. The recap sections are 
 ```bash
 python skills/beat-transcript-polisher/scripts/manage_beat_transcripts.py \
   --transcript /path/to/cleaned/<bundle-stem>-source-cleaned.md \
-  --context-json /path/to/cleaned/<bundle-stem>-session-summary-context.json \
   --session-recap-md /path/to/cleaned/<bundle-stem>-session-recap.md \
   --output-dir /path/to/cleaned/beat-transcripts \
   --file-prefix <bundle-stem>
@@ -189,28 +205,28 @@ python skills/beat-transcript-polisher/scripts/manage_beat_transcripts.py \
 
 3. Polish each generated transcript file under `## Transcript`.
    For long sessions, work one recap block at a time.
-4. Fill `<bundle-stem>-transcript-highlights.md`:
+4. Run the prose-quality review pass and fix any `rework` findings.
+5. Fill `<bundle-stem>-transcript-highlights.md`:
    - one or more pull quotes for each beat
    - optional audio monologue candidates across the whole session
-5. Run the helper again in normal mode to sync `## Pull Quotes` and `## Audio Highlights` into `session-recap.md`.
+6. Run the helper again in normal mode to sync `## Pull Quotes` and `## Audio Highlights` into `session-recap.md`.
    This does not overwrite existing transcript files unless `--overwrite` is passed.
-6. Review `session-recap.md`:
+7. Review `session-recap.md`:
    - delete pull quotes and audio highlights that should not appear in the final session note
    - reorder the remaining entries if desired
    - edit audio titles or output filenames if needed
-7. Run the helper again in validation mode:
+8. Run the helper again in validation mode:
 
 ```bash
 python skills/beat-transcript-polisher/scripts/manage_beat_transcripts.py \
   --transcript /path/to/cleaned/<bundle-stem>-source-cleaned.md \
-  --context-json /path/to/cleaned/<bundle-stem>-session-summary-context.json \
   --session-recap-md /path/to/cleaned/<bundle-stem>-session-recap.md \
   --output-dir /path/to/cleaned/beat-transcripts \
   --file-prefix <bundle-stem> \
   --validate-only
 ```
 
-8. Fix any validation errors before handing off the polished transcript set.
+9. Fix any validation errors before handing off the polished transcript set.
 
 ## Single Block Work
 
@@ -219,21 +235,20 @@ To work on one recap block:
 ```bash
 python skills/beat-transcript-polisher/scripts/manage_beat_transcripts.py \
   --transcript /path/to/cleaned/<bundle-stem>-source-cleaned.md \
-  --context-json /path/to/cleaned/<bundle-stem>-session-summary-context.json \
   --session-recap-md /path/to/cleaned/<bundle-stem>-session-recap.md \
   --output-dir /path/to/cleaned/beat-transcripts \
   --file-prefix <bundle-stem> \
   --recap-block-id recap-001
 ```
 
-If the user provides a `beatId` instead of a recap block id, inspect `session-summary-context.json` and select the recap block whose `beatIds` includes that beat.
+If the user provides a `beatId` instead of a recap block id, inspect the `## Recap` block metadata in `session-recap.md` and select the recap block whose `Beat IDs` includes that beat.
 
 ## Helper Script
 
 `scripts/manage_beat_transcripts.py` owns:
 
 - validating that inputs are outside `sources/`
-- reading recap block source ranges from `session-summary-context.json`
+- reading recap block IDs, titles, beat IDs, and source ranges from `session-recap.md`
 - extracting source lines into stable draft transcript files
 - syncing transcript file headings to titles from `session-recap.md`
 - never overwriting existing transcript files unless `--overwrite` is passed
@@ -245,5 +260,6 @@ If the user provides a `beatId` instead of a recap block id, inspect `session-su
 - validating that the transcript highlights summary exists and has one section for each beat
 - validating that pull quote and audio candidate IDs are present and globally unique
 
+The script accepts a deprecated `--context-json` argument for older command lines, but ignores it.
 The script does not polish prose or select highlights.
 The LLM must edit the generated transcript files and fill the transcript highlights summary.

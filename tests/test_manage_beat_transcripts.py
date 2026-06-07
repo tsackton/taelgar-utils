@@ -24,6 +24,87 @@ class ManageBeatTranscriptsTest(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(tmpdir, ignore_errors=True))
         return tmpdir
 
+    def test_read_recap_blocks_uses_recap_markdown_metadata(self) -> None:
+        workspace = self.make_workspace()
+        recap_path = workspace / "session-recap.md"
+        recap_path.write_text(
+            "# Session Recap\n\n"
+            "## Recap\n\n"
+            "### recap-001 | Campfire Tales\n\n"
+            "- Kind: beat\n"
+            "- Beat IDs: B01, B02\n"
+            "- Source Range: u0001 -> u0698\n"
+            "- Polished Transcript: old/path.md\n\n"
+            "#### Short\n"
+            "The party camps in the woods.\n\n"
+            "#### Long\n"
+            "- Source Range: u9999 -> u9999\n\n"
+            "### recap-003 | The Journey\n\n"
+            "- Kind: beat\n"
+            "- Beat IDs: B03\n"
+            "- Source Range: u0699 -> u1415\n\n"
+            "## Cast\n",
+            encoding="utf-8",
+        )
+
+        blocks = manager.read_recap_blocks(recap_path)
+
+        self.assertEqual([block["blockId"] for block in blocks], ["recap-001", "recap-003"])
+        self.assertEqual(blocks[0]["title"], "Campfire Tales")
+        self.assertEqual(blocks[0]["beatIds"], ["B01", "B02"])
+        self.assertEqual(blocks[0]["startUid"], "u0001")
+        self.assertEqual(blocks[0]["endUid"], "u0698")
+        self.assertEqual(blocks[1]["beatIds"], ["B03"])
+        self.assertEqual(blocks[1]["sourceEntries"][0]["title"], "The Journey")
+
+    def test_main_ignores_missing_context_json(self) -> None:
+        workspace = self.make_workspace()
+        transcript_path = workspace / "source-cleaned.md"
+        recap_path = workspace / "session-recap.md"
+        output_dir = workspace / "beat-transcripts"
+        transcript_path.write_text(
+            "[u0001 | 00:00:00.000-00:00:01.000 | DM] The door opens.\n"
+            "[u0002 | 00:00:01.000-00:00:02.000 | Kaito] What could go wrong?\n"
+            "[u0003 | 00:00:02.000-00:00:03.000 | DM] Everything.\n",
+            encoding="utf-8",
+        )
+        recap_path.write_text(
+            "# Session Recap\n\n"
+            "## Recap\n\n"
+            "### recap-001 | Opening the Door\n\n"
+            "- Kind: beat\n"
+            "- Beat IDs: B01\n"
+            "- Source Range: u0001 -> u0003\n\n"
+            "#### Short\n"
+            "The door opens.\n",
+            encoding="utf-8",
+        )
+
+        old_argv = sys.argv
+        try:
+            sys.argv = [
+                "manage_beat_transcripts.py",
+                "--transcript",
+                str(transcript_path),
+                "--context-json",
+                str(workspace / "missing-context.json"),
+                "--session-recap-md",
+                str(recap_path),
+                "--output-dir",
+                str(output_dir),
+                "--file-prefix",
+                "test-session-001",
+            ]
+            result = manager.main()
+        finally:
+            sys.argv = old_argv
+
+        self.assertEqual(result, 0)
+        transcript_file = output_dir / "test-session-001-recap-001-transcript.md"
+        self.assertTrue(transcript_file.exists())
+        self.assertIn("- Polished Transcript: beat-transcripts/test-session-001-recap-001-transcript.md", recap_path.read_text(encoding="utf-8"))
+        self.assertIn("%% u0001 %%", transcript_file.read_text(encoding="utf-8"))
+
     def test_sync_recap_review_media_from_highlights_summary(self) -> None:
         workspace = self.make_workspace()
         recap_path = workspace / "session-recap.md"

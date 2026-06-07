@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 from pathlib import Path
@@ -14,6 +13,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 SOURCE_LINE_RE = re.compile(r"^(?P<header>\[(?P<uid>u\d{4,})(?:\s*\|[^\]]+)?\])\s*(?P<text>.*)$")
 RECAP_HEADING_RE = re.compile(r"^### (?P<block_id>recap-\d+)\s+\|\s+(?P<title>.+)$")
+RECAP_METADATA_RE = re.compile(r"^-\s+(?P<key>[^:]+):\s*(?P<value>.*)$")
+SOURCE_RANGE_VALUE_RE = re.compile(r"^(?P<start>u\d{4,})\s*->\s*(?P<end>u\d{4,})$")
 SOURCE_MARKER_RE = re.compile(r"^%%\s*(?P<start>u\d{4,})(?:-(?P<end>u\d{4,}))?\s*%%$")
 SPEAKER_TURN_RE = re.compile(r"^[^:\n]{1,80}:\s+\S")
 HIGHLIGHT_ID_RE = re.compile(r"^\s*-\s+ID:\s*(?P<id>[A-Za-z0-9_.:-]+)\s*$")
@@ -29,7 +30,12 @@ MAX_DRAFT_GROUP_LINES = 12
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Manage recap-scoped polished transcript files.")
     parser.add_argument("--transcript", type=Path, required=True, help="Cleaned source transcript path.")
-    parser.add_argument("--context-json", type=Path, required=True, help="session-summary-context JSON path.")
+    parser.add_argument(
+        "--context-json",
+        type=Path,
+        default=None,
+        help="Deprecated and ignored. session-recap.md is authoritative.",
+    )
     parser.add_argument("--session-recap-md", type=Path, required=True, help="session-recap.md path to patch or validate.")
     parser.add_argument("--output-dir", type=Path, required=True, help="Directory for polished transcript files.")
     parser.add_argument(
@@ -55,7 +61,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     transcript_path = args.transcript.expanduser().resolve()
-    context_path = args.context_json.expanduser().resolve()
     recap_path = args.session_recap_md.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
     file_prefix = args.file_prefix.strip()
@@ -64,7 +69,6 @@ def main() -> int:
 
     for label, path in (
         ("--transcript", transcript_path),
-        ("--context-json", context_path),
         ("--session-recap-md", recap_path),
         ("--output-dir", output_dir),
     ):
@@ -72,8 +76,7 @@ def main() -> int:
 
     transcript_lines = read_source_lines(transcript_path)
     uid_to_index = build_uid_index(transcript_lines)
-    recap_titles = read_recap_titles(recap_path)
-    blocks = select_recap_blocks(read_recap_blocks(context_path), args.recap_block_id)
+    blocks = select_recap_blocks(read_recap_blocks(recap_path), args.recap_block_id)
     summary_path = output_dir / f"{file_prefix}-transcript-highlights.md"
     plan = build_plan(
         blocks=blocks,
@@ -83,7 +86,6 @@ def main() -> int:
         recap_path=recap_path,
         output_dir=output_dir,
         file_prefix=file_prefix,
-        recap_titles=recap_titles,
     )
 
     if not args.validate_only:
@@ -146,115 +148,108 @@ def build_uid_index(transcript_lines: Sequence[Dict[str, str]]) -> Dict[str, int
     return {line["uid"]: index for index, line in enumerate(transcript_lines)}
 
 
-def read_recap_titles(recap_path: Path) -> Dict[str, str]:
-    titles: Dict[str, str] = {}
+def read_recap_blocks(recap_path: Path) -> List[Dict[str, Any]]:
+    blocks: List[Dict[str, Any]] = []
     in_recap = False
-    for raw in recap_path.read_text(encoding="utf-8").splitlines():
+    current: Optional[Dict[str, Any]] = None
+    seen_ids: set[str] = set()
+
+    for line_number, raw in enumerate(recap_path.read_text(encoding="utf-8").splitlines(), start=1):
         if raw.startswith("## "):
+            if in_recap and current is not None:
+                blocks.append(finalize_recap_block(current, recap_path))
+                current = None
             in_recap = raw == "## Recap"
             continue
         if not in_recap:
             continue
-        match = RECAP_HEADING_RE.match(raw)
-        if match:
-            titles[match.group("block_id")] = match.group("title").strip()
-    return titles
 
-
-def read_recap_blocks(context_path: Path) -> List[Dict[str, Any]]:
-    payload = json.loads(context_path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise SystemExit(f"Expected JSON object in {context_path}")
-    raw_blocks = payload.get("recapBlocks")
-    if not isinstance(raw_blocks, list) or not raw_blocks:
-        raise SystemExit(f"{context_path} must contain a non-empty recapBlocks list.")
-
-    blocks: List[Dict[str, Any]] = []
-    seen_ids: set[str] = set()
-    for raw in raw_blocks:
-        if not isinstance(raw, dict):
-            raise SystemExit(f"Invalid recap block: {raw!r}")
-        block_id = required_string(raw, "blockId")
-        if block_id in seen_ids:
-            raise SystemExit(f"Duplicate recap block id: {block_id}")
-        seen_ids.add(block_id)
-        source_range = raw.get("sourceRange")
-        if not isinstance(source_range, dict):
-            raise SystemExit(f"{block_id} is missing sourceRange.")
-        blocks.append(
-            {
+        heading_match = RECAP_HEADING_RE.match(raw)
+        if heading_match:
+            if current is not None:
+                blocks.append(finalize_recap_block(current, recap_path))
+            block_id = heading_match.group("block_id")
+            if block_id in seen_ids:
+                raise SystemExit(f"Duplicate recap block id in {recap_path}: {block_id}")
+            seen_ids.add(block_id)
+            current = {
                 "blockId": block_id,
-                "beatIds": normalize_string_list(raw.get("beatIds")),
-                "startUid": required_string(source_range, "startUid"),
-                "endUid": required_string(source_range, "endUid"),
-                "sourceEntries": normalize_source_entries(raw),
+                "title": heading_match.group("title").strip(),
+                "metadata": {},
+                "metadataOpen": True,
+                "lineNumber": line_number,
             }
-        )
+            continue
+
+        if current is None:
+            continue
+        if raw.startswith("#### "):
+            current["metadataOpen"] = False
+            continue
+        metadata_match = RECAP_METADATA_RE.match(raw) if current["metadataOpen"] else None
+        if metadata_match:
+            current["metadata"][metadata_match.group("key").strip()] = metadata_match.group("value").strip()
+
+    if in_recap and current is not None:
+        blocks.append(finalize_recap_block(current, recap_path))
+
+    if not blocks:
+        raise SystemExit(f"Could not find recap blocks in {recap_path}.")
     return blocks
 
 
-def required_string(raw: Dict[str, Any], field_name: str) -> str:
-    value = raw.get(field_name)
-    text = "" if value is None else str(value).strip()
-    if not text:
-        raise SystemExit(f"Missing required field {field_name!r}: {raw!r}")
-    return text
+def finalize_recap_block(raw: Dict[str, Any], recap_path: Path) -> Dict[str, Any]:
+    block_id = raw["blockId"]
+    metadata = raw["metadata"]
+    source_range = metadata.get("Source Range", "")
+    range_match = SOURCE_RANGE_VALUE_RE.match(source_range)
+    if not range_match:
+        raise SystemExit(f"{block_id} in {recap_path} is missing a valid Source Range.")
+    beat_ids = parse_recap_list(metadata.get("Beat IDs", ""))
+    return {
+        "blockId": block_id,
+        "title": raw["title"],
+        "beatIds": beat_ids,
+        "startUid": range_match.group("start"),
+        "endUid": range_match.group("end"),
+        "sourceEntries": recap_source_entries(
+            block_id=block_id,
+            title=raw["title"],
+            beat_ids=beat_ids,
+            start_uid=range_match.group("start"),
+            end_uid=range_match.group("end"),
+        ),
+    }
 
 
-def normalize_string_list(value: Any) -> List[str]:
-    if value is None:
+def parse_recap_list(value: str) -> List[str]:
+    text = value.strip()
+    if not text or text.lower() == "none":
         return []
-    if not isinstance(value, list):
-        raise SystemExit(f"Expected list of strings, got {value!r}")
-    return [str(item).strip() for item in value if str(item).strip()]
+    return [item.strip() for item in text.split(",") if item.strip()]
 
 
-def normalize_source_entries(block: Dict[str, Any]) -> List[Dict[str, str]]:
-    raw_entries = block.get("sourceEntries")
-    if not isinstance(raw_entries, list):
-        raw_entries = []
-    entries: List[Dict[str, str]] = []
-    for raw in raw_entries:
-        if not isinstance(raw, dict):
-            continue
-        source_range = raw.get("sourceRange")
-        if not isinstance(source_range, dict):
-            continue
-        beat_id = required_string(raw, "beatId")
-        entries.append(
-            {
-                "beatId": beat_id,
-                "title": required_string(raw, "title"),
-                "startUid": required_string(source_range, "startUid"),
-                "endUid": required_string(source_range, "endUid"),
-                "shortSummary": optional_string(raw.get("shortSummary")),
-                "recapBlockId": required_string(block, "blockId"),
-            }
-        )
-    if entries:
-        return entries
-
-    beat_ids = normalize_string_list(block.get("beatIds"))
-    source_range = block.get("sourceRange")
-    if not beat_ids or not isinstance(source_range, dict):
+def recap_source_entries(
+    *,
+    block_id: str,
+    title: str,
+    beat_ids: Sequence[str],
+    start_uid: str,
+    end_uid: str,
+) -> List[Dict[str, str]]:
+    if not beat_ids:
         return []
     return [
         {
             "beatId": beat_id,
-            "title": beat_id,
-            "startUid": required_string(source_range, "startUid"),
-            "endUid": required_string(source_range, "endUid"),
+            "title": title if len(beat_ids) == 1 else beat_id,
+            "startUid": start_uid,
+            "endUid": end_uid,
             "shortSummary": "",
-            "recapBlockId": required_string(block, "blockId"),
+            "recapBlockId": block_id,
         }
         for beat_id in beat_ids
     ]
-
-
-def optional_string(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
 
 
 def select_recap_blocks(blocks: Sequence[Dict[str, Any]], block_id: Optional[str]) -> List[Dict[str, Any]]:
@@ -276,7 +271,6 @@ def build_plan(
     recap_path: Path,
     output_dir: Path,
     file_prefix: str,
-    recap_titles: Dict[str, str],
 ) -> List[Dict[str, Any]]:
     plan: List[Dict[str, Any]] = []
     for block in blocks:
@@ -286,9 +280,6 @@ def build_plan(
             raise SystemExit(f"{block['blockId']} references unknown source uid.")
         if start_index > end_index:
             raise SystemExit(f"{block['blockId']} has an inverted source range.")
-        recap_title = recap_titles.get(block["blockId"])
-        if not recap_title:
-            raise SystemExit(f"Could not find recap markdown heading for {block['blockId']}.")
         output_path = output_dir / f"{file_prefix}-{safe_slug(block['blockId'])}-transcript.md"
         relative_path = relative_markdown_path(output_path, recap_path.parent)
         source_relative_path = relative_markdown_path(transcript_path, output_path.parent)
@@ -296,7 +287,6 @@ def build_plan(
         plan.append(
             {
                 **block,
-                "title": recap_title,
                 "outputPath": output_path,
                 "relativePath": relative_path,
                 "sourceRelativePath": source_relative_path,
@@ -703,9 +693,9 @@ def validate_summary_file(summary_path: Path, plan: Sequence[Dict[str, Any]]) ->
         errors.append(f"Transcript highlights summary has duplicate ID: {highlight_id}")
     for item in plan:
         for entry in item["sourceEntries"]:
-            heading = f"### {entry['beatId']} | {entry['title']}"
-            if heading not in text:
-                errors.append(f"Transcript highlights summary is missing beat heading: {heading}")
+            heading = find_beat_heading(text, entry["beatId"])
+            if heading is None:
+                errors.append(f"Transcript highlights summary is missing beat heading for {entry['beatId']}.")
             elif not beat_section_has_id(text, heading):
                 errors.append(f"Transcript highlights summary beat section is missing a pull quote ID: {heading}")
     audio_text = section_after_heading(text, MONOLOGUES_HEADING)
@@ -728,6 +718,14 @@ def collect_highlight_ids(text: str) -> List[str]:
 def beat_section_has_id(text: str, heading: str) -> bool:
     section = section_after_heading(text, heading)
     return bool(collect_highlight_ids(section))
+
+
+def find_beat_heading(text: str, beat_id: str) -> Optional[str]:
+    pattern = re.compile(rf"^###\s+{re.escape(beat_id)}(?:\s+\|\s+.+)?$")
+    for raw in text.splitlines():
+        if pattern.match(raw.strip()):
+            return raw.strip()
+    return None
 
 
 def section_after_heading(text: str, heading: str) -> str:
