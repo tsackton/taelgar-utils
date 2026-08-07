@@ -158,20 +158,37 @@ The full highlights summary remains the complete record. The recap sections are 
 - Hide source UIDs in `%% ... %%` comments; do not leave `[uNNNN | ...]` source headers visible.
 - Speaker labels may be corrected only when the local context makes the original assignment obviously wrong.
 - Merge adjacent source lines into natural speaker turns.
-  Keep source comments tight: usually one contiguous same-speaker turn or short phrase group, not a whole scene.
-- Split long same-speaker stretches at natural sentence, action, or topic boundaries, with a separate source comment for each turn.
+  A turn is a complete readable speech unit, not a fixed number of source lines.
+  Keep source comments tight by rhetorical unit, sentence, action, or topic; do not split a visible turn in the middle of a phrase just because a source UID boundary falls there.
+- Split long same-speaker stretches at natural rhetorical, breath, sentence, action, or topic boundaries, with a separate source comment for each turn.
 - Do not omit, summarize, reorder, or add substantive content.
+- Treat the output as an edited transcript, not a prose adaptation.
+  Preserve the speaker's wording, tense, syntax, repetitions, rhetorical fragments, run-on cadence, and vocal texture unless they are clearly ASR errors or make the text hard to parse.
 - Polish more aggressively than `transcript-cleaner`:
   - fix grammar and punctuation
-  - normalize sentence boundaries and capitalization
+  - repair broken source-line boundaries and capitalization
   - remove obvious ASR filler and duplicated false starts when doing so preserves the speaker's meaning
   - correct additional ASR errors missed by the upstream cleaner
   - normalize known names and campaign terms using the same evidence standards as transcript cleanup
+- Do not substitute smoother, more literary, or more concise wording merely because it reads better.
+  Examples of over-polish: changing `got denser` to `grew denser`, `long, long since` to `long since`, `anyways` to `anyway`, or `He tells you` to `He told you` without a clear transcript reason.
 - Keep character voice and table phrasing where it carries meaning.
   Do not make every speaker sound formal.
+- Preserve performance texture where it carries meaning: rhetorical questions, hedges, repeated adjectives, self-corrections, trailing constructions, and deliberate run-on sentences.
 - Do not add narrative descriptions, scene summaries, or stage directions that are not in the transcript.
 - If a phrase remains suspicious but cannot be corrected with high confidence, mark only that phrase with `[[...]]`.
 - If any `[[...]]` markers remain, report them to the user with UID locations before treating the polished transcript as final.
+
+### Calibration Examples
+
+Prefer transcript-faithful cleanup over smoothed recap prose:
+
+- Bad: `Lord Holda: proud, bitter, resentful, over the hill...`
+- Good: `Lord Holda, who was, what? Proud? Bitter? Resentful? Over the hill?`
+- Bad: `in a place long since swallowed by woods`
+- Good: `in a place that was long, long since swallowed by woods`
+- Bad: `this self-described elven archivist`
+- Good: `this elf, who called himself an archivist`
 
 ## Quality Review
 
@@ -184,8 +201,11 @@ The review pass should look specifically for text that still reads like joined A
 - stray punctuation and capitalization artifacts
 - obvious duplicated false starts, such as `how comp... How complex`
 - fragments joined across source-line boundaries without sentence repair
-- long same-speaker turns that preserve raw transcript rhythm instead of readable turns
+- long turns with no readable paragraph, rhetorical, or topic boundaries
 - filler and repeated phrases that no longer carry table voice or meaning
+- over-polished turns that flatten spoken cadence into recap prose
+- unnecessary synonym substitutions, tense harmonization, removed repetitions, or collapsed rhetorical fragments
+- source comments that split a visible phrase across turns, such as ending one turn with `a...` and starting the next with `House`
 
 If the review returns `rework`, revise only the cited transcript blocks, then rerun structural validation and prose review.
 

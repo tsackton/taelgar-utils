@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prepare Session Source"
+  short_description: "Prepare Taelgar session source bundles"
+  default_prompt: "Use $prepare-session-source to prepare a Taelgar session recording transcript bundle for session-note-prep."
