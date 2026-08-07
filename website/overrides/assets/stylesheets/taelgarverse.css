@@ -37,6 +37,32 @@
   margin-bottom: 0.15rem;
 }
 
+/* Obsidian image callouts: keep the responsive inline layout without
+   Material's admonition frame or fallback title icon. */
+.md-typeset .admonition.image {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.md-typeset .admonition.image > .admonition-title {
+  display: none;
+}
+
+.md-typeset .admonition.image > p {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.md-typeset .admonition.image img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
 .md-typeset .taelgar-session-zoom {
   --taelgar-session-zoom-border: var(--md-default-fg-color--lightest);
   --taelgar-session-zoom-muted: var(--md-default-fg-color--light);

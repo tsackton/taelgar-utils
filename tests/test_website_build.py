@@ -66,6 +66,10 @@ class WebsiteBuildTests(unittest.TestCase):
                 "> [!quote]\n"
                 "> Quote body.\n\n"
                 "> [!image]\n"
+                "> ![[pic.png]]\n\n"
+                "> [!image|left]\n"
+                "> ![[pic.png]]\n\n"
+                "> [!image|right]\n"
                 "> ![[pic.png]]\n",
             )
             (site.source / "pic.png").write_bytes(b"fake image bytes")
@@ -76,6 +80,8 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertIn('!!! info "Custom title"', text)
             self.assertIn('!!! quote " "', text)
             self.assertIn('!!! image " "', text)
+            self.assertIn('!!! image inline " "', text)
+            self.assertIn('!!! image inline end " "', text)
             self.assertNotIn("[!quote]", text)
             self.assertNotIn("[!image]", text)
 
