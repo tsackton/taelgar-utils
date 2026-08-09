@@ -63,6 +63,13 @@
   max-width: 100%;
 }
 
+/* Material defaults admonition text to 80% of body copy. Keep prose-heavy
+   callouts at the surrounding reading size while retaining compact captions. */
+.md-typeset .admonition:not(.image),
+.md-typeset details:not(.image) {
+  font-size: 0.8rem;
+}
+
 .md-typeset .taelgar-session-zoom {
   --taelgar-session-zoom-border: var(--md-default-fg-color--lightest);
   --taelgar-session-zoom-muted: var(--md-default-fg-color--light);
