@@ -55,6 +55,9 @@
   "stub_files": "skip",
   "skip_future_dated": true,
   "always_include_assets": [],
+  "session_artifact_roots": [
+    "/Users/tim/Library/Mobile Documents/iCloud~md~obsidian/Documents/Taelgar/_sessions"
+  ],
   "manifest_path": ".website-build/export-manifest.json",
   "warning_report_path": ".website-build/export-warnings.md",
   "asset_report_path": ".website-build/asset-report.md",

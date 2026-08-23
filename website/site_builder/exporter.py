@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -12,13 +14,18 @@ from typing import Any
 import yaml
 
 from .asset_policy import TileBounds, tile_paths
-from .assets import copy_asset, copy_tree_contents, generate_map_tiles
+from .assets import AssetCopyResult, copy_asset, copy_tree_contents, generate_map_tiles
 from .config import WebsiteConfig
 from .link_index import LinkIndex
 from .manifest import Manifest
 from .nav import MkDocsNavigationGenerator
 from .notes import MarkdownNote, parse_markdown_note
 from .scanner import SourceEntry, note_tag_parts, scan_source
+from .session_zoom import (
+    SessionArtifactIndex,
+    is_zoomable_session_note,
+    render_zoomable_session_note,
+)
 from .transform import LinkIssue, NoteTransformer, TileRequest
 
 
@@ -65,6 +72,7 @@ class ExportStats:
     nav_warnings: list[str] = field(default_factory=list)
     content_warnings: list[ContentWarning] = field(default_factory=list)
     asset_warnings: list["AssetWarning"] = field(default_factory=list)
+    zoomable_pages: list[Path] = field(default_factory=list)
 
 
 @dataclass
@@ -103,26 +111,34 @@ def export_site(config: WebsiteConfig) -> ExportStats:
 
     manifest = Manifest.load(config.manifest_path)
     previous_manifest = {} if config.clean_docs else manifest.files
+    print(f"Manifest: {config.manifest_path}")
     scan = scan_source(config)
     stats.scanned_files = scan.scanned_files
     stats.skipped_source_files = scan.skipped_files
     print(f"Scan: {stats.scanned_files} file(s), {stats.skipped_source_files} skipped")
 
+    markdown_entries = [item for item in scan.entries if item.is_markdown]
+    asset_entry_list = [item for item in scan.entries if item.is_asset]
+    print(f"Index: {len(markdown_entries)} markdown note(s), {len(asset_entry_list)} asset(s)")
     index = LinkIndex(scan.entries)
     index_digest = index.digest()
     config_digest = digest(config.digest_payload())
     transformer = NoteTransformer(config, index)
+    session_artifacts = SessionArtifactIndex(config.session_artifact_roots)
     new_manifest: dict[str, dict[str, Any]] = {}
     generated: set[str] = set()
     linked_asset_ids: set[str] = set()
     tile_requests: dict[str, TileRequest] = {}
 
-    for entry in [item for item in scan.entries if item.is_markdown]:
+    print(f"Notes: transforming {len(markdown_entries)} markdown note(s)")
+    note_progress_interval = progress_interval_for(len(markdown_entries))
+    for note_number, entry in enumerate(markdown_entries, start=1):
         previous = previous_manifest.get(entry.id)
         target_path = config.docs_dir / entry.target_path
+        zoomable_session = is_zoomable_session_note(entry.note)
         if entry.note:
             stats.content_warnings.extend(scan_content_warnings(entry.note.clean_text, entry.relative_path.as_posix()))
-        if can_skip_entry(previous, entry, target_path, config_digest, index_digest):
+        if not zoomable_session and can_skip_entry(previous, entry, target_path, config_digest, index_digest):
             stats.skipped_notes += 1
             generated.add(entry.target_path.as_posix())
             linked_asset_ids.update(previous.get("linked_assets", []))
@@ -131,6 +147,8 @@ def export_site(config: WebsiteConfig) -> ExportStats:
                 if isinstance(bounds, list):
                     tile_requests[asset_id] = TileRequest(bounds=tile_bounds_from_manifest(bounds))
             new_manifest[entry.id] = previous
+            if should_print_progress(note_number, len(markdown_entries), note_progress_interval):
+                print(f"Notes: processed {note_number}/{len(markdown_entries)}")
             continue
 
         result = transformer.transform_entry(entry)
@@ -138,6 +156,40 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         stats.ambiguous_links.extend(result.ambiguous_links)
         linked_asset_ids.update(result.linked_assets)
         tile_requests.update(result.tile_assets)
+        if zoomable_session and entry.note is not None:
+            zoom_result = render_zoomable_session_note(
+                note=entry.note,
+                transformed_text=result.text,
+                page_path=entry.target_path,
+                config=config,
+                index=index,
+                artifact_index=session_artifacts,
+            )
+            if zoom_result.warning:
+                stats.content_warnings.append(
+                    ContentWarning(
+                        source=entry.relative_path.as_posix(),
+                        line=1,
+                        kind="zoomable session view",
+                        excerpt=zoom_result.warning,
+                    )
+                )
+            else:
+                result.text = zoom_result.text
+                linked_asset_ids.update(zoom_result.linked_asset_ids)
+                for warning in zoom_result.warnings:
+                    stats.content_warnings.append(
+                        ContentWarning(
+                            source=entry.relative_path.as_posix(),
+                            line=1,
+                            kind="zoomable session view",
+                            excerpt=warning,
+                        )
+                    )
+                stats.zoomable_pages.append(entry.target_path)
+                if zoom_result.transcript_asset_path is not None and zoom_result.transcript_json is not None:
+                    write_text_if_changed(config.docs_dir / zoom_result.transcript_asset_path, zoom_result.transcript_json)
+                    generated.add(zoom_result.transcript_asset_path.as_posix())
         output = render_note(entry.note, result.text, config)
         if write_text_if_changed(target_path, output):
             stats.exported_notes += 1
@@ -145,8 +197,13 @@ def export_site(config: WebsiteConfig) -> ExportStats:
             stats.skipped_notes += 1
         generated.add(entry.target_path.as_posix())
         new_manifest[entry.id] = manifest_record(entry, config_digest, index_digest, result.linked_assets, result.tile_assets)
+        if should_print_progress(note_number, len(markdown_entries), note_progress_interval):
+            print(f"Notes: processed {note_number}/{len(markdown_entries)}")
+
+    print(f"Notes: processed {len(markdown_entries)} markdown note(s)")
 
     if config.home_source:
+        print(f"Home: transforming {config.home_source} -> {config.home_dest}")
         home_note = parse_markdown_note(config.home_source, config)
         stats.content_warnings.extend(scan_content_warnings(home_note.clean_text, config.home_source.as_posix()))
         home_result = transformer.transform_note(home_note, config.home_dest, config.home_source.as_posix())
@@ -162,13 +219,15 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         generated.add(config.home_dest.as_posix())
 
     if config.nav_source:
+        print(f"Navigation: generating {config.nav_dest} from {config.nav_source}")
         nav_result = MkDocsNavigationGenerator(config.nav_source, scan.entries, config).process_template()
         stats.nav_warnings.extend(nav_result.warnings)
         write_text_if_changed(config.docs_dir / config.nav_dest, render_nav_file(nav_result.lines))
         generated.add(config.nav_dest.as_posix())
 
     linked_asset_ids.update(resolve_always_include_assets(config, index))
-    asset_entries = {entry.id: entry for entry in scan.entries if entry.is_asset}
+    asset_entries = {entry.id: entry for entry in asset_entry_list}
+    print(f"Assets: resolving {len(linked_asset_ids)} linked/always-include asset(s), {len(tile_requests)} tile request(s)")
     for asset_id, request in sorted(tile_requests.items()):
         entry = asset_entries.get(asset_id)
         if entry is None:
@@ -187,7 +246,11 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         stats.tiled_maps += 1
         stats.map_tiles_written += tile_result.tiles_written
         new_manifest[manifest_id] = tile_record(entry, config_digest, bounds, tile_rel_paths)
+    if tile_requests:
+        print(f"Tiles: processed {stats.tiled_maps} map(s), wrote {stats.map_tiles_written} tile(s)")
 
+    asset_jobs: list[AssetCopyJob] = []
+    unchanged_assets = 0
     for asset_id in sorted(linked_asset_ids):
         entry = asset_entries.get(asset_id)
         if entry is None:
@@ -195,10 +258,21 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         target_path = config.docs_dir / entry.target_path
         previous = previous_manifest.get(entry.id)
         if can_skip_asset(previous, entry, target_path, config_digest):
+            unchanged_assets += 1
             generated.add(entry.target_path.as_posix())
             new_manifest[entry.id] = previous
             continue
-        result = copy_asset(entry, target_path, config)
+        asset_jobs.append(AssetCopyJob(entry, target_path))
+
+    asset_workers = asset_worker_count(len(asset_jobs))
+    if asset_jobs and asset_workers > 1:
+        print(f"Assets: processing {len(asset_jobs)} file(s) with {asset_workers} worker(s)")
+    elif asset_jobs:
+        print(f"Assets: processing {len(asset_jobs)} file(s)")
+    else:
+        print(f"Assets: no linked asset copies needed ({unchanged_assets} unchanged)")
+    for job, result in copy_assets(asset_jobs, config, asset_workers):
+        entry = job.entry
         stats.copied_assets += 1
         stats.resized_assets += 1 if result.resized else 0
         stats.optimized_assets += 1 if result.optimized else 0
@@ -206,6 +280,7 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         new_manifest[entry.id] = asset_record(entry, config_digest)
 
     stats.deleted_stale_outputs = delete_stale_outputs(config.docs_dir, manifest.generated, generated)
+    print(f"Reports: writing manifest, warning report, and asset report")
     manifest.save(new_manifest, generated)
     write_warning_report(config.warning_report_path, stats.content_warnings)
     stats.asset_warnings = write_asset_report(config.asset_report_path, scan.entries, linked_asset_ids, tile_requests, config)
@@ -489,6 +564,41 @@ def resolve_always_include_assets(config: WebsiteConfig, index: LinkIndex) -> se
             if entry.is_asset and entry.relative_path.match(pattern):
                 asset_ids.add(entry.id)
     return asset_ids
+
+
+@dataclass(frozen=True)
+class AssetCopyJob:
+    entry: SourceEntry
+    target_path: Path
+
+
+def copy_assets(
+    jobs: list[AssetCopyJob], config: WebsiteConfig, workers: int
+) -> list[tuple[AssetCopyJob, AssetCopyResult]]:
+    if not jobs:
+        return []
+    if workers <= 1:
+        return [(job, copy_asset(job.entry, job.target_path, config)) for job in jobs]
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(lambda job: (job, copy_asset(job.entry, job.target_path, config)), jobs))
+
+
+def asset_worker_count(job_count: int) -> int:
+    if job_count <= 1:
+        return 1
+    process_cpu_count = getattr(os, "process_cpu_count", None)
+    cpu_count = process_cpu_count() if process_cpu_count is not None else os.cpu_count()
+    return max(1, min(job_count, cpu_count or 1))
+
+
+def progress_interval_for(total: int) -> int:
+    if total < 500:
+        return 0
+    return max(250, total // 10)
+
+
+def should_print_progress(current: int, total: int, interval: int) -> bool:
+    return bool(interval and current < total and current % interval == 0)
 
 
 def delete_stale_outputs(docs_dir: Path, previous: set[str], current: set[str]) -> int:

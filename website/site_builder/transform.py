@@ -21,7 +21,7 @@ from .asset_policy import (
     tile_native_max_zoom,
 )
 from .link_index import LinkIndex
-from .notes import ASSET_SUFFIXES, IMAGE_SUFFIXES, WIKILINK_RE, MarkdownNote, title_case
+from .notes import ASSET_SUFFIXES, AUDIO_SUFFIXES, IMAGE_SUFFIXES, WIKILINK_RE, MarkdownNote, title_case
 from .scanner import SourceEntry
 
 
@@ -52,6 +52,27 @@ class TileRequest:
     bounds: object
 
 
+CALLOUT_BLOCK_RE = re.compile(r'^ ?(?P<markers>>+) *\[!(?P<type>[^\]]*)\](?P<fold>[-+]?)(?P<title>.*)?$')
+CALLOUT_CONTENT_RE = re.compile(r"^ ?(?P<markers>>+) ?")
+CALLOUT_ALIASES = {
+    "summary": "abstract",
+    "tldr": "abstract",
+    "hint": "tip",
+    "important": "tip",
+    "check": "success",
+    "done": "success",
+    "help": "question",
+    "faq": "question",
+    "caution": "warning",
+    "attention": "warning",
+    "fail": "failure",
+    "missing": "failure",
+    "error": "danger",
+    "cite": "quote",
+}
+AUDIO_SUFFIX_PATTERN = "|".join(re.escape(suffix.lstrip(".")) for suffix in sorted(AUDIO_SUFFIXES))
+
+
 class NoteTransformer:
     def __init__(self, config: Any, index: LinkIndex) -> None:
         self.config = config
@@ -71,6 +92,7 @@ class NoteTransformer:
         result.text = re.sub(WIKILINK_RE, lambda match: self._replace_wikilink(match, page_path, source_label, result), result.text)
         result.text = self._replace_markdown_audio_links(result.text, source_label, result)
         result.text = self._rewrite_and_collect_direct_asset_links(result.text, source_label, result)
+        result.text = convert_obsidian_callouts(result.text)
         result.text = normalize_loose_lists(result.text)
         return result
 
@@ -121,7 +143,7 @@ class NoteTransformer:
 
     def _replace_audio_tags(self, text: str, source_label: str, result: TransformResult) -> str:
         def replace(match: re.Match[str]) -> str:
-            file_name = match.group(1)
+            file_name = match.group("target")
             resolution = self.index.resolve(file_name)
             if resolution.status == "found" and resolution.entry:
                 result.linked_assets.add(resolution.entry.id)
@@ -132,10 +154,18 @@ class NoteTransformer:
                 result.unresolved_links.append(LinkIssue(source_label, file_name, "Missing audio link"))
             return match.group(0)
 
-        return re.sub(r"!\[\[(.*?\.mp3)\]\]", replace, text)
+        return re.sub(
+            rf"!\[\[(?P<target>[^\]]+\.(?:{AUDIO_SUFFIX_PATTERN}))\]\]",
+            replace,
+            text,
+            flags=re.IGNORECASE,
+        )
 
     def _replace_markdown_audio_links(self, text: str, source_label: str, result: TransformResult) -> str:
-        pattern = re.compile(r"!\[[^\]]*\]\(\s*<?(?P<target>[^<>)\s]+\.mp3)>?\s*\)", re.IGNORECASE)
+        pattern = re.compile(
+            rf"!\[[^\]]*\]\(\s*<?(?P<target>[^<>)\s]+\.(?:{AUDIO_SUFFIX_PATTERN}))>?\s*\)",
+            re.IGNORECASE,
+        )
 
         def replace(match: re.Match[str]) -> str:
             raw_target = match.group("target")
@@ -152,7 +182,11 @@ class NoteTransformer:
         return pattern.sub(replace, text)
 
     def _audio_html(self, target_path: Path) -> str:
-        return f'<audio controls>\n    <source src="{self.absolute_url(target_path)}" type="audio/mpeg">\n</audio>'
+        return (
+            "<audio controls>\n"
+            f'    <source src="{self.absolute_url(target_path)}" type="{audio_mime_type(target_path)}">\n'
+            "</audio>"
+        )
 
     def _replace_wikilink(
         self,
@@ -183,7 +217,7 @@ class NoteTransformer:
             return alias or filename
 
         target = resolution.entry
-        rel_link_url = relative_url(page_path, target.target_path)
+        rel_link_url = self.absolute_url(target.target_path) if target.is_asset else relative_url(page_path, target.target_path)
         if title:
             rel_link_url += "#" + gfm_anchor(title)
 
@@ -227,8 +261,7 @@ class NoteTransformer:
             resolution = self.index.resolve(clean_target)
             if resolution.status == "found" and resolution.entry:
                 result.linked_assets.add(resolution.entry.id)
-                if raw_target.startswith("/"):
-                    return f"{match.group('prefix')}{self.absolute_url(resolution.entry.target_path)}{match.group('suffix')}"
+                return f"{match.group('prefix')}{self.absolute_url(resolution.entry.target_path)}{match.group('suffix')}"
             elif resolution.status == "ambiguous":
                 result.ambiguous_links.append(LinkIssue(source_label, raw_target, "Ambiguous direct asset link"))
             else:
@@ -366,6 +399,67 @@ def relative_url(from_path: Path, to_path: Path) -> str:
 
 def markdown_link(label: str, url: str) -> str:
     return f"[{label}](<{url}>)"
+
+
+def convert_obsidian_callouts(text: str) -> str:
+    if "> [!" not in text and ">[!" not in text:
+        return text
+
+    lines: list[str] = []
+    active_callout = False
+    for line in text.split("\n"):
+        block_match = CALLOUT_BLOCK_RE.search(line)
+        if block_match:
+            active_callout = True
+            lines.append(render_material_callout_opening(block_match))
+            continue
+        content_match = CALLOUT_CONTENT_RE.search(line)
+        if active_callout and content_match:
+            indent = "\t" * content_match.group("markers").count(">")
+            lines.append(CALLOUT_CONTENT_RE.sub(indent, line, count=1))
+            continue
+        active_callout = False
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def render_material_callout_opening(match: re.Match[str]) -> str:
+    indent = "\t" * (match.group("markers").count(">") - 1)
+    callout_type = normalize_callout_type(match.group("type"))
+    syntax = {"-": "???", "+": "???+"}.get(match.group("fold"), "!!!")
+    title = (match.group("title") or "").strip()
+    if title:
+        return f'{indent}{syntax} {callout_type} "{escape_admonition_title(title)}"'
+    return f'{indent}{syntax} {callout_type} " "'
+
+
+def normalize_callout_type(value: str) -> str:
+    callout_type = value.lower()
+    callout_type = re.sub(r" *\| *(inline|left) *$", " inline", callout_type)
+    callout_type = re.sub(r" *\| *(inline end|right) *$", " inline end", callout_type)
+    callout_type = re.sub(r" *\|.*", "", callout_type)
+    first, separator, rest = callout_type.partition(" ")
+    first = CALLOUT_ALIASES.get(first, first)
+    return first + (separator + rest if separator else "")
+
+
+def escape_admonition_title(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def audio_mime_type(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".mp3":
+        return "audio/mpeg"
+    if suffix == ".m4a":
+        return "audio/mp4"
+    if suffix == ".wav":
+        return "audio/wav"
+    if suffix == ".flac":
+        return "audio/flac"
+    if suffix == ".ogg":
+        return "audio/ogg"
+    return "audio/mpeg"
 
 
 LIST_MARKER_RE = re.compile(r"^(?P<indent>[ \t]{0,3})(?:[-+*]|\d+[.)])\s+\S")

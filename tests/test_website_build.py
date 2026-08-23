@@ -1,9 +1,10 @@
 import json
 import html
+import io
 import re
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 import sys
 
@@ -20,6 +21,7 @@ from website.site_builder.exporter import export_site
 from website.site_builder.link_index import LinkIndex
 from website.site_builder.nav import MkDocsNavigationGenerator
 from website.site_builder.scanner import scan_source
+from website.site_builder.session_zoom import TRANSCRIPT_COLLAPSE_LIMIT, SourceLine, collapse_transcript_lines
 
 
 class WebsiteBuildTests(unittest.TestCase):
@@ -54,19 +56,51 @@ class WebsiteBuildTests(unittest.TestCase):
             text = (site.docs / "a.md").read_text(encoding="utf-8")
             self.assertIn("[bee](<b.md>)", text)
 
+    def test_callouts_without_titles_hide_material_default_title(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Callouts.md",
+                "---\nname: Callouts\n---\n"
+                ">[!info] Custom title\n"
+                "> Body.\n\n"
+                "> [!quote]\n"
+                "> Quote body.\n\n"
+                "> [!image]\n"
+                "> ![[pic.png]]\n\n"
+                "> [!image|left]\n"
+                "> ![[pic.png]]\n\n"
+                "> [!image|right]\n"
+                "> ![[pic.png]]\n",
+            )
+            (site.source / "pic.png").write_bytes(b"fake image bytes")
+
+            export_site(site.config)
+            text = (site.docs / "callouts.md").read_text(encoding="utf-8")
+
+            self.assertIn('!!! info "Custom title"', text)
+            self.assertIn('!!! quote " "', text)
+            self.assertIn('!!! image " "', text)
+            self.assertIn('!!! image inline " "', text)
+            self.assertIn('!!! image inline end " "', text)
+            self.assertNotIn("[!quote]", text)
+            self.assertNotIn("[!image]", text)
+
     def test_asset_selection_and_stale_cleanup(self) -> None:
         with fixture_site() as site:
-            write_note(site.source / "A.md", "---\nname: A\n---\n![[pic.png]]\n![Audio](/assets/audio/song.mp3)\n")
+            write_note(site.source / "A.md", "---\nname: A\n---\n![[pic.png]]\n![Audio](/assets/audio/song.mp3)\n![[assets/audio/clip.m4a]]\n")
             (site.source / "pic.png").write_bytes(b"fake image bytes")
             (site.source / "assets" / "audio").mkdir(parents=True)
             (site.source / "assets" / "audio" / "song.mp3").write_bytes(b"audio")
+            (site.source / "assets" / "audio" / "clip.m4a").write_bytes(b"m4a")
             (site.source / "unused.png").write_bytes(b"unused")
             export_site(site.config)
             self.assertTrue((site.docs / "pic.png").exists())
             self.assertTrue((site.docs / "assets" / "audio" / "song.mp3").exists())
+            self.assertTrue((site.docs / "assets" / "audio" / "clip.m4a").exists())
             text = (site.docs / "a.md").read_text(encoding="utf-8")
             self.assertIn("<audio controls>", text)
             self.assertIn('<source src="/assets/audio/song.mp3" type="audio/mpeg">', text)
+            self.assertIn('<source src="/assets/audio/clip.m4a" type="audio/mp4">', text)
             self.assertNotIn("![Audio]", text)
             self.assertFalse((site.docs / "unused.png").exists())
 
@@ -156,6 +190,22 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertIn("TODO marker", text)
             self.assertNotIn("(XXX)", text)
 
+    def test_export_prints_phase_status_updates(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "A.md", "---\nname: A\n---\nbody\n")
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                export_site(site.config)
+            text = output.getvalue()
+
+            self.assertIn("Manifest:", text)
+            self.assertIn("Index: 1 markdown note(s), 0 asset(s)", text)
+            self.assertIn("Notes: transforming 1 markdown note(s)", text)
+            self.assertIn("Notes: processed 1 markdown note(s)", text)
+            self.assertIn("Assets: resolving 0 linked/always-include asset(s), 0 tile request(s)", text)
+            self.assertIn("Reports: writing manifest, warning report, and asset report", text)
+
     def test_ignore_file_omits_metadata_files(self) -> None:
         with fixture_site() as site:
             (site.source / "Thumbs.db").write_bytes(b"metadata")
@@ -193,6 +243,154 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertIn("search:", text)
             self.assertIn("exclude: true", text)
 
+    def test_config_accepts_session_artifact_roots(self) -> None:
+        with fixture_site() as site:
+            update_config(site.config_path, {"session_artifact_roots": ["sessions"]})
+            config = load_config(site.config_path)
+
+            self.assertEqual(config.session_artifact_roots, ((site.root / "sessions").resolve(),))
+
+    def test_zoomable_session_replaces_narrative_and_writes_lazy_transcript(self) -> None:
+        with fixture_site() as site:
+            write_note(site.source / "Alden.md", "---\nname: Alden\n---\ncontact\n")
+            write_note(site.source / "Glass Key.md", "---\nname: Glass Key\n---\nitem\n")
+            write_note(
+                site.source / "Zoom.md",
+                "---\n"
+                "name: Zoom\n"
+                "sessionKey: test-campaign-session-7\n"
+                "websiteSessionView: zoomable\n"
+                "---\n"
+                "# Zoom\n\n"
+                "## Narrative\n\n"
+                "The long narrative links [[Alden]] and the [[Glass Key|key]].\n\n"
+                "## Cast\n\n"
+                "- Alden\n\n"
+                "## Narrative\n\n"
+                "A later duplicate heading remains untouched.\n",
+            )
+            (site.source / "opening-door.png").write_bytes(b"opening image")
+            (site.source / "closing-door.png").write_bytes(b"closing image")
+            write_zoom_session_artifacts(site.root / "sessions")
+            update_config(site.config_path, {"session_artifact_roots": ["sessions"]})
+            config = load_config(site.config_path)
+
+            export_site(config)
+            text = (site.docs / "zoom.md").read_text(encoding="utf-8")
+            transcript_path = site.docs / "assets" / "session-zoom" / "test-campaign-session-7.json"
+            transcript = json.loads(transcript_path.read_text(encoding="utf-8"))
+
+            self.assertIn("taelgar-session-zoom", text)
+            self.assertIn("### Opening the Door", text)
+            self.assertNotIn("B01", text)
+            self.assertNotIn("taelgar-session-zoom__nav", text)
+            self.assertNotIn("taelgar-session-zoom__beat-id", text)
+            self.assertNotIn("taelgar-session-zoom__cycle", text)
+            self.assertNotIn("Next: Intermediate", text)
+            self.assertIn('<a href="/alden/">Alden</a>', text)
+            self.assertIn('<a href="/glass-key/">key</a>', text)
+            self.assertIn("taelgar-session-zoom__image--right", text)
+            self.assertIn("taelgar-session-zoom__image--left", text)
+            self.assertIn('style="width: 400px; max-width: 100%;"', text)
+            self.assertIn('<img src="/opening-door.png" alt="Alden turns the key" width="400">', text)
+            self.assertIn(
+                '<figcaption><a href="/alden/">Alden</a> turns the <a href="/glass-key/">key</a></figcaption>',
+                text,
+            )
+            self.assertIn('<img src="/closing-door.png" alt="Mira waits with Alden" width="240">', text)
+            self.assertIn('<figcaption>Mira waits with <a href="/alden/">Alden</a></figcaption>', text)
+            self.assertIn('<p><a href="/alden/">Alden</a> turns the <a href="/glass-key/">key</a>.</p>', text)
+            self.assertIn('<p><a href="/alden/">Alden</a> turns the <a href="/glass-key/">key</a> while Mira waits.</p>', text)
+            self.assertEqual(text.count('<img src="/opening-door.png"'), 1)
+            self.assertEqual(text.count('<img src="/closing-door.png"'), 1)
+            self.assertIn("turns the", text)
+            self.assertNotIn("DM first line", text)
+            self.assertNotIn("The long narrative links", text)
+            self.assertIn("A later duplicate heading remains untouched.", text)
+            self.assertTrue(transcript_path.exists())
+            self.assertTrue((site.docs / "opening-door.png").exists())
+            self.assertTrue((site.docs / "closing-door.png").exists())
+            self.assertLess(
+                text.index('<figure class="taelgar-session-zoom__image taelgar-session-zoom__image--right"'),
+                text.index('<p><a href="/alden/">Alden</a> turns the <a href="/glass-key/">key</a> and opens the door while Mira waits.</p>'),
+            )
+            mira_paragraph = text.index('<p>Mira steps through the doorway while <a href="/alden/">Alden</a> watches from the hall.</p>')
+            self.assertGreater(
+                text.index('<figure class="taelgar-session-zoom__image taelgar-session-zoom__image--left"', mira_paragraph),
+                mira_paragraph,
+            )
+            self.assertEqual(
+                transcript["blocks"][0]["lines"],
+                [
+                    {"speaker": "DM", "text": "Polished opening."},
+                    {"speaker": "Mira", "text": "Polished reply."},
+                ],
+            )
+            self.assertEqual(
+                transcript["blocks"][1]["lines"],
+                [
+                    {"speaker": "Mira", "text": "Mira crosses."},
+                    {"speaker": "DM", "text": "Alden watches."},
+                ],
+            )
+            self.assertNotIn("u0001", transcript_path.read_text(encoding="utf-8"))
+            self.assertNotIn("This comment block", transcript_path.read_text(encoding="utf-8"))
+
+            write_note(
+                site.source / "Zoom.md",
+                "---\n"
+                "name: Zoom\n"
+                "sessionKey: test-campaign-session-7\n"
+                "---\n"
+                "# Zoom\n\n"
+                "## Narrative\n\n"
+                "The long narrative links [[Alden]] and the [[Glass Key|key]].\n",
+            )
+            export_site(config)
+
+            self.assertFalse(transcript_path.exists())
+
+    def test_zoomable_transcript_collapse_respects_cap(self) -> None:
+        collapsed = collapse_transcript_lines(
+            [
+                SourceLine("u0001", "DM", "a" * (TRANSCRIPT_COLLAPSE_LIMIT - 2)),
+                SourceLine("u0002", "DM", "b"),
+            ]
+        )
+        split = collapse_transcript_lines(
+            [
+                SourceLine("u0001", "DM", "a" * TRANSCRIPT_COLLAPSE_LIMIT),
+                SourceLine("u0002", "DM", "b"),
+            ]
+        )
+
+        self.assertEqual(len(collapsed), 1)
+        self.assertEqual(len(collapsed[0]["text"]), TRANSCRIPT_COLLAPSE_LIMIT)
+        self.assertEqual(len(split), 2)
+
+    def test_zoomable_session_missing_artifacts_preserves_original_narrative(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Zoom.md",
+                "---\n"
+                "name: Zoom\n"
+                "sessionKey: missing-session-key\n"
+                "websiteSessionView: zoomable\n"
+                "---\n"
+                "# Zoom\n\n"
+                "## Narrative\n\n"
+                "Keep this narrative.\n",
+            )
+            update_config(site.config_path, {"session_artifact_roots": ["sessions"]})
+            config = load_config(site.config_path)
+
+            stats = export_site(config)
+            text = (site.docs / "zoom.md").read_text(encoding="utf-8")
+
+            self.assertIn("Keep this narrative.", text)
+            self.assertNotIn("taelgar-session-zoom", text)
+            self.assertTrue(any(warning.kind == "zoomable session view" for warning in stats.content_warnings))
+
     def test_asset_report_lists_linked_and_unlinked_assets(self) -> None:
         with fixture_site() as site:
             write_note(site.source / "A.md", "---\nname: A\n---\n![[linked.png]]\n")
@@ -220,7 +418,7 @@ class WebsiteBuildTests(unittest.TestCase):
             export_site(config)
             text = (site.docs / "a.md").read_text(encoding="utf-8")
 
-            self.assertIn("](portrait.webp)", text)
+            self.assertIn("](/portrait.webp)", text)
             self.assertTrue((site.docs / "portrait.webp").exists())
             self.assertFalse((site.docs / "portrait.png").exists())
 
@@ -525,6 +723,89 @@ def update_config(path: Path, updates: dict) -> None:
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload.update(updates)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def write_zoom_session_artifacts(root: Path) -> None:
+    cleaned = root / "test-campaign-007" / "cleaned"
+    cleaned.mkdir(parents=True)
+    (cleaned / "test-campaign-007-session.yaml").write_text(
+        "campaign: Test Campaign\n"
+        "scope: session\n"
+        "sessionNumber: 7\n",
+        encoding="utf-8",
+    )
+    (cleaned / "test-campaign-007-beats.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": "1.0",
+                "sourceTranscriptPath": str(cleaned / "test-campaign-007-source-cleaned.md"),
+                "sessionPath": str(cleaned / "test-campaign-007-session.yaml"),
+                "beats": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (cleaned / "test-campaign-007-session-recap.md").write_text(
+        "# Session Recap\n\n"
+        "## Recap\n\n"
+        "### recap-001 | Opening the Door\n\n"
+        "- Kind: beat\n"
+        "- Beat IDs: beat-001\n"
+        "- Source Range: u0001 -> u0004\n"
+        "- Polished Transcript: beat-transcripts/test-campaign-007-recap-001-transcript.md\n"
+        "- Image: opening-door.png\n"
+        "- Image Placement: start\n"
+        "- Image Render: right|400\n"
+        "- Image Caption: Alden turns the [[Glass Key|key]]\n\n"
+        "#### Short\n"
+        "Alden turns the key.\n\n"
+        "#### Intermediate\n"
+        "Alden turns the key while Mira waits.\n\n"
+        "#### Long\n"
+        "Alden turns the key and opens the door while Mira waits.\n\n"
+        "### recap-002 | Crossing the Threshold\n\n"
+        "- Kind: beat\n"
+        "- Beat IDs: beat-002\n"
+        "- Source Range: u0005 -> u0006\n"
+        "- Image: closing-door.png\n"
+        "- Image Placement: end\n"
+        "- Image Render: left|240\n"
+        "- Image Caption: Mira waits with [[Alden]]\n\n"
+        "#### Short\n"
+        "Mira steps through.\n\n"
+        "#### Intermediate\n"
+        "Mira steps through while Alden watches.\n\n"
+        "#### Long\n"
+        "Mira steps through the doorway while Alden watches from the hall.\n",
+        encoding="utf-8",
+    )
+    (cleaned / "test-campaign-007-source-cleaned.md").write_text(
+        "[u0001 | 00:00:00-00:00:01 | DM] DM first line.\n"
+        "[u0002 | 00:00:01-00:00:02 | DM] DM second line.\n"
+        "[u0003 | 00:00:02-00:00:03 | Mira] Mira replies.\n"
+        "[u0004 | 00:00:03-00:00:04 | Mira] Mira continues.\n"
+        "[u0005 | 00:00:04-00:00:05 | Mira] Mira crosses.\n"
+        "[u0006 | 00:00:05-00:00:06 | DM] Alden watches.\n",
+        encoding="utf-8",
+    )
+    transcript_dir = cleaned / "beat-transcripts"
+    transcript_dir.mkdir()
+    (transcript_dir / "test-campaign-007-recap-001-transcript.md").write_text(
+        "# recap-001 | Opening the Door\n\n"
+        "- Recap Block: recap-001\n"
+        "- Beat IDs: beat-001\n"
+        "- Source Range: u0001 -> u0004\n"
+        "- Source Transcript: ../test-campaign-007-source-cleaned.md\n\n"
+        "## Transcript\n\n"
+        "%% u0001-u0002 %%\n"
+        "DM: Polished opening.\n\n"
+        "%%\n"
+        "This comment block is not visible.\n"
+        "%%\n"
+        "%% u0003-u0004 %%\n"
+        "Mira: Polished reply.\n",
+        encoding="utf-8",
+    )
 
 
 def extract_leaflet_config(text: str) -> dict:

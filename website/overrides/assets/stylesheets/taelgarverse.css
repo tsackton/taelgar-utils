@@ -37,8 +37,214 @@
   margin-bottom: 0.15rem;
 }
 
-.md-sidebar--secondary:not(:has(.taelgar-secondary-nav)) {
+/* Obsidian image callouts: keep the responsive inline layout without
+   Material's admonition frame or fallback title icon. */
+.md-typeset .admonition.image {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.md-typeset .admonition.image > .admonition-title {
   display: none;
+}
+
+.md-typeset .admonition.image > p {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.md-typeset .admonition.image img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
+/* Material defaults admonition text to 80% of body copy. Keep prose-heavy
+   callouts at the surrounding reading size while retaining compact captions. */
+.md-typeset .admonition:not(.image),
+.md-typeset details:not(.image) {
+  font-size: 0.8rem;
+}
+
+.md-typeset .taelgar-session-zoom {
+  --taelgar-session-zoom-border: var(--md-default-fg-color--lightest);
+  --taelgar-session-zoom-muted: var(--md-default-fg-color--light);
+  background: var(--md-default-bg-color);
+  border-bottom: 1px solid var(--taelgar-session-zoom-border);
+  margin: 1rem 0 0.75rem;
+  padding: 0.35rem 0 0.5rem;
+  position: sticky;
+  top: 4.9rem;
+  z-index: 5;
+}
+
+.md-typeset .taelgar-session-zoom__controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.md-typeset .taelgar-session-zoom__button-group {
+  border: 1px solid var(--taelgar-session-zoom-border);
+  border-radius: 0.3rem;
+  display: inline-flex;
+  overflow: hidden;
+}
+
+.md-typeset .taelgar-session-zoom button {
+  background: var(--md-default-bg-color);
+  border: 0;
+  color: var(--md-default-fg-color);
+  cursor: pointer;
+  font: inherit;
+  margin: 0;
+  min-height: 2rem;
+  padding: 0.3rem 0.65rem;
+}
+
+.md-typeset .taelgar-session-zoom__button-group button + button {
+  border-left: 1px solid var(--taelgar-session-zoom-border);
+}
+
+.md-typeset .taelgar-session-zoom button[aria-pressed="true"] {
+  background: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+.md-typeset .taelgar-session-zoom__beat {
+  border-top: 1px solid var(--taelgar-session-zoom-border);
+  padding: 0.35rem 0 1rem;
+  scroll-margin-top: 4rem;
+}
+
+.md-typeset .taelgar-session-zoom__beat[data-zoom="short"] {
+  border-top: 0;
+  padding: 0.15rem 0;
+}
+
+.md-typeset .taelgar-session-zoom__scene-heading {
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 1.1rem 0 0.2rem;
+  scroll-margin-top: 5rem;
+}
+
+.md-typeset .taelgar-session-zoom__scene-heading[data-zoom="short"] {
+  display: none;
+}
+
+.md-typeset .taelgar-session-zoom__level p {
+  margin-bottom: 0.7rem;
+  margin-top: 0;
+}
+
+.md-typeset .taelgar-session-zoom__level::after {
+  clear: both;
+  content: "";
+  display: block;
+}
+
+.md-typeset .taelgar-session-zoom__image {
+  margin: 0.1rem auto 0.85rem;
+  max-width: min(100%, 42rem);
+}
+
+.md-typeset .taelgar-session-zoom__image img {
+  border-radius: 0.15rem;
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.md-typeset .taelgar-session-zoom__image figcaption {
+  color: var(--taelgar-session-zoom-muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  margin-top: 0.25rem;
+  text-align: center;
+}
+
+.md-typeset .taelgar-session-zoom__image--left {
+  float: left;
+  margin: 0.15rem 1rem 0.55rem 0;
+}
+
+.md-typeset .taelgar-session-zoom__image--right {
+  float: right;
+  margin: 0.15rem 0 0.55rem 1rem;
+}
+
+.md-typeset .taelgar-session-zoom__beat[data-zoom="short"] .taelgar-session-zoom__level:not([data-zoom-level="short"]),
+.md-typeset .taelgar-session-zoom__beat[data-zoom="intermediate"] .taelgar-session-zoom__level:not([data-zoom-level="intermediate"]),
+.md-typeset .taelgar-session-zoom__beat[data-zoom="long"] .taelgar-session-zoom__level:not([data-zoom-level="long"]),
+.md-typeset .taelgar-session-zoom__beat[data-zoom="transcript"] .taelgar-session-zoom__level:not([data-zoom-level="transcript"]) {
+  display: none;
+}
+
+.md-typeset .taelgar-session-zoom__transcript-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.md-typeset .taelgar-session-zoom__transcript-line {
+  border-bottom: 1px solid var(--taelgar-session-zoom-border);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(6rem, 9rem) 1fr;
+  margin: 0;
+  padding: 0.35rem 0;
+}
+
+.md-typeset .taelgar-session-zoom__speaker {
+  color: var(--md-accent-fg-color);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.md-typeset .taelgar-session-zoom__line-text {
+  min-width: 0;
+}
+
+.md-typeset .taelgar-session-zoom__loading {
+  color: var(--taelgar-session-zoom-muted);
+  font-style: italic;
+}
+
+@media screen and (max-width: 44.984375em) {
+  .md-typeset .taelgar-session-zoom {
+    position: static;
+    top: auto;
+    z-index: auto;
+  }
+
+  .md-typeset .taelgar-session-zoom__controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .md-typeset .taelgar-session-zoom__button-group {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .md-typeset .taelgar-session-zoom__image--left,
+  .md-typeset .taelgar-session-zoom__image--right {
+    float: none;
+    margin: 0.1rem auto 0.85rem;
+  }
+
+  .md-typeset .taelgar-session-zoom__transcript-line {
+    gap: 0.1rem;
+    grid-template-columns: 1fr;
+  }
 }
 
 @media screen and (min-width: 76.25em) {
@@ -58,6 +264,14 @@
   max-height: 48vh;
   overflow-y: auto;
   padding-right: 0.15rem;
+}
+
+.taelgar-backlinks__title {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.64rem;
+  font-weight: 700;
+  margin: 1em 0 0.25rem;
+  padding: 0 0.6rem;
 }
 
 .taelgar-backlinks__more {

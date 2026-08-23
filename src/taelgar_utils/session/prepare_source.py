@@ -41,6 +41,17 @@ TRANSCRIPT_FORMAT_CHOICES = [
     TRANSCRIPT_FORMAT_LINES,
     TRANSCRIPT_FORMAT_VTT,
 ]
+SOURCE_AUDIO_EXTENSIONS = [
+    ".m4a",
+    ".mp3",
+    ".wav",
+    ".aac",
+    ".flac",
+    ".mp4",
+    ".mov",
+    ".m4v",
+]
+TRANSCRIPT_STEM_SUFFIXES = [".transcript", "-transcript", "_transcript"]
 
 NARRATIVE_UNIT_SENTENCE = "sentence"
 NARRATIVE_UNIT_PARAGRAPH = "paragraph"
@@ -83,6 +94,11 @@ def main() -> int:
     source_path = Path(options["sourcePath"]).expanduser().resolve()
     if not source_path.exists():
         raise SystemExit(f"Source file not found: {source_path}")
+    source_audio_path = resolve_source_audio_path(
+        source_path=source_path,
+        configured_path=options.get("sourceAudioPath"),
+        source_type=options["sourceType"],
+    )
 
     participants_path = Path(options["participantsPath"]).expanduser().resolve()
     speaker_mappings_path = args.speaker_mappings.expanduser().resolve() if args.speaker_mappings else None
@@ -200,6 +216,7 @@ def main() -> int:
         speaker_stats_path=speaker_stats_path if speaker_stats_payload is not None else None,
         participants=participants,
         supplemental_sources=archived_supplemental_sources,
+        source_audio_path=source_audio_path,
     )
 
     copy_file(source_path, archived_source_path)
@@ -241,6 +258,7 @@ def load_yaml_mapping(path: Path) -> Dict[str, Any]:
 def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     options = {
         "sourcePath": config.get("sourcePath"),
+        "sourceAudioPath": config.get("sourceAudioPath"),
         "sourceType": config.get("sourceType"),
         "scope": config.get("scope") or SCOPE_SESSION,
         "outputDir": config.get("outputDir"),
@@ -481,6 +499,62 @@ def resolve_transcript_format(source_path: Path, requested: str) -> str:
     return TRANSCRIPT_FORMAT_LINES
 
 
+def resolve_source_audio_path(
+    *,
+    source_path: Path,
+    configured_path: Any,
+    source_type: str,
+) -> Optional[Path]:
+    configured_text = str(configured_path or "").strip()
+    if configured_text:
+        audio_path = Path(configured_text).expanduser().resolve()
+        if not audio_path.exists():
+            raise SystemExit(f"sourceAudioPath file not found: {audio_path}")
+        if not audio_path.is_file():
+            raise SystemExit(f"sourceAudioPath is not a file: {audio_path}")
+        return audio_path
+    if source_type != SOURCE_TYPE_TRANSCRIPT:
+        return None
+    return infer_source_audio_path(source_path)
+
+
+def infer_source_audio_path(source_path: Path) -> Optional[Path]:
+    source_stem = source_path.with_suffix("").name
+    candidate_stems: List[str] = []
+
+    def add_candidate_stem(stem: str) -> None:
+        if stem and stem not in candidate_stems:
+            candidate_stems.append(stem)
+
+    add_candidate_stem(source_stem)
+    lower_source_stem = source_stem.lower()
+    for suffix in TRANSCRIPT_STEM_SUFFIXES:
+        if lower_source_stem.endswith(suffix):
+            add_candidate_stem(source_stem[: -len(suffix)])
+
+    for stem in candidate_stems:
+        for extension in SOURCE_AUDIO_EXTENSIONS:
+            candidate = source_path.parent / f"{stem}{extension}"
+            if candidate.is_file():
+                return candidate.resolve()
+
+    candidate_stem_lowers = {stem.lower() for stem in candidate_stems}
+    matches = [
+        candidate
+        for candidate in source_path.parent.iterdir()
+        if candidate.is_file()
+        and candidate.suffix.lower() in SOURCE_AUDIO_EXTENSIONS
+        and candidate.with_suffix("").name.lower() in candidate_stem_lowers
+    ]
+    matches.sort(
+        key=lambda candidate: (
+            SOURCE_AUDIO_EXTENSIONS.index(candidate.suffix.lower()),
+            candidate.name.lower(),
+        )
+    )
+    return matches[0].resolve() if matches else None
+
+
 def build_bundle_stem(
     campaign: Any,
     session_number: Any,
@@ -523,6 +597,7 @@ def build_session_manifest(
     speaker_stats_path: Optional[Path],
     participants: Sequence[Dict[str, Any]],
     supplemental_sources: Sequence[Dict[str, str]],
+    source_audio_path: Optional[Path],
 ) -> Dict[str, Any]:
     manifest: Dict[str, Any] = {
         "schemaVersion": "1.0",
@@ -537,10 +612,12 @@ def build_session_manifest(
         "drEndTime": options.get("drEndTime"),
         "participants": list(participants),
         "sourceInputPath": str(source_path),
-        "sourceConfigPath": str(config_path),
-        "participantsPath": str(participants_path),
-        "preparedSourcePath": str(prepared_path),
     }
+    if source_audio_path is not None:
+        manifest["sourceAudioPath"] = str(source_audio_path)
+    manifest["sourceConfigPath"] = str(config_path)
+    manifest["participantsPath"] = str(participants_path)
+    manifest["preparedSourcePath"] = str(prepared_path)
     if supplemental_sources:
         manifest["supplementalSources"] = list(supplemental_sources)
     if speaker_mappings_path is not None:

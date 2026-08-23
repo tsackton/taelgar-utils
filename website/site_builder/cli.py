@@ -4,6 +4,9 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from .checker import check_site
 from .config import ConfigError, load_config
@@ -37,8 +40,11 @@ def main(argv: list[str] | None = None) -> int:
         export_site(config)
         return 0
     if args.command == "build":
-        export_site(config)
-        return run_command(["mkdocs", "build"], config.root_dir)
+        stats = export_site(config)
+        rc = run_command(["mkdocs", "build"], config.root_dir)
+        if rc == 0:
+            print_zoomable_html_paths(config, stats.zoomable_pages)
+        return rc
     if args.command == "serve":
         export_site(config)
         return run_command(["mkdocs", "serve"], config.root_dir)
@@ -64,6 +70,40 @@ def publish_site(config, message: str) -> int:
 def run_command(command: list[str], cwd: Path) -> int:
     print("+ " + " ".join(command))
     return subprocess.run(command, cwd=cwd).returncode
+
+
+def print_zoomable_html_paths(config: Any, pages: list[Path]) -> None:
+    if not pages:
+        return
+    site_dir, use_directory_urls = mkdocs_output_config(config.root_dir)
+    print("Zoomable session HTML:")
+    for page in pages:
+        print(f"  - {site_dir / html_path_for_markdown(page, use_directory_urls)}")
+
+
+def mkdocs_output_config(root_dir: Path) -> tuple[Path, bool]:
+    mkdocs_path = root_dir / "mkdocs.yml"
+    site_dir = root_dir / "site"
+    use_directory_urls = True
+    if not mkdocs_path.exists():
+        return site_dir, use_directory_urls
+    payload = yaml.safe_load(mkdocs_path.read_text(encoding="utf-8")) or {}
+    if isinstance(payload, dict):
+        raw_site_dir = payload.get("site_dir")
+        if isinstance(raw_site_dir, str) and raw_site_dir.strip():
+            candidate = Path(raw_site_dir.strip())
+            site_dir = candidate if candidate.is_absolute() else root_dir / candidate
+        if isinstance(payload.get("use_directory_urls"), bool):
+            use_directory_urls = bool(payload["use_directory_urls"])
+    return site_dir, use_directory_urls
+
+
+def html_path_for_markdown(path: Path, use_directory_urls: bool) -> Path:
+    if path.name == "index.md":
+        return path.with_suffix(".html")
+    if use_directory_urls:
+        return path.with_suffix("") / "index.html"
+    return path.with_suffix(".html")
 
 
 if __name__ == "__main__":

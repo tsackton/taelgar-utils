@@ -123,6 +123,22 @@ The current canonical example is in `website_config_example.json`.
 | `hide_nav_tags` | list of strings | `[]` | If a note has any matching tag segment, the exporter adds front matter that hides MkDocs navigation for that page. |
 | `hide_backlinks_tags` | list of strings | `[]` | If a note has any matching tag segment, the exporter adds front matter that hides backlinks for that page. |
 
+### Website-Only Session Views
+
+Session notes can opt into a website-only zoomable narrative with front matter:
+
+```yaml
+websiteSessionView: zoomable
+sessionKey: campaign-session-1
+```
+
+The Obsidian-facing note remains unchanged. During export, the website builder
+uses `session_artifact_roots` to locate the matching reviewed
+`session-recap.md`, slices the cleaned transcript by each recap block's Source
+Range, writes transcript data under `assets/session-zoom/`, and replaces only
+the published `## Narrative` section. The generated scene titles are normal
+Markdown headings so MkDocs Material can provide the page table of contents.
+
 ### Links, Code Blocks, And Assets
 
 | Key | Type | Default | Description |
@@ -138,3 +154,4 @@ The current canonical example is in `website_config_example.json`.
 | `max_image_height` | positive integer | `1600` | Maximum resized image height, preserving aspect ratio. |
 | `delete_unlinked_assets` | boolean | `true` | Accepted by the strict schema. Current asset copying is driven by linked assets, always-include assets, and stale manifest cleanup. |
 | `always_include_assets` | list of glob strings | `[]` | Source-relative asset patterns to copy even when no exported page links to them. Patterns use `Path.match`, for example `assets/**/*.png`. |
+| `session_artifact_roots` | list of paths | `[]` | Optional `_sessions` roots used by website-only session renderers. Notes with `websiteSessionView: zoomable` use `sessionKey` to find reviewed recap and cleaned transcript artifacts under these roots. |
