@@ -32,8 +32,14 @@ class MarkdownNote:
 
 
 def parse_markdown_note(path: Path, config: Any) -> MarkdownNote:
-    metadata, raw_text = parse_frontmatter(path)
-    clean_text = clean_note_text(raw_text, metadata, config, source=str(path))
+    metadata, raw_text, body_line_offset = parse_frontmatter(path)
+    clean_text = clean_note_text(
+        raw_text,
+        metadata,
+        config,
+        source=str(path),
+        line_offset=body_line_offset,
+    )
     page_title = page_title_for(path, metadata)
     outlinks = [match[0] for match in re.findall(WIKILINK_RE, clean_text) if match[0]]
     is_stub = count_relevant_lines(clean_text) < 1
@@ -52,18 +58,18 @@ def parse_markdown_note(path: Path, config: Any) -> MarkdownNote:
     )
 
 
-def parse_frontmatter(path: Path) -> tuple[dict[str, Any], str]:
+def parse_frontmatter(path: Path) -> tuple[dict[str, Any], str, int]:
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     if not lines or lines[0].strip() != "---":
-        return {}, "".join(lines)
+        return {}, "".join(lines), 0
     try:
         end_index = next(i for i, line in enumerate(lines[1:], start=1) if line.strip() == "---")
     except StopIteration:
-        return {}, "".join(lines)
+        return {}, "".join(lines), 0
     metadata = yaml.safe_load("".join(lines[1:end_index])) or {}
     if not isinstance(metadata, dict):
         metadata = {}
-    return metadata, "".join(lines[end_index + 1 :])
+    return metadata, "".join(lines[end_index + 1 :]), end_index + 1
 
 
 def clean_note_text(
@@ -71,12 +77,14 @@ def clean_note_text(
     metadata: dict[str, Any],
     config: Any,
     source: str = "<text>",
+    line_offset: int = 0,
 ) -> str:
     text = filter_comment_blocks(
         raw_text,
         campaigns=config.campaigns,
         export_date=config.export_date,
         source=source,
+        line_offset=line_offset,
     )
     if config.clean_inline_tags:
         text = clean_inline_tags(text)

@@ -120,6 +120,16 @@ class WebsiteBuildTests(unittest.TestCase):
 
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "existing public output\n")
 
+    def test_comment_errors_report_physical_source_lines(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Broken.md",
+                "---\nname: Broken\n---\nvisible\n%%^Lint%%private\n",
+            )
+
+            with self.assertRaisesRegex(CommentBlockError, r"Broken\.md:5:"):
+                scan_source(site.config)
+
     def test_comment_filter_version_invalidates_legacy_manifest_entries(self) -> None:
         with fixture_site() as site:
             write_note(

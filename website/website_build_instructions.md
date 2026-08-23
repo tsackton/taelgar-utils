@@ -114,8 +114,10 @@ The current canonical example is in `website_config_example.json`.
 The content-filtering preflight also always removes `Lint`, `Metadata:*`, and
 `povNotes:*` blocks. It rejects `Date:Xa`, unknown structured markers, stray or
 missing `%%^End%%` terminators, nested structured blocks, and unterminated
-ordinary comments. Preflight completes before `docs_dir` is cleaned or written,
-so malformed private content cannot produce a partial public export.
+ordinary comments. Comment-like examples inside Markdown inline-code spans and
+fenced code blocks remain literal. Preflight completes before `docs_dir` is
+cleaned or written, so malformed private content cannot produce a partial public
+export.
 
 ### Home And Navigation
 

@@ -91,6 +91,58 @@ class CommentBlockParserTests(unittest.TestCase):
         ):
             self.assertNotIn(private_text, result)
 
+    def test_comment_syntax_inside_inline_code_is_literal(self) -> None:
+        text = (
+            "Examples: `%%SECRET`, `%% ordinary %%`, and "
+            "``%%^Lint%%private%%^End%%``."
+        )
+
+        self.assertEqual(filter_comment_blocks(text), text)
+
+    def test_comment_syntax_inside_fenced_code_is_literal(self) -> None:
+        text = (
+            "before\n"
+            "```markdown\n"
+            "%%SECRET\n"
+            "%%^Lint%%private%%^End%%\n"
+            "```\n"
+            "after\n"
+        )
+
+        self.assertEqual(filter_comment_blocks(text), text)
+
+    def test_structured_terminator_inside_fenced_code_is_literal(self) -> None:
+        text = (
+            "%%^Campaign:dufr%%\n"
+            "~~~markdown\n"
+            "%%^End%%\n"
+            "~~~\n"
+            "kept\n"
+            "%%^End%%\n"
+        )
+
+        self.assertEqual(filter_comment_blocks(text, campaigns=("dufr",)), "\n~~~markdown\n%%^End%%\n~~~\nkept\n\n")
+
+    def test_code_literals_inside_removed_blocks_are_validated_as_code(self) -> None:
+        text = "%%^Campaign:none%%private `%%SECRET` example%%^End%%public"
+
+        self.assertEqual(filter_comment_blocks(text), "public")
+
+    def test_real_comments_around_code_literals_are_still_removed(self) -> None:
+        text = "public %% private `%%` detail %% after"
+
+        self.assertEqual(filter_comment_blocks(text), "public  after")
+
+    def test_escaped_backticks_do_not_shield_real_comments(self) -> None:
+        text = r"public \` %% private %% \` after"
+
+        self.assertEqual(filter_comment_blocks(text), r"public \`  \` after")
+
+    def test_unmatched_backticks_on_separate_lines_do_not_shield_comments(self) -> None:
+        text = "public `\n%% private %%\n` after"
+
+        self.assertEqual(filter_comment_blocks(text), "public `\n\n` after")
+
     def test_malformed_comment_structures_are_rejected(self) -> None:
         cases = {
             "ordinary": "visible %% comment",
@@ -114,6 +166,12 @@ class CommentBlockParserTests(unittest.TestCase):
         self.assertIn("Secret.md:2", message)
         self.assertIn("unterminated structured block 'Lint'", message)
         self.assertNotIn("PRIVATE BODY", message)
+
+    def test_errors_include_source_line_offset(self) -> None:
+        with self.assertRaises(CommentBlockError) as raised:
+            filter_comment_blocks("visible\n%% comment", source="A.md", line_offset=7)
+
+        self.assertIn("A.md:9", str(raised.exception))
 
 
 if __name__ == "__main__":
