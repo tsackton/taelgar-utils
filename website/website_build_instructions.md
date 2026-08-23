@@ -103,13 +103,19 @@ The current canonical example is in `website_config_example.json`.
 | --- | --- | --- | --- |
 | `campaigns` | list of strings | `[]` | Campaign IDs to include. Used for `excludePublish` front matter and `%%^Campaign:name%%...%%^End%%` blocks. |
 | `export_date` | string or omitted | none | Taelgar date used for date-block filtering and future-dated note exclusion. |
-| `strip_comments` | boolean | `true` | Removes Obsidian comments such as `%%comment%%` after campaign/date block handling. |
-| `strip_campaign_blocks` | boolean | `true` | Processes `%%^Campaign:name%%...%%^End%%` blocks. Matching campaign blocks are kept; nonmatching campaign blocks are removed. |
-| `strip_date_blocks` | boolean | `true` | Processes `%%^Date:...%%...%%^End%%` blocks against `export_date`. `b` blocks are removed on or after the marker date; `a` blocks are removed on or before it. |
+| `strip_comments` | boolean | `true` | Required for public exports. Removes ordinary and `SECRET` Obsidian comments. Configuring `false` is rejected. |
+| `strip_campaign_blocks` | boolean | `true` | Required for public exports. Matching campaign blocks are kept; unselected blocks are removed. `Campaign:none` is always removed, even with no configured campaigns. Configuring `false` is rejected. |
+| `strip_date_blocks` | boolean | `true` | Required for public exports. `Date:X` is visible on or after `X`; `Date:Xb` is visible strictly before `X`. A Date block requires `export_date`. Configuring `false` is rejected. |
 | `clean_inline_tags` | boolean | `true` | Rewrites inline Obsidian-style fields such as `(DR:: 1749-03-17)` into readable text. |
 | `skip_future_dated` | boolean | `true` | Skips notes whose `activeYear` front matter is later than `export_date`. Has no effect without `export_date`. |
 | `unnamed_files` | `skip`, `unlist`, or `include` | `unlist` | Controls notes whose filename or generated title starts with `~`. `skip` omits them; `unlist` exports them but leaves them out of generated nav; `include` treats them normally. |
 | `stub_files` | `skip`, `unlist`, or `include` | `skip` | Controls notes with no meaningful body content after cleaning. `skip` omits them; `unlist` exports them but leaves them out of generated nav; `include` treats them normally. |
+
+The content-filtering preflight also always removes `Lint`, `Metadata:*`, and
+`povNotes:*` blocks. It rejects `Date:Xa`, unknown structured markers, stray or
+missing `%%^End%%` terminators, nested structured blocks, and unterminated
+ordinary comments. Preflight completes before `docs_dir` is cleaned or written,
+so malformed private content cannot produce a partial public export.
 
 ### Home And Navigation
 

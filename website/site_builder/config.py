@@ -10,6 +10,9 @@ class ConfigError(ValueError):
     pass
 
 
+COMMENT_BLOCK_TRANSFORM_VERSION = 1
+
+
 ALLOWED_KEYS = {
     "source_dir",
     "docs_dir",
@@ -143,6 +146,7 @@ class WebsiteConfig:
             "map_tile_format": self.map_tile_format,
             "map_tile_quality": self.map_tile_quality,
             "map_tile_transform_version": 5,
+            "comment_block_transform_version": COMMENT_BLOCK_TRANSFORM_VERSION,
             "asset_link_transform_version": 2,
             "audio_embed_transform_version": 2,
             "callout_transform_version": 2,
@@ -229,6 +233,17 @@ def load_config(config_path: str | Path = "website.json") -> WebsiteConfig:
     if map_tile_format not in {"webp", "png", "jpg", "jpeg"}:
         raise ConfigError("map_tile_format must be one of: webp, png, jpg, jpeg")
 
+    required_filters = {
+        "strip_comments": bool_value("strip_comments", True),
+        "strip_campaign_blocks": bool_value("strip_campaign_blocks", True),
+        "strip_date_blocks": bool_value("strip_date_blocks", True),
+    }
+    disabled_filters = [key for key, enabled in required_filters.items() if not enabled]
+    if disabled_filters:
+        raise ConfigError(
+            "Public export filtering cannot be disabled: " + ", ".join(disabled_filters)
+        )
+
     return WebsiteConfig(
         root_dir=root_dir,
         config_path=path,
@@ -240,9 +255,9 @@ def load_config(config_path: str | Path = "website.json") -> WebsiteConfig:
         clean_docs=bool_value("clean_docs", False),
         campaigns=string_tuple("campaigns"),
         export_date=raw.get("export_date"),
-        strip_comments=bool_value("strip_comments", True),
-        strip_campaign_blocks=bool_value("strip_campaign_blocks", True),
-        strip_date_blocks=bool_value("strip_date_blocks", True),
+        strip_comments=required_filters["strip_comments"],
+        strip_campaign_blocks=required_filters["strip_campaign_blocks"],
+        strip_date_blocks=required_filters["strip_date_blocks"],
         clean_inline_tags=bool_value("clean_inline_tags", True),
         home_source=path_value("home_source"),
         home_dest=relative_path_value("home_dest", "index.md"),

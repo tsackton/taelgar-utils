@@ -9,6 +9,8 @@ import yaml
 
 from taelgar_utils.vault.taelgar_date import TaelgarDate
 
+from .comment_blocks import filter_comment_blocks
+
 
 WIKILINK_RE = r"""\[\[([^\|\]\#\\]+)(\#.*?)?(?:\\?\|([^\|\]]*))?(?:\\?\|([^\|\]]*))?(?:\\?\|([^\|\]]*))?\]\]"""
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"}
@@ -31,9 +33,9 @@ class MarkdownNote:
 
 def parse_markdown_note(path: Path, config: Any) -> MarkdownNote:
     metadata, raw_text = parse_frontmatter(path)
-    clean_text = clean_note_text(raw_text, metadata, config)
+    clean_text = clean_note_text(raw_text, metadata, config, source=str(path))
     page_title = page_title_for(path, metadata)
-    outlinks = [match[0] for match in re.findall(WIKILINK_RE, raw_text) if match[0]]
+    outlinks = [match[0] for match in re.findall(WIKILINK_RE, clean_text) if match[0]]
     is_stub = count_relevant_lines(clean_text) < 1
     is_unnamed = page_title.startswith("~") or path.stem.startswith("~")
     is_future = is_future_dated(metadata, config)
@@ -64,52 +66,21 @@ def parse_frontmatter(path: Path) -> tuple[dict[str, Any], str]:
     return metadata, "".join(lines[end_index + 1 :])
 
 
-def clean_note_text(raw_text: str, metadata: dict[str, Any], config: Any) -> str:
-    text = raw_text
-    if config.strip_date_blocks and config.export_date:
-        text = strip_date_content(text, config.export_date)
-    if config.strip_campaign_blocks and config.campaigns:
-        text = strip_campaign_content(text, config.campaigns)
-    if config.strip_comments:
-        text = strip_comments(text)
+def clean_note_text(
+    raw_text: str,
+    metadata: dict[str, Any],
+    config: Any,
+    source: str = "<text>",
+) -> str:
+    text = filter_comment_blocks(
+        raw_text,
+        campaigns=config.campaigns,
+        export_date=config.export_date,
+        source=source,
+    )
     if config.clean_inline_tags:
         text = clean_inline_tags(text)
     return text
-
-
-def strip_comments(text: str) -> str:
-    return re.sub(r"%%.*?%%|%%.*", "", text, flags=re.DOTALL)
-
-
-def strip_campaign_content(text: str, campaigns: tuple[str, ...]) -> str:
-    campaign_names = {campaign.lower() for campaign in campaigns}
-
-    def keep_or_remove(match: re.Match[str]) -> str:
-        campaign_text = match.group(1).strip().lower()
-        content = match.group(2)
-        return content if campaign_text in campaign_names else ""
-
-    return re.sub(r"%%\^Campaign:(.*?)%%(.*?)%%\^End%%", keep_or_remove, text, flags=re.DOTALL | re.IGNORECASE)
-
-
-def strip_date_content(text: str, export_date: str) -> str:
-    target_date = TaelgarDate.parse_date_string(export_date)
-
-    def keep_or_remove(match: re.Match[str]) -> str:
-        comment_date_str = match.group(1).strip()
-        parse_code = "b"
-        comment_date_str = comment_date_str.rstrip("^").strip()
-        if comment_date_str and comment_date_str[-1].isalpha():
-            parse_code = comment_date_str[-1].lower()
-            comment_date_str = comment_date_str[:-1].rstrip("^").strip()
-        comment_date = TaelgarDate.parse_date_string(comment_date_str)
-        if parse_code == "a":
-            return "" if target_date <= comment_date else match.group(2)
-        if parse_code == "b":
-            return "" if target_date >= comment_date else match.group(2)
-        raise ValueError(f"Invalid date block parse code: {parse_code}")
-
-    return re.sub(r"%%\^Date:(.*?)%%(.*?)%%\^End%%", keep_or_remove, text, flags=re.DOTALL)
 
 
 def clean_inline_tags(text: str) -> str:

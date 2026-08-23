@@ -100,6 +100,12 @@ def export_site(config: WebsiteConfig) -> ExportStats:
     print(f"Source: {config.source_dir}")
     print(f"Docs: {config.docs_dir}")
 
+    manifest = Manifest.load(config.manifest_path)
+    previous_manifest = {} if config.clean_docs else manifest.files
+    print(f"Manifest: {config.manifest_path}")
+    scan = scan_source(config)
+    home_note = parse_markdown_note(config.home_source, config) if config.home_source else None
+
     if config.clean_docs and config.docs_dir.exists():
         print(f"Cleaning docs directory: {config.docs_dir}")
         shutil.rmtree(config.docs_dir)
@@ -109,10 +115,6 @@ def export_site(config: WebsiteConfig) -> ExportStats:
         copied = copy_tree_contents(config.overrides_source, config.overrides_dir)
         print(f"Overrides: copied {len(copied)} file(s)")
 
-    manifest = Manifest.load(config.manifest_path)
-    previous_manifest = {} if config.clean_docs else manifest.files
-    print(f"Manifest: {config.manifest_path}")
-    scan = scan_source(config)
     stats.scanned_files = scan.scanned_files
     stats.skipped_source_files = scan.skipped_files
     print(f"Scan: {stats.scanned_files} file(s), {stats.skipped_source_files} skipped")
@@ -204,7 +206,8 @@ def export_site(config: WebsiteConfig) -> ExportStats:
 
     if config.home_source:
         print(f"Home: transforming {config.home_source} -> {config.home_dest}")
-        home_note = parse_markdown_note(config.home_source, config)
+        if home_note is None:
+            raise ValueError("Configured home source was not preflighted")
         stats.content_warnings.extend(scan_content_warnings(home_note.clean_text, config.home_source.as_posix()))
         home_result = transformer.transform_note(home_note, config.home_dest, config.home_source.as_posix())
         stats.unresolved_links.extend(home_result.unresolved_links)

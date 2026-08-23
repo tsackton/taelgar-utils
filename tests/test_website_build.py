@@ -15,9 +15,10 @@ for path in (UTILS_ROOT, SRC_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from website.site_builder.config import ConfigError, load_config
+from website.site_builder.comment_blocks import CommentBlockError
+from website.site_builder.config import COMMENT_BLOCK_TRANSFORM_VERSION, ConfigError, load_config
 from website.site_builder.assets import is_resize_excluded
-from website.site_builder.exporter import export_site
+from website.site_builder.exporter import digest, export_site
 from website.site_builder.link_index import LinkIndex
 from website.site_builder.nav import MkDocsNavigationGenerator
 from website.site_builder.scanner import scan_source
@@ -33,6 +34,21 @@ class WebsiteBuildTests(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 load_config(config)
 
+    def test_config_rejects_disabled_public_content_filters(self) -> None:
+        for key in ("strip_comments", "strip_campaign_blocks", "strip_date_blocks"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tmpdir:
+                path = Path(tmpdir) / "website.json"
+                write_config(path)
+                update_config(path, {key: False})
+                with self.assertRaisesRegex(ConfigError, "Public export filtering cannot be disabled"):
+                    load_config(path)
+
+    def test_config_digest_versions_comment_filtering(self) -> None:
+        with fixture_site() as site:
+            payload = site.config.digest_payload()
+
+            self.assertEqual(payload["comment_block_transform_version"], COMMENT_BLOCK_TRANSFORM_VERSION)
+
     def test_export_filters_future_notes_and_cleans_campaign_blocks(self) -> None:
         with fixture_site() as site:
             write_note(
@@ -47,6 +63,85 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertIn("keep", text)
             self.assertNotIn("drop", text)
             self.assertFalse((site.docs / "future.md").exists())
+
+    def test_export_removes_private_and_unselected_blocks_without_campaign_config(self) -> None:
+        with fixture_site() as site:
+            update_config(site.config_path, {"campaigns": []})
+            config = load_config(site.config_path)
+            write_note(
+                site.source / "Current.md",
+                "---\nname: Current\n---\n"
+                "visible\n"
+                "%%^Campaign:none%%private%%^End%%\n"
+                "%%^Campaign:dufr%%campaign-only%%^End%%\n",
+            )
+
+            export_site(config)
+            text = (site.docs / "current.md").read_text(encoding="utf-8")
+
+            self.assertIn("visible", text)
+            self.assertNotIn("private", text)
+            self.assertNotIn("campaign-only", text)
+
+    def test_export_strips_internal_blocks_and_private_outlinks(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Current.md",
+                "---\nname: Current\n---\n"
+                "See [[Public]].\n"
+                "%%^Metadata:names:v1%%[[Metadata Secret]]%%^End%%\n"
+                "%%^povNotes:v1%%[[POV Secret]]%%^End%%\n"
+                "%%^Lint%%[[Lint Secret]]%%^End%%\n",
+            )
+            write_note(site.source / "Public.md", "---\nname: Public\n---\npublic\n")
+
+            scan = scan_source(site.config)
+            current_entry = next(entry for entry in scan.entries if entry.relative_path.name == "Current.md")
+            self.assertEqual(current_entry.note.outlinks, ["Public"])
+
+            export_site(site.config)
+            text = (site.docs / "current.md").read_text(encoding="utf-8")
+            self.assertIn("Public", text)
+            self.assertNotIn("Metadata Secret", text)
+            self.assertNotIn("POV Secret", text)
+            self.assertNotIn("Lint Secret", text)
+
+    def test_malformed_comments_abort_before_cleaning_docs(self) -> None:
+        with fixture_site() as site:
+            update_config(site.config_path, {"clean_docs": True})
+            config = load_config(site.config_path)
+            site.docs.mkdir()
+            sentinel = site.docs / "existing.md"
+            sentinel.write_text("existing public output\n", encoding="utf-8")
+            write_note(site.source / "Broken.md", "---\nname: Broken\n---\n%%^Lint%%private\n")
+
+            with self.assertRaises(CommentBlockError):
+                export_site(config)
+
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "existing public output\n")
+
+    def test_comment_filter_version_invalidates_legacy_manifest_entries(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "A.md",
+                "---\nname: A\n---\nvisible\n%%^Lint%%private%%^End%%\n",
+            )
+            export_site(site.config)
+
+            manifest_path = site.root / ".website-build" / "export-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            legacy_payload = dict(site.config.digest_payload())
+            legacy_payload.pop("comment_block_transform_version")
+            manifest["files"]["A.md"]["config_digest"] = digest(legacy_payload)
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            output_path = site.docs / "a.md"
+            output_path.write_text("STALE PRIVATE OUTPUT\n", encoding="utf-8")
+
+            export_site(site.config)
+            text = output_path.read_text(encoding="utf-8")
+
+            self.assertIn("visible", text)
+            self.assertNotIn("private", text.casefold())
 
     def test_wikilinks_use_single_index(self) -> None:
         with fixture_site() as site:

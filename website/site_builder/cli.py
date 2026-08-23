@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from .checker import check_site
+from .comment_blocks import CommentBlockError
 from .config import ConfigError, load_config
 from .exporter import export_site
 
@@ -33,26 +34,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Config error: {error}", file=sys.stderr)
         return 2
 
-    if args.command == "check":
-        result = check_site(config)
-        return 1 if result.has_errors else 0
-    if args.command == "export":
-        export_site(config)
-        return 0
-    if args.command == "build":
-        stats = export_site(config)
-        rc = run_command(["mkdocs", "build"], config.root_dir)
-        if rc == 0:
-            print_zoomable_html_paths(config, stats.zoomable_pages)
-        return rc
-    if args.command == "serve":
-        export_site(config)
-        return run_command(["mkdocs", "serve"], config.root_dir)
-    if args.command == "publish":
-        return publish_site(config, args.message)
-    if args.command == "deploy":
-        export_site(config)
-        return publish_site(config, args.message)
+    try:
+        if args.command == "check":
+            result = check_site(config)
+            return 1 if result.has_errors else 0
+        if args.command == "export":
+            export_site(config)
+            return 0
+        if args.command == "build":
+            stats = export_site(config)
+            rc = run_command(["mkdocs", "build"], config.root_dir)
+            if rc == 0:
+                print_zoomable_html_paths(config, stats.zoomable_pages)
+            return rc
+        if args.command == "serve":
+            export_site(config)
+            return run_command(["mkdocs", "serve"], config.root_dir)
+        if args.command == "publish":
+            return publish_site(config, args.message)
+        if args.command == "deploy":
+            export_site(config)
+            return publish_site(config, args.message)
+    except CommentBlockError as error:
+        print(f"Content filtering error: {error}", file=sys.stderr)
+        return 2
     return 2
 
 
