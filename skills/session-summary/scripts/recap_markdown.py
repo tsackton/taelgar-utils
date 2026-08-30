@@ -138,12 +138,6 @@ def parse_timeline_section(lines: Sequence[str], errors: List[str]) -> List[Dict
                     f"timeline {block_id or heading}",
                     errors,
                 ),
-                "long": parse_required_subsection(
-                    block_lines,
-                    "#### Long",
-                    f"timeline {block_id or heading}",
-                    errors,
-                ),
             }
         )
     return parsed

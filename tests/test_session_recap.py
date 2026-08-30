@@ -15,6 +15,7 @@ FIXTURE_DIR = REPO_ROOT / "tests" / "data" / "session_summary"
 CONTEXT_BUILDER_PATH = REPO_ROOT / "skills" / "session-summary" / "scripts" / "build_session_summary_context.py"
 RECAP_BUILDER_PATH = REPO_ROOT / "skills" / "session-summary" / "scripts" / "build_session_recap.py"
 RECAP_VALIDATOR_PATH = REPO_ROOT / "skills" / "session-summary" / "scripts" / "manage_session_recap.py"
+RECAP_SCENES_VALIDATOR_PATH = REPO_ROOT / "skills" / "session-summary" / "scripts" / "manage_recap_scenes.py"
 
 
 class SessionRecapBase(unittest.TestCase):
@@ -36,20 +37,52 @@ class SessionRecapBase(unittest.TestCase):
     def write_yaml(self, path: Path, payload: dict) -> None:
         path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
-    def run_context_builder(self, workspace: Path) -> subprocess.CompletedProcess[str]:
+    def run_context_builder(
+        self,
+        workspace: Path,
+        recap_scenes_path: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         output_dir = workspace / "out"
+        command = [
+            sys.executable,
+            str(CONTEXT_BUILDER_PATH),
+            "--session",
+            str(workspace / "session.yaml"),
+            "--beats-json",
+            str(workspace / "beats.json"),
+            "--beat-facts-json",
+            str(workspace / "beat-facts.json"),
+            "--output-dir",
+            str(output_dir),
+            "--file-prefix",
+            "test-session-007",
+        ]
+        if recap_scenes_path is not None:
+            command.extend(["--recap-scenes-json", str(recap_scenes_path)])
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def run_recap_scenes_validator(
+        self,
+        workspace: Path,
+        recap_scenes_path: Path,
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 sys.executable,
-                str(CONTEXT_BUILDER_PATH),
-                "--session",
-                str(workspace / "session.yaml"),
+                str(RECAP_SCENES_VALIDATOR_PATH),
                 "--beats-json",
                 str(workspace / "beats.json"),
                 "--beat-facts-json",
                 str(workspace / "beat-facts.json"),
+                "--recap-scenes-json",
+                str(recap_scenes_path),
                 "--output-dir",
-                str(output_dir),
+                str(workspace / "out"),
                 "--file-prefix",
                 "test-session-007",
             ],
@@ -57,6 +90,11 @@ class SessionRecapBase(unittest.TestCase):
             text=True,
             check=False,
         )
+
+    def write_recap_scenes(self, workspace: Path, scenes: list[dict]) -> Path:
+        path = workspace / "recap-scenes.json"
+        self.write_json(path, {"schemaVersion": "1.0", "scenes": scenes})
+        return path
 
     def run_recap_builder(self, workspace: Path) -> subprocess.CompletedProcess[str]:
         output_dir = workspace / "recap"
@@ -175,6 +213,123 @@ class BuildSessionSummaryContextTest(SessionRecapBase):
         self.assertEqual(payload["recapBlocks"][0]["npcRefs"], ["Kalima"])
         self.assertEqual(payload["worldCandidates"]["mentioned"]["npcs"][0]["name"], "Zeyfa")
 
+    def test_approved_scene_groups_control_recap_blocks(self) -> None:
+        workspace = self.make_workspace()
+        recap_scenes_path = self.write_recap_scenes(
+            workspace,
+            [
+                {
+                    "sceneId": "scene-001",
+                    "title": "Entering the Labyrinth",
+                    "beatIds": ["beat-001", "beat-002"],
+                    "rationale": "The descent and fissure discovery form one continuous exploration scene.",
+                },
+                {
+                    "sceneId": "scene-002",
+                    "title": "Across the Fissure",
+                    "beatIds": ["beat-003"],
+                    "rationale": "The dangerous crossing is the next distinct situation.",
+                },
+            ],
+        )
+
+        result = self.run_context_builder(workspace, recap_scenes_path)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = self.load_json(workspace / "out" / "test-session-007-session-summary-context.json")
+        self.assertEqual(payload["recapScenesPath"], str(recap_scenes_path.resolve()))
+        self.assertEqual([block["beatIds"] for block in payload["recapBlocks"]], [["beat-001", "beat-002"], ["beat-003"]])
+        self.assertEqual([block["title"] for block in payload["recapBlocks"]], ["Entering the Labyrinth", "Across the Fissure"])
+
+    def test_scene_group_can_include_setup_and_combat(self) -> None:
+        workspace = self.make_workspace()
+        beats = self.load_json(workspace / "beats.json")
+        facts = self.load_json(workspace / "beat-facts.json")
+        beats["beats"][1]["containsCombat"] = True
+        facts["facts"][1]["combat"] = {
+            "isCombat": True,
+            "phase": "full",
+            "mainEnemies": [{"name": "Ice wraiths", "role": "enemy"}],
+        }
+        self.write_json(workspace / "beats.json", beats)
+        self.write_json(workspace / "beat-facts.json", facts)
+        recap_scenes_path = self.write_recap_scenes(
+            workspace,
+            [
+                {
+                    "sceneId": "scene-001",
+                    "title": "Discovery and Attack",
+                    "beatIds": ["beat-001", "beat-002"],
+                    "rationale": "The setup runs directly into the combat without a scene break.",
+                },
+                {
+                    "sceneId": "scene-002",
+                    "title": "Deeper In",
+                    "beatIds": ["beat-003"],
+                    "rationale": "The party moves into the next situation after the fight.",
+                },
+            ],
+        )
+
+        result = self.run_context_builder(workspace, recap_scenes_path)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = self.load_json(workspace / "out" / "test-session-007-session-summary-context.json")
+        self.assertEqual(payload["recapBlocks"][0]["kind"], "combat")
+        self.assertEqual(payload["recapBlocks"][0]["beatIds"], ["beat-001", "beat-002"])
+        self.assertEqual(payload["recapBlocks"][0]["combatEnemyRefs"], ["Ice wraiths"])
+        self.assertEqual(payload["recapExtrasCandidates"]["combats"][0]["blockId"], "recap-001")
+
+
+class ManageRecapScenesTest(SessionRecapBase):
+    def test_valid_scene_map_writes_preview(self) -> None:
+        workspace = self.make_workspace()
+        recap_scenes_path = self.write_recap_scenes(
+            workspace,
+            [
+                {
+                    "sceneId": "scene-001",
+                    "title": "The Descent",
+                    "beatIds": ["beat-001", "beat-002"],
+                    "rationale": "The party remains in one continuous exploratory situation.",
+                },
+                {
+                    "sceneId": "scene-002",
+                    "title": "The Crossing",
+                    "beatIds": ["beat-003"],
+                    "rationale": "The fissure crossing creates a distinct scene goal.",
+                },
+            ],
+        )
+
+        result = self.run_recap_scenes_validator(workspace, recap_scenes_path)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        preview = (workspace / "out" / "test-session-007-recap-scenes-preview.md").read_text(encoding="utf-8")
+        self.assertIn("- Scene Count: 2", preview)
+        self.assertIn("- Beat Coverage: 3/3", preview)
+        self.assertIn("## scene-001 | The Descent", preview)
+        self.assertIn("beat-001 | Into the Labyrinth", preview)
+
+    def test_scene_map_rejects_missing_or_reordered_beats(self) -> None:
+        workspace = self.make_workspace()
+        recap_scenes_path = self.write_recap_scenes(
+            workspace,
+            [
+                {
+                    "sceneId": "scene-001",
+                    "title": "Out of Order",
+                    "beatIds": ["beat-002", "beat-001"],
+                    "rationale": "Invalid test grouping.",
+                }
+            ],
+        )
+
+        result = self.run_recap_scenes_validator(workspace, recap_scenes_path)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cover every beat exactly once in original order", result.stdout)
+
 
 class BuildSessionRecapTest(SessionRecapBase):
     def test_builds_structured_markdown_scaffold(self) -> None:
@@ -192,14 +347,17 @@ class BuildSessionRecapTest(SessionRecapBase):
         self.assertIn("- Desc Title: TODO", recap_text)
         self.assertIn("- Tagline: TODO", recap_text)
         self.assertIn("- One-Sentence Summary: TODO", recap_text)
+        self.assertIn("- Arc: none", recap_text)
         self.assertIn("- DM: Maris", recap_text)
         self.assertIn("- PCs: Ekko, Justas, Eolo", recap_text)
+        self.assertIn("- Table Notes: none", recap_text)
         self.assertIn("## Timeline", recap_text)
         self.assertIn("### Jan 25th, 1730 (afternoon)", recap_text)
         self.assertIn("- Timeline Segment: timeline-001", recap_text)
         self.assertIn("- Timeline Key: (DR:: 1730-01-25), afternoon", recap_text)
         self.assertIn("#### Short", recap_text)
-        self.assertIn("#### Long", recap_text)
+        timeline_text = recap_text.split("## Timeline", 1)[1].split("## Recap", 1)[0]
+        self.assertNotIn("#### Long", timeline_text)
         self.assertIn("## Recap", recap_text)
         self.assertIn("### recap-001 | Into the Labyrinth", recap_text)
         self.assertIn(
@@ -213,21 +371,37 @@ class BuildSessionRecapTest(SessionRecapBase):
         self.assertIn("## Source Files", recap_text)
         self.assertIn("source.cleaned.md", recap_text)
 
-    def test_multi_day_timeline_key_includes_dr_end(self) -> None:
+    def test_multi_day_beat_expands_to_daily_timeline_blocks(self) -> None:
         workspace = self.make_workspace()
+        beats = self.load_json(workspace / "beats.json")
+        beats["beats"][2]["dateEnd"] = "1730-01-27"
+        beats["beats"][2]["timeWindow"] = None
+        self.write_json(workspace / "beats.json", beats)
+
         result = self.run_context_builder(workspace)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         context_path = workspace / "out" / "test-session-007-session-summary-context.json"
         context = self.load_json(context_path)
-        context["timelineBlocks"][0]["dateEnd"] = "1730-01-27"
-        self.write_json(context_path, context)
+        daily_blocks = context["timelineBlocks"][-3:]
+        self.assertEqual([block["dateStart"] for block in daily_blocks], ["1730-01-25", "1730-01-26", "1730-01-27"])
+        self.assertTrue(all(block["dateEnd"] is None for block in daily_blocks))
+        self.assertTrue(all(block["beatIds"] == ["beat-003"] for block in daily_blocks))
+        self.assertEqual(
+            [block["sourceEntries"][0]["sourceDateSpan"]["dayPosition"] for block in daily_blocks],
+            ["start", "middle", "end"],
+        )
 
         result = self.run_recap_builder(workspace)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
         recap_path = workspace / "recap" / "test-session-007-session-recap.md"
         recap_text = recap_path.read_text(encoding="utf-8")
-        self.assertIn("- Timeline Key: (DR:: 1730-01-25) - (DR_end:: 1730-01-27), afternoon", recap_text)
+        timeline_text = recap_text.split("## Timeline", 1)[1].split("## Recap", 1)[0]
+        self.assertIn("- Timeline Key: (DR:: 1730-01-25)", timeline_text)
+        self.assertIn("- Timeline Key: (DR:: 1730-01-26)", timeline_text)
+        self.assertIn("- Timeline Key: (DR:: 1730-01-27)", timeline_text)
+        self.assertNotIn("DR_end", timeline_text)
+        self.assertNotIn("#### Long", timeline_text)
 
         recap_text = recap_text.replace("TODO", "Drafted text.")
         recap_text = recap_text.replace("- Tagline: Drafted text.", "- Tagline: in which the party descends.")
@@ -392,6 +566,25 @@ class ManageSessionRecapTest(SessionRecapBase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Validated", result.stdout)
 
+    def test_locations_without_sublocations_fail_agent_validation(self) -> None:
+        workspace = self.make_workspace()
+        result = self.run_context_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        result = self.run_recap_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        recap_path = workspace / "recap" / "test-session-007-session-recap.md"
+        recap_lines = recap_path.read_text(encoding="utf-8").replace("TODO", "Drafted text.").splitlines()
+        recap_text = "\n".join(line for line in recap_lines if not line.startswith("  - Sublocations:")) + "\n"
+        recap_text = recap_text.replace("- Tagline: Drafted text.", "- Tagline: in which the party descends.")
+        recap_path.write_text(recap_text, encoding="utf-8")
+
+        result = self.run_recap_validator(workspace)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is missing Sublocations.", result.stdout)
+
     def test_missing_recap_subsection_fails_validation(self) -> None:
         workspace = self.make_workspace()
         result = self.run_context_builder(workspace)
@@ -444,9 +637,7 @@ class ManageSessionRecapTest(SessionRecapBase):
             "\n"
             "#### Short\n"
             "Drafted text: Jan 26th, 1730: one short event-log line.\n"
-            "\n"
-            "#### Long\n"
-            "Drafted text: one or two tighter event-log sentences covering the whole segment.\n",
+            "\n",
             "",
         )
         recap_text = recap_text.replace(

@@ -392,6 +392,7 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertNotIn("taelgar-session-zoom__beat-id", text)
             self.assertNotIn("taelgar-session-zoom__cycle", text)
             self.assertNotIn("Next: Intermediate", text)
+            self.assertIn('data-set-session-zoom="intermediate"', text)
             self.assertIn('<a href="/alden/">Alden</a>', text)
             self.assertIn('<a href="/glass-key/">key</a>', text)
             self.assertIn("taelgar-session-zoom__image--right", text)
@@ -454,6 +455,46 @@ class WebsiteBuildTests(unittest.TestCase):
             export_site(config)
 
             self.assertFalse(transcript_path.exists())
+
+    def test_zoomable_session_omits_intermediate_when_any_recap_block_lacks_it(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Zoom.md",
+                "---\n"
+                "name: Zoom\n"
+                "sessionKey: test-campaign-session-7\n"
+                "websiteSessionView: zoomable\n"
+                "---\n"
+                "# Zoom\n\n"
+                "## Narrative\n\n"
+                "Keep the zoomable narrative.\n",
+            )
+            write_zoom_session_artifacts(site.root / "sessions")
+            recap_path = (
+                site.root
+                / "sessions"
+                / "test-campaign-007"
+                / "cleaned"
+                / "test-campaign-007-session-recap.md"
+            )
+            recap_text = recap_path.read_text(encoding="utf-8").replace(
+                "#### Intermediate\nMira steps through while Alden watches.\n\n",
+                "",
+            )
+            recap_path.write_text(recap_text, encoding="utf-8")
+            update_config(site.config_path, {"session_artifact_roots": ["sessions"]})
+            config = load_config(site.config_path)
+
+            export_site(config)
+            text = (site.docs / "zoom.md").read_text(encoding="utf-8")
+
+            self.assertIn("taelgar-session-zoom", text)
+            self.assertNotIn('data-set-session-zoom="intermediate"', text)
+            self.assertNotIn('data-zoom-level="intermediate"', text)
+            self.assertIn('data-set-session-zoom="short"', text)
+            self.assertIn('data-set-session-zoom="long"', text)
+            self.assertIn('data-set-session-zoom="transcript"', text)
+            self.assertEqual(recap_path.read_text(encoding="utf-8"), recap_text)
 
     def test_zoomable_transcript_collapse_respects_cap(self) -> None:
         collapsed = collapse_transcript_lines(

@@ -36,7 +36,7 @@ class RecapBlock:
     source_start_uid: str
     source_end_uid: str
     short: str
-    intermediate: str
+    intermediate: str | None
     long: str
     polished_transcript_path: Path | None = None
     image: "RecapImage | None" = None
@@ -217,7 +217,7 @@ def parse_recap_blocks(path: Path) -> list[RecapBlock]:
                 source_start_uid=start_uid,
                 source_end_uid=end_uid,
                 short=parse_required_subsection(block_lines, "#### Short", match.group("block_id")),
-                intermediate=parse_required_subsection(block_lines, "#### Intermediate", match.group("block_id")),
+                intermediate=parse_optional_subsection(block_lines, "#### Intermediate"),
                 long=parse_required_subsection(block_lines, "#### Long", match.group("block_id")),
                 polished_transcript_path=resolve_polished_transcript_path(
                     metadata.get("Polished Transcript"),
@@ -369,6 +369,10 @@ def render_zoom_html(
     warnings: list[str],
 ) -> str:
     transcript_src = base_path + transcript_asset_path.as_posix()
+    include_intermediate = all(block.intermediate is not None for block in recap_blocks)
+    available_levels = tuple(
+        level for level in LEVELS if level != "intermediate" or include_intermediate
+    )
     lines = [
         (
             f'<div class="taelgar-session-zoom" data-taelgar-session-zoom '
@@ -378,7 +382,7 @@ def render_zoom_html(
         '  <div class="taelgar-session-zoom__controls" aria-label="Session summary zoom level">',
         '    <div class="taelgar-session-zoom__button-group" role="group" aria-label="Zoom level">',
     ]
-    for level in LEVELS:
+    for level in available_levels:
         label = level.title() if level != "intermediate" else "Intermediate"
         lines.append(
             f'      <button type="button" data-set-session-zoom="{level}" '
@@ -411,11 +415,13 @@ def render_zoom_html(
                     f'data-session-zoom-key="{html.escape(session_key, quote=True)}" data-zoom="short">'
                 ),
                 render_level("short", block.short, link_map),
-                render_level(
-                    "intermediate",
-                    block.intermediate,
-                    link_map,
-                ),
+            ]
+        )
+        if include_intermediate:
+            assert block.intermediate is not None
+            lines.append(render_level("intermediate", block.intermediate, link_map))
+        lines.extend(
+            [
                 render_level("long", block.long, link_map, image_html=image_html, image_placement=placement),
                 (
                     f'  <div class="taelgar-session-zoom__level taelgar-session-zoom__transcript" '
@@ -749,6 +755,13 @@ def parse_required_subsection(lines: list[str], heading: str, block_id: str) -> 
     text = parse_subsection(lines, heading)
     if text is None or not text.strip():
         raise ValueError(f"{block_id} is missing {heading}")
+    return text.strip()
+
+
+def parse_optional_subsection(lines: list[str], heading: str) -> str | None:
+    text = parse_subsection(lines, heading)
+    if text is None or not text.strip():
+        return None
     return text.strip()
 
 

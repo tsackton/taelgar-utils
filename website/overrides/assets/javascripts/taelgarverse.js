@@ -60,9 +60,11 @@
     }
     root.dataset.taelgarSessionZoomInitialized = "true";
 
-    var levels = ["short", "intermediate", "long", "transcript"];
     var storageKey = "taelgar-session-zoom:" + window.location.pathname;
     var buttons = Array.prototype.slice.call(root.querySelectorAll("[data-set-session-zoom]"));
+    var levels = buttons.map(function (button) {
+      return button.dataset.setSessionZoom;
+    });
     decorateSessionHeadings(root);
 
     function setZoom(level) {

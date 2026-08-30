@@ -16,7 +16,7 @@ At each stage, load the next skill and follow its rules strictly:
 - [`../beat-annotator/SKILL.md`](../beat-annotator/SKILL.md)
 - [`../session-summary/SKILL.md`](../session-summary/SKILL.md)
 
-Prefer loading only the stage you are currently executing, not all four in full up front.
+Prefer loading only the stage you are currently executing, not every component in full up front.
 
 ## Required Inputs
 
@@ -40,6 +40,8 @@ Prefer these canonical downstream artifact paths in `cleaned/`:
 - `<bundle-stem>-beats-preview.md`
 - `<bundle-stem>-beat-facts.json`
 - `<bundle-stem>-beat-facts-preview.md`
+- `<bundle-stem>-recap-scenes.json`
+- `<bundle-stem>-recap-scenes-preview.md`
 - `<bundle-stem>-session-summary-context.json`
 - `<bundle-stem>-session-recap.md`
 
@@ -54,7 +56,7 @@ If the user does not specify a mode, default to `interactive`.
 
 ### `auto`
 
-- Run all four stages in order.
+- Run all stages in order.
 - After each stage, run the stage's deterministic validator or helper for a quick validation pass.
 - Make one narrow repair pass if the validator output is specific and easy to fix.
 - Do not pause for user confirmation between stages.
@@ -63,13 +65,26 @@ If the user does not specify a mode, default to `interactive`.
 
 ### `interactive`
 
-- Run all four stages in order.
-- After transcript cleanup, transcript splitting, and beat annotation:
+- Run all stages in order.
+- After transcript cleanup, transcript splitting, beat annotation, and recap-scene proposal:
   - run the validator
   - summarize the current artifact state and warnings
   - pause for user cleanup or confirmation before continuing
 - If the user edits an artifact during a checkpoint, reread it and rerun the validator before moving on.
 - Do not insert an extra checkpoint after `session-summary` unless the user explicitly asks for one.
+
+## Human-Edited Recap Boundary
+
+Validation and repair apply to the skill's own generated recap only, before its initial handoff to the user.
+
+Once the recap has been handed off and a human has edited, accepted, or deliberately removed any generated content or structure, the recap is human-owned:
+
+- do not run `manage_session_recap.py` against it
+- do not rebuild, normalize, or repair it because it would fail the generated-artifact schema
+- do not restore missing subsections, metadata, wording, or formatting
+- do not treat validation failure as evidence that a human edit is wrong
+
+A human-owned recap is allowed to fail the pipeline validator. Later skills may read it as authoritative input, but may change it only within the scope of a new explicit user request. Revalidate or repair it only when the user explicitly asks to revalidate, rebuild, or fix the recap.
 
 ## Shared Rules
 
@@ -80,6 +95,7 @@ If the user does not specify a mode, default to `interactive`.
 - If an artifact already exists, validate it before trusting it.
 - If an existing artifact validates cleanly and its upstream dependencies also exist in the current bundle, reuse it and skip regenerating that stage.
 - If an existing artifact fails validation, treat that stage as incomplete: repair or regenerate it, then continue forward.
+- The human-edited recap boundary above overrides these existing-artifact rules for `session_recap_md` after handoff.
 - Do not rerun completed stages just because this is a full-pipeline skill.
 - Keep filenames stable across the run so later stages point at the current validated outputs.
 
@@ -92,13 +108,16 @@ If the user does not specify a mode, default to `interactive`.
    - `cleaned_transcript = cleaned/<bundle-stem>-source-cleaned.md`
    - `beats_json = cleaned/<bundle-stem>-beats.json`
    - `beat_facts_json = cleaned/<bundle-stem>-beat-facts.json`
+   - `recap_scenes_json = cleaned/<bundle-stem>-recap-scenes.json`
    - `summary_context_json = cleaned/<bundle-stem>-session-summary-context.json`
    - `session_recap_md = cleaned/<bundle-stem>-session-recap.md`
 3. Check which stage outputs are already present in `cleaned/`.
 4. Validate and resume from the latest trustworthy stage instead of restarting automatically.
    Use this order:
-   - if `session_recap_md` and `summary_context_json` exist and `manage_session_recap.py` passes, the pipeline is already complete
-   - else if `beat_facts_json` exists and `manage_beat_facts.py` passes, resume at `session-summary`
+   - if `session_recap_md` and `summary_context_json` exist and the recap is still an untouched agent-generated artifact in the current pre-handoff run, validate it; if `manage_session_recap.py` passes, the pipeline is already complete
+   - if an existing recap predates the current run or has been handed off for human review, treat it as human-owned and do not validate or repair it without an explicit request
+   - else if `recap_scenes_json` exists and `manage_recap_scenes.py` passes, resume at `session-summary`
+   - else if `beat_facts_json` exists and `manage_beat_facts.py` passes, resume at recap-scene proposal
    - else if `beats_json` exists and `manage_beats.py` passes, resume at `beat-annotator`
    - else if `cleaned_transcript` exists and the upstream normalization/cleanup stage has already produced it, resume at `transcript-splitter`
    - else start at transcript cleanup for `sourceType=transcript`, or source normalization for `sourceType=narrative|raw_notes`
@@ -244,12 +263,72 @@ At the interactive checkpoint, provide:
 - any warnings or suspicious facts that merit human cleanup
 - a request for fact cleanup or confirmation
 
+## Stage 3.5: Recap Scene Proposal
+
+Beats are evidence and navigation units; they are not automatically recap scenes. Before building the summary context, propose a smaller set of contiguous scene groups that reflects the session's actual playable situations.
+
+Human guidance controls this stage:
+
+- If the user gives exact beat groupings, preserve them unless they fail ordered coverage validation.
+- If the user gives partial guidance, treat it as a constraint and propose the remaining boundaries around it.
+- If the user gives no guidance, infer scenes from continuity of location, situation, immediate goal, and active cast.
+- Do not target a fixed scene count or mechanically make one scene per beat.
+- Do not merge across a genuine change of situation merely to make the recap shorter.
+- Keep scene grouping independent from timeline grouping; one recap scene may cross a calendar-date boundary.
+
+Draft `cleaned/<bundle-stem>-recap-scenes.json` with this shape:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "scenes": [
+    {
+      "sceneId": "scene-001",
+      "title": "A short scene title",
+      "beatIds": ["beat-001", "beat-002"],
+      "rationale": "Why these adjacent beats form one playable situation."
+    }
+  ]
+}
+```
+
+Validate it and render the proposal preview:
+
+```bash
+python skills/session-summary/scripts/manage_recap_scenes.py \
+  --beats-json /path/to/cleaned/<bundle-stem>-beats.json \
+  --beat-facts-json /path/to/cleaned/<bundle-stem>-beat-facts.json \
+  --recap-scenes-json /path/to/cleaned/<bundle-stem>-recap-scenes.json \
+  --output-dir /path/to/cleaned \
+  --file-prefix <bundle-stem>
+```
+
+The validator requires every beat exactly once, in original order, divided into contiguous groups with stable sequential scene IDs.
+
+Mode handling:
+
+- `auto`: validate the proposal, make one narrow repair if needed, then continue without pausing.
+- `interactive`: show the compact scene-to-beat map and rationales, then stop for feedback before summary context generation. The scene map remains a proposal until the user approves it. If the user already supplied and confirmed an exact complete grouping, a redundant second approval pause is unnecessary; show a compact readback and continue.
+
+At the interactive checkpoint, provide:
+
+- the proposed scene count
+- each scene title and its beat IDs
+- a one-line rationale for any boundary that may be debatable
+- the path to `<bundle-stem>-recap-scenes-preview.md`
+- a direct request to approve or revise the scene grouping
+
 ## Stage 4: Session Summary
 
 Load `session-summary` before doing this stage.
 
-If both `summary_context_json` and `session_recap_md` already exist, run `manage_session_recap.py` first.
-If it validates cleanly, skip this stage and treat the bundle as already complete.
+Before drafting, search for one clearly matching human-written session note using the canonical campaign identity and session number. If it exists, read it fully and use it as a secondary guide for summary style, emphasis, established naming, and notable details. Do not let it override the cleaned source, finalized beats, or beat facts; ignore stale dates or unsupported claims, and do not edit the written note during this pipeline stage.
+
+The timeline output has only the compact `Short` view. Exact multi-day beats must be expanded into separate calendar-day entries before drafting. Strongly prefer daily entries: an overnight rest followed by next-day travel or arrival must never remain one date-range entry.
+
+The recap scaffold includes optional human-owned `Arc` and `Table Notes` header fields. Leave both as `none` unless the user explicitly supplies their values. Do not infer them from the transcript, beat facts, or a written session note; surface them at handoff as fields the user may fill in.
+
+If both `summary_context_json` and `session_recap_md` already exist, first apply the human-edited recap boundary above. Run `manage_session_recap.py` only when the recap is still an untouched agent-generated artifact in the current pre-handoff run. If it validates cleanly, skip this stage and treat the bundle as already complete. Otherwise, leave a human-owned recap unchanged unless the user explicitly requested rebuilding or validation.
 
 Otherwise, build the deterministic context:
 
@@ -258,6 +337,7 @@ python skills/session-summary/scripts/build_session_summary_context.py \
   --session /path/to/cleaned/<bundle-stem>-session.yaml \
   --beats-json /path/to/cleaned/<bundle-stem>-beats.json \
   --beat-facts-json /path/to/cleaned/<bundle-stem>-beat-facts.json \
+  --recap-scenes-json /path/to/cleaned/<bundle-stem>-recap-scenes.json \
   --output-dir /path/to/cleaned \
   --file-prefix <bundle-stem>
 ```
@@ -285,6 +365,7 @@ Quick-pass validation focus:
 - no remaining `TODO` placeholders
 - Session Header title, tagline, summary, DM, and PCs are filled correctly
 - recap/timeline/combat block ordering preserved
+- no timeline `Long` subsections or exact multi-day timeline blocks remain
 
 This stage completes the skill.
 Do not add an automatic pause after it in `interactive` mode unless the user asked for one.
@@ -296,6 +377,7 @@ The run is complete when these files exist and pass their stage validations:
 - `cleaned/<bundle-stem>-source-cleaned.md`
 - `cleaned/<bundle-stem>-beats.json`
 - `cleaned/<bundle-stem>-beat-facts.json`
+- `cleaned/<bundle-stem>-recap-scenes.json`
 - `cleaned/<bundle-stem>-session-summary-context.json`
 - `cleaned/<bundle-stem>-session-recap.md`
 

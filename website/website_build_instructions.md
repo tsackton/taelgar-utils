@@ -146,6 +146,10 @@ uses `session_artifact_roots` to locate the matching reviewed
 Range, writes transcript data under `assets/session-zoom/`, and replaces only
 the published `## Narrative` section. The generated scene titles are normal
 Markdown headings so MkDocs Material can provide the page table of contents.
+If a human-owned recap omits `#### Intermediate` from any recap block, the
+website view omits the Intermediate zoom level for that session; it does not
+restore the missing prose or disable the remaining Short, Long, and Transcript
+views.
 
 ### Links, Code Blocks, And Assets
 

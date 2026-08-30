@@ -167,7 +167,8 @@ def validate_timeline_blocks(context: Dict[str, Any], lines: Sequence[str], erro
         block_lines = timeline_lines[start:end]
         validate_timeline_heading_and_key(block_lines, context_blocks[block_id], errors)
         validate_subsection(block_lines, "#### Short", f"timeline {block_id}", errors)
-        validate_subsection(block_lines, "#### Long", f"timeline {block_id}", errors)
+        if any(line.strip() == "#### Long" for line in block_lines):
+            errors.append(f"timeline {block_id} must not include subsection #### Long.")
 
 
 def validate_recap_blocks(context: Dict[str, Any], lines: Sequence[str], errors: List[str]) -> None:
@@ -236,6 +237,10 @@ def validate_context_ordered_subset(
 
 
 def validate_timeline_heading_and_key(lines: Sequence[str], context_block: Dict[str, Any], errors: List[str]) -> None:
+    date_start = normalize_optional_string(context_block.get("dateStart"))
+    date_end = normalize_optional_string(context_block.get("dateEnd"))
+    if date_start is not None and date_end is not None and date_end != date_start:
+        errors.append(f"timeline {context_block['blockId']} spans multiple calendar dates; split it into daily blocks.")
     heading = next((line.strip() for line in lines if line.startswith("### ")), None)
     expected_heading = f"### {format_display_date_span(context_block.get('dateStart'), context_block.get('dateEnd'))}{format_time_window(context_block.get('timeWindow'))}"
     if heading != expected_heading:

@@ -114,12 +114,14 @@ def render_session_header(
         f"- Tagline: TODO",
         f"- One-Sentence Summary: TODO",
         f"- Campaign: {render_scalar(session.get('campaign'))}",
+        f"- Arc: none",
         f"- Scope: {scope}",
         f"- Session Number: {render_scalar(session.get('sessionNumber'))}",
         f"- DR Date: {format_date_span(normalize_optional_string(session.get('drStart')), normalize_optional_string(session.get('drEnd')))}",
         f"- Real Date: {render_scalar(session.get('realWorldDate'))}",
         f"- DM: {render_scalar(dm_name)}",
         f"- PCs: {', '.join(players) if players else 'none'}",
+        f"- Table Notes: none",
         "",
     ]
 
@@ -143,9 +145,6 @@ def render_timeline(blocks: Sequence[Dict[str, Any]]) -> List[str]:
         lines.append("")
         lines.append("#### Short")
         lines.append(f"TODO: {format_display_date_span(block.get('dateStart'), block.get('dateEnd'))}{format_time_window_csv(block.get('timeWindow'))}: one short event-log line.")
-        lines.append("")
-        lines.append("#### Long")
-        lines.append("TODO: one or two tighter event-log sentences covering the whole segment.")
         lines.append("")
     return lines
 

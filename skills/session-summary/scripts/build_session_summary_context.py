@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
+from manage_recap_scenes import scene_groups, validate_recap_scenes
+
 
 VALID_TIME_WINDOWS = {"dawn", "morning", "midday", "afternoon", "evening", "night"}
 
@@ -21,6 +23,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--session", type=Path, required=True, help="session.yaml path.")
     parser.add_argument("--beats-json", type=Path, required=True, help="Beat JSON path.")
     parser.add_argument("--beat-facts-json", type=Path, required=True, help="Beat-facts JSON path.")
+    parser.add_argument(
+        "--recap-scenes-json",
+        type=Path,
+        help="Optional approved recap-scenes JSON path. When present, it controls recap block boundaries.",
+    )
     parser.add_argument("--output-dir", type=Path, required=True, help="Directory for session-summary context artifacts.")
     parser.add_argument(
         "--file-prefix",
@@ -43,16 +50,22 @@ def main() -> int:
     session_path = args.session.expanduser().resolve()
     beats_path = args.beats_json.expanduser().resolve()
     beat_facts_path = args.beat_facts_json.expanduser().resolve()
+    recap_scenes_path = args.recap_scenes_json.expanduser().resolve() if args.recap_scenes_json else None
 
     assert_not_in_sources_dir(session_path, "--session")
     assert_not_in_sources_dir(beats_path, "--beats-json")
     assert_not_in_sources_dir(beat_facts_path, "--beat-facts-json")
+    if recap_scenes_path is not None:
+        assert_not_in_sources_dir(recap_scenes_path, "--recap-scenes-json")
 
     session_payload = read_yaml_mapping(session_path)
     beats = parse_beats_payload(read_json_mapping(beats_path))
     facts = parse_beat_facts_payload(read_json_mapping(beat_facts_path))
+    recap_scenes_payload = read_json_mapping(recap_scenes_path) if recap_scenes_path is not None else None
 
     errors = validate_alignment(beats, facts)
+    if recap_scenes_payload is not None:
+        errors.extend(validate_recap_scenes(recap_scenes_payload, beats, facts))
     if errors:
         for error in errors:
             print(f"ERROR: {error}")
@@ -62,9 +75,11 @@ def main() -> int:
         session_path=session_path,
         beats_path=beats_path,
         beat_facts_path=beat_facts_path,
+        recap_scenes_path=recap_scenes_path,
         session_payload=session_payload,
         beats=beats,
         facts=facts,
+        recap_scenes=scene_groups(recap_scenes_payload) if recap_scenes_payload is not None else None,
     )
 
     context_json_path = output_dir / f"{file_prefix}-session-summary-context.json"
@@ -156,12 +171,15 @@ def build_context_payload(
     session_path: Path,
     beats_path: Path,
     beat_facts_path: Path,
+    recap_scenes_path: Optional[Path],
     session_payload: Dict[str, Any],
     beats: Sequence[Dict[str, Any]],
     facts: Sequence[Dict[str, Any]],
+    recap_scenes: Optional[Sequence[Dict[str, Any]]],
 ) -> Dict[str, Any]:
     combined = [combine_beat_and_fact(beat, fact) for beat, fact in zip(beats, facts)]
-    return {
+    recap_blocks = build_recap_blocks(combined, recap_scenes)
+    payload = {
         "schemaVersion": "1.0",
         "sessionPath": str(session_path),
         "beatsPath": str(beats_path),
@@ -175,10 +193,13 @@ def build_context_payload(
             "drEnd": normalize_optional_string(session_payload.get("drEnd")),
         },
         "timelineBlocks": build_timeline_blocks(expand_timeline_entries(combined)),
-        "recapBlocks": build_recap_blocks(combined),
-        "recapExtrasCandidates": build_recap_extras_candidates(combined),
+        "recapBlocks": recap_blocks,
+        "recapExtrasCandidates": build_recap_extras_candidates(combined, recap_blocks),
         "worldCandidates": build_world_candidates(combined),
     }
+    if recap_scenes_path is not None:
+        payload["recapScenesPath"] = str(recap_scenes_path)
+    return payload
 
 
 def combine_beat_and_fact(beat: Dict[str, Any], fact: Dict[str, Any]) -> Dict[str, Any]:
@@ -241,7 +262,49 @@ def expand_timeline_entries(combined: Sequence[Dict[str, Any]]) -> List[Dict[str
                     [[normalize_optional_string(value)] for value in combat_beat_ids]
                 )
             timeline_entries.append(expanded)
-    return timeline_entries
+    return split_multi_day_timeline_entries(timeline_entries)
+
+
+def split_multi_day_timeline_entries(entries: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Expand exact multi-day entries into one timeline entry per calendar day."""
+    split_entries: List[Dict[str, Any]] = []
+    for entry in entries:
+        date_start = normalize_optional_string(entry.get("dateStart"))
+        date_end = normalize_optional_string(entry.get("dateEnd"))
+        if date_start is None or date_end is None or date_start == date_end:
+            split_entries.append(entry)
+            continue
+
+        try:
+            first_day = date.fromisoformat(date_start)
+            last_day = date.fromisoformat(date_end)
+        except ValueError:
+            split_entries.append(entry)
+            continue
+        if last_day < first_day:
+            split_entries.append(entry)
+            continue
+
+        day_count = (last_day - first_day).days + 1
+        for day_index in range(day_count):
+            current_day = first_day + timedelta(days=day_index)
+            daily_entry = dict(entry)
+            base_id = normalize_optional_string(entry.get("timelineEntryId")) or entry["beatId"]
+            daily_entry["timelineEntryId"] = f"{base_id}:day-{day_index + 1:03d}"
+            daily_entry["timelineBoundary"] = True
+            daily_entry["sourceDateStart"] = date_start
+            daily_entry["sourceDateEnd"] = date_end
+            daily_entry["dateStart"] = current_day.isoformat()
+            daily_entry["dateEnd"] = None
+            daily_entry["timeWindow"] = None
+            if day_index == 0:
+                daily_entry["timelineDayPosition"] = "start"
+            elif day_index == day_count - 1:
+                daily_entry["timelineDayPosition"] = "end"
+            else:
+                daily_entry["timelineDayPosition"] = "middle"
+            split_entries.append(daily_entry)
+    return split_entries
 
 
 def build_timeline_blocks(combined: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -299,7 +362,19 @@ def make_timeline_block(index: int, entries: Sequence[Dict[str, Any]]) -> Dict[s
     }
 
 
-def build_recap_blocks(combined: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def build_recap_blocks(
+    combined: Sequence[Dict[str, Any]],
+    recap_scenes: Optional[Sequence[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    if recap_scenes is not None:
+        entries_by_id = {entry["beatId"]: entry for entry in combined}
+        blocks: List[Dict[str, Any]] = []
+        for index, scene in enumerate(recap_scenes, start=1):
+            entries = [entries_by_id[beat_id] for beat_id in scene["beatIds"]]
+            kind = "combat" if any(entry["combat"].get("isCombat") for entry in entries) else "beat"
+            blocks.append(make_recap_block(index, kind, entries, title=scene["title"]))
+        return blocks
+
     blocks: List[Dict[str, Any]] = []
     index = 1
     position = 0
@@ -332,13 +407,19 @@ def combat_phase(entry: Dict[str, Any]) -> Optional[str]:
     return normalize_optional_string(entry.get("combat", {}).get("phase"))
 
 
-def make_recap_block(index: int, kind: str, entries: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def make_recap_block(
+    index: int,
+    kind: str,
+    entries: Sequence[Dict[str, Any]],
+    *,
+    title: Optional[str] = None,
+) -> Dict[str, Any]:
     first = entries[0]
     last = entries[-1]
     return {
         "blockId": f"recap-{index:03d}",
         "kind": kind,
-        "title": first["title"] if len(entries) == 1 else f"{first['title']} to {last['title']}",
+        "title": title or (first["title"] if len(entries) == 1 else f"{first['title']} to {last['title']}"),
         "beatIds": [entry["beatId"] for entry in entries],
         "sourceRange": {
             "startUid": first["sourceRange"]["startUid"],
@@ -365,9 +446,13 @@ def make_recap_block(index: int, kind: str, entries: Sequence[Dict[str, Any]]) -
     }
 
 
-def build_recap_extras_candidates(combined: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def build_recap_extras_candidates(
+    combined: Sequence[Dict[str, Any]],
+    recap_blocks: Optional[Sequence[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     world_candidates = build_world_candidates(combined)
-    combat_blocks = [block for block in build_recap_blocks(combined) if block["kind"] == "combat"]
+    candidate_blocks = list(recap_blocks) if recap_blocks is not None else build_recap_blocks(combined)
+    combat_blocks = [block for block in candidate_blocks if block["kind"] == "combat"]
     return {
         "cast": [
             {"name": entry["name"], "beatIds": entry["beatIds"], "relationKinds": entry["relationKinds"]}
@@ -568,6 +653,15 @@ def build_source_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
         "shortSummary": entry["shortSummary"],
         "longSummary": entry["longSummary"],
     }
+
+    source_date_start = normalize_optional_string(entry.get("sourceDateStart"))
+    source_date_end = normalize_optional_string(entry.get("sourceDateEnd"))
+    if source_date_start is not None and source_date_end is not None:
+        source_entry["sourceDateSpan"] = {
+            "dateStart": source_date_start,
+            "dateEnd": source_date_end,
+            "dayPosition": entry.get("timelineDayPosition"),
+        }
 
     location_hints = compact_location_hints(entry)
     if location_hints:
