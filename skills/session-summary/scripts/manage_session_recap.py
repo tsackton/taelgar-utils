@@ -33,6 +33,12 @@ RECAP_META_OPENERS = (
     r"^this beat\b",
     r"^this section\b",
 )
+IMAGE_ROLES = {"aside", "figure", "hero"}
+IMAGE_SIZES = {"small", "standard", "large"}
+IMAGE_PLACEMENTS = {"start", "before", "top", "beginning", "end", "after", "bottom"}
+IMAGE_METADATA_RE = re.compile(
+    r"^Image(?: (?P<number>[1-9]\d*))?(?: (?P<field>Role|Size|Placement|Render|Caption|Alt))?$"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -191,6 +197,72 @@ def validate_recap_blocks(context: Dict[str, Any], lines: Sequence[str], errors:
             validate_recap_prose(intermediate_text, f"recap {block_id} #### Intermediate", errors)
         if long_text:
             validate_recap_prose(long_text, f"recap {block_id} #### Long", errors)
+        validate_recap_images(block_lines, block_id, errors)
+
+
+def validate_recap_images(lines: Sequence[str], block_id: str, errors: List[str]) -> None:
+    fields_by_number: Dict[int, Dict[str, str]] = {}
+    target_keys: Dict[int, str] = {}
+    saw_base_image = False
+    saw_image_one = False
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if not stripped.startswith("- Image") or ":" not in stripped:
+            continue
+        key, value = stripped[2:].split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        match = IMAGE_METADATA_RE.fullmatch(key)
+        if match is None:
+            errors.append(f"recap {block_id} has unsupported image metadata field '{key}'.")
+            continue
+        number_text = match.group("number")
+        number = int(number_text) if number_text else 1
+        field = match.group("field") or "Target"
+        fields_by_number.setdefault(number, {})[field] = value
+        if field == "Target":
+            target_keys[number] = key
+            saw_base_image = saw_base_image or key == "Image"
+            saw_image_one = saw_image_one or key == "Image 1"
+
+    if saw_base_image and saw_image_one:
+        errors.append(f"recap {block_id} must use either Image or Image 1 for the first image, not both.")
+
+    populated_numbers: List[int] = []
+    for number, fields in sorted(fields_by_number.items()):
+        label = target_keys.get(number, "Image" if number == 1 else f"Image {number}")
+        target = normalize_optional_string(fields.get("Target"))
+        companion_values = [normalize_optional_string(fields.get(field)) for field in ("Role", "Size", "Placement", "Render", "Caption", "Alt")]
+        if target is None or target.casefold() == "none":
+            if any(value is not None for value in companion_values):
+                errors.append(f"recap {block_id} has {label} metadata but no image target.")
+            continue
+        populated_numbers.append(number)
+
+        role = (normalize_optional_string(fields.get("Role")) or "").casefold()
+        size = (normalize_optional_string(fields.get("Size")) or "").casefold()
+        placement = (normalize_optional_string(fields.get("Placement")) or "").casefold()
+        if role and role not in IMAGE_ROLES:
+            errors.append(
+                f"recap {block_id} {label} Role must be one of: {', '.join(sorted(IMAGE_ROLES))}."
+            )
+        if size and size not in IMAGE_SIZES:
+            errors.append(
+                f"recap {block_id} {label} Size must be one of: {', '.join(sorted(IMAGE_SIZES))}."
+            )
+        if placement and placement not in IMAGE_PLACEMENTS:
+            errors.append(
+                f"recap {block_id} {label} Placement must be start or end. "
+                "Legacy aliases before, top, beginning, after, and bottom are also accepted."
+            )
+        if size and not role:
+            errors.append(f"recap {block_id} {label} Size requires an Image Role.")
+
+    if populated_numbers:
+        expected_numbers = list(range(1, max(populated_numbers) + 1))
+        if populated_numbers != expected_numbers:
+            errors.append(f"recap {block_id} image numbers must be contiguous starting at 1.")
 
 
 def validate_combat_blocks(context: Dict[str, Any], lines: Sequence[str], errors: List[str]) -> None:

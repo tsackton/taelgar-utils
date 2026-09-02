@@ -362,9 +362,12 @@ class BuildSessionRecapTest(SessionRecapBase):
         self.assertIn("### recap-001 | Into the Labyrinth", recap_text)
         self.assertIn(
             "- Image:\n"
+            "- Image Role:\n"
+            "- Image Size:\n"
             "- Image Placement:\n"
             "- Image Render:\n"
-            "- Image Caption:",
+            "- Image Caption:\n"
+            "- Image Alt:",
             recap_text,
         )
         self.assertIn("#### Intermediate", recap_text)
@@ -654,9 +657,12 @@ class ManageSessionRecapTest(SessionRecapBase):
             "- Items: heating rune\n"
             "- Enemies: none\n"
             "- Image:\n"
+            "- Image Role:\n"
+            "- Image Size:\n"
             "- Image Placement:\n"
             "- Image Render:\n"
             "- Image Caption:\n"
+            "- Image Alt:\n"
             "\n"
             "#### Short\n"
             "Drafted text.\n"
@@ -692,6 +698,94 @@ class ManageSessionRecapTest(SessionRecapBase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Recap block recap-999 is not present in context.", result.stdout)
+
+    def test_semantic_and_numbered_recap_images_validate(self) -> None:
+        workspace = self.make_workspace()
+        result = self.run_context_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = self.run_recap_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        recap_path = workspace / "recap" / "test-session-007-session-recap.md"
+        recap_text = recap_path.read_text(encoding="utf-8").replace("TODO", "Drafted text.")
+        recap_text = recap_text.replace("- Tagline: Drafted text.", "- Tagline: in which the party descends.")
+        recap_text = recap_text.replace(
+            "- Image:\n"
+            "- Image Role:\n"
+            "- Image Size:\n"
+            "- Image Placement:\n"
+            "- Image Render:\n"
+            "- Image Caption:\n"
+            "- Image Alt:\n",
+            "- Image: first.png\n"
+            "- Image Role: figure\n"
+            "- Image Size: standard\n"
+            "- Image Placement: end\n"
+            "- Image Render:\n"
+            "- Image Caption: First view\n"
+            "- Image Alt: A stone doorway\n"
+            "- Image 2: second.png\n"
+            "- Image 2 Role: figure\n"
+            "- Image 2 Size: large\n"
+            "- Image 2 Placement: end\n"
+            "- Image 2 Render:\n"
+            "- Image 2 Caption: Second view\n"
+            "- Image 2 Alt:\n",
+            1,
+        )
+        recap_path.write_text(recap_text, encoding="utf-8")
+
+        result = self.run_recap_validator(workspace)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_invalid_recap_image_vocabulary_fails_validation(self) -> None:
+        workspace = self.make_workspace()
+        result = self.run_context_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = self.run_recap_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        recap_path = workspace / "recap" / "test-session-007-session-recap.md"
+        recap_text = recap_path.read_text(encoding="utf-8").replace("TODO", "Drafted text.")
+        recap_text = recap_text.replace("- Tagline: Drafted text.", "- Tagline: in which the party descends.")
+        recap_text = recap_text.replace(
+            "- Image:\n"
+            "- Image Role:\n"
+            "- Image Size:\n"
+            "- Image Placement:\n",
+            "- Image: portrait.png\n"
+            "- Image Role: portrait\n"
+            "- Image Size: thumbnail\n"
+            "- Image Placement: middle\n",
+            1,
+        )
+        recap_path.write_text(recap_text, encoding="utf-8")
+
+        result = self.run_recap_validator(workspace)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Image Role must be one of: aside, figure, hero.", result.stdout)
+        self.assertIn("Image Size must be one of: large, small, standard.", result.stdout)
+        self.assertIn("Image Placement must be start or end.", result.stdout)
+
+    def test_legacy_image_placement_alias_passes_validation(self) -> None:
+        workspace = self.make_workspace()
+        result = self.run_context_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = self.run_recap_builder(workspace)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        recap_path = workspace / "recap" / "test-session-007-session-recap.md"
+        recap_text = recap_path.read_text(encoding="utf-8").replace("TODO", "Drafted text.")
+        recap_text = recap_text.replace("- Tagline: Drafted text.", "- Tagline: in which the party descends.")
+        recap_text = recap_text.replace("- Image:\n", "- Image: old-scene.jpg\n", 1)
+        recap_text = recap_text.replace("- Image Placement:\n", "- Image Placement: beginning\n", 1)
+        recap_path.write_text(recap_text, encoding="utf-8")
+
+        result = self.run_recap_validator(workspace)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_unfilled_title_fails_validation(self) -> None:
         workspace = self.make_workspace()
@@ -750,9 +844,12 @@ class ManageSessionRecapTest(SessionRecapBase):
             "- Items: Romil's token\n"
             "- Enemies: none\n"
             "- Image:\n"
+            "- Image Role:\n"
+            "- Image Size:\n"
             "- Image Placement:\n"
             "- Image Render:\n"
             "- Image Caption:\n"
+            "- Image Alt:\n"
             "\n"
             "#### Short\n"
             "Drafted text.\n"
@@ -775,9 +872,12 @@ class ManageSessionRecapTest(SessionRecapBase):
             "- Items: Romil's token\n"
             "- Enemies: none\n"
             "- Image:\n"
+            "- Image Role:\n"
+            "- Image Size:\n"
             "- Image Placement:\n"
             "- Image Render:\n"
             "- Image Caption:\n"
+            "- Image Alt:\n"
             "\n"
             "#### Short\n"
             "Drafted text.\n"

@@ -4,6 +4,15 @@
   max-width: 1440px; 
 }
 
+.md-typeset {
+  --taelgar-aside-small: 12.5rem;
+  --taelgar-aside-standard: 20rem;
+  --taelgar-aside-large: 26rem;
+  --taelgar-figure-small: 24rem;
+  --taelgar-figure-standard: 36rem;
+  --taelgar-figure-large: 48rem;
+}
+
 /* summary boxes */
 .md-typeset .ext-one-column {
   grid-template-columns: 1fr;
@@ -180,6 +189,97 @@
   margin: 0.15rem 0 0.55rem 1rem;
 }
 
+/* Semantic image roles. Legacy session images continue to use the rules above. */
+.md-typeset .taelgar-image--aside {
+  clear: right;
+  float: right;
+  margin: 0.15rem 0 0.75rem 1rem;
+  max-width: 45%;
+  width: var(--taelgar-aside-standard, 20rem);
+}
+
+.md-typeset .taelgar-image--aside.taelgar-image--align-left {
+  clear: left;
+  float: left;
+  margin-left: 0;
+  margin-right: 1rem;
+}
+
+.md-typeset .taelgar-image--aside.taelgar-image--size-small {
+  width: var(--taelgar-aside-small, 12.5rem);
+}
+
+.md-typeset .taelgar-image--aside.taelgar-image--size-large {
+  width: var(--taelgar-aside-large, 26rem);
+}
+
+.md-typeset .taelgar-image--figure {
+  float: none;
+  margin: 1rem auto 0.85rem;
+  max-width: 100%;
+  width: var(--taelgar-figure-standard, 36rem);
+}
+
+.md-typeset .taelgar-image--figure.taelgar-image--size-small {
+  width: var(--taelgar-figure-small, 24rem);
+}
+
+.md-typeset .taelgar-image--figure.taelgar-image--size-large {
+  width: var(--taelgar-figure-large, 48rem);
+}
+
+.md-typeset .taelgar-image--hero {
+  float: none;
+  margin: 1.15rem auto 1rem;
+  max-width: 100%;
+  width: 100%;
+}
+
+.md-typeset .taelgar-image-gallery {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+  margin: 1rem 0;
+  width: 100%;
+}
+
+.md-typeset .taelgar-image-gallery .taelgar-image-gallery__item {
+  margin: 0;
+  max-width: none;
+  width: 100%;
+}
+
+/* Generic-note galleries use an Obsidian callout containing a Markdown list. */
+.md-typeset .admonition.gallery {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.md-typeset .admonition.gallery > .admonition-title {
+  display: none;
+}
+
+.md-typeset .admonition.gallery > ul {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.md-typeset .admonition.gallery > ul > li {
+  margin: 0;
+}
+
+.md-typeset .admonition.gallery img {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
 .md-typeset .taelgar-session-zoom__beat[data-zoom="short"] .taelgar-session-zoom__level:not([data-zoom-level="short"]),
 .md-typeset .taelgar-session-zoom__beat[data-zoom="intermediate"] .taelgar-session-zoom__level:not([data-zoom-level="intermediate"]),
 .md-typeset .taelgar-session-zoom__beat[data-zoom="long"] .taelgar-session-zoom__level:not([data-zoom-level="long"]),
@@ -236,9 +336,12 @@
   }
 
   .md-typeset .taelgar-session-zoom__image--left,
-  .md-typeset .taelgar-session-zoom__image--right {
+  .md-typeset .taelgar-session-zoom__image--right,
+  .md-typeset .taelgar-image--aside,
+  .md-typeset .taelgar-image--aside.taelgar-image--align-left {
     float: none;
     margin: 0.1rem auto 0.85rem;
+    max-width: 100%;
   }
 
   .md-typeset .taelgar-session-zoom__transcript-line {

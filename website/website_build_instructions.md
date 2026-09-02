@@ -151,6 +151,33 @@ website view omits the Intermediate zoom level for that session; it does not
 restore the missing prose or disable the remaining Short, Long, and Transcript
 views.
 
+Optional recap image metadata uses the same semantic vocabulary as Obsidian:
+
+```markdown
+- Image: scene-art.jpg
+- Image Role: aside
+- Image Size: standard
+- Image Placement:
+- Image Render:
+- Image Caption: Visible caption text
+- Image Alt: Concise visual description
+```
+
+`aside` is a supporting image that defaults to the right at the start of its
+scene, `figure` is a centered illustration that defaults to the end, and `hero`
+is a full-narrative-width image that defaults to the end. Named sizes are
+`small`, `standard`, and `large`; a numeric `Image Render` value remains an
+escape hatch. Add further images with contiguous field sets beginning with
+`Image 2`, `Image 2 Role`, and so on. Consecutive figures at the same placement
+render as a gallery. Session images appear only in the Long zoom level.
+
+Generic notes keep source-position placement and can opt into the same defaults
+with callouts such as `[!image|right small]`, `[!image|figure large]`, and
+`[!image|hero]`. A `[!gallery]` callout containing a Markdown list of image
+embeds creates a responsive gallery. Direct embeds such as
+`![[portrait.png|right|small]]` also support named sizes. Existing bare
+`left`/`right` callouts and numeric embeds remain on the legacy path.
+
 ### Links, Code Blocks, And Assets
 
 | Key | Type | Default | Description |

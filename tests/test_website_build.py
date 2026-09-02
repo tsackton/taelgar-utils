@@ -175,7 +175,18 @@ class WebsiteBuildTests(unittest.TestCase):
                 "> [!image|left]\n"
                 "> ![[pic.png]]\n\n"
                 "> [!image|right]\n"
-                "> ![[pic.png]]\n",
+                "> ![[pic.png]]\n\n"
+                "> [!image|right small]\n"
+                "> ![[pic.png]]\n\n"
+                "> [!image|figure large]\n"
+                "> ![[pic.png]]\n\n"
+                "> [!image|hero]\n"
+                "> ![[pic.png]]\n\n"
+                "> [!gallery]\n"
+                "> - ![[pic.png]]\n"
+                "> - ![[pic.png]]\n\n"
+                "![[pic.png|right|small]]\n"
+                "![[pic.png|right|400]]\n",
             )
             (site.source / "pic.png").write_bytes(b"fake image bytes")
 
@@ -187,6 +198,13 @@ class WebsiteBuildTests(unittest.TestCase):
             self.assertIn('!!! image " "', text)
             self.assertIn('!!! image inline " "', text)
             self.assertIn('!!! image inline end " "', text)
+            self.assertIn("taelgar-image--size-small", text)
+            self.assertIn("taelgar-image--figure", text)
+            self.assertIn("taelgar-image--size-large", text)
+            self.assertIn("taelgar-image--hero", text)
+            self.assertIn('!!! gallery " "', text)
+            self.assertIn('align="right"; class="taelgar-image taelgar-image--aside taelgar-image--align-right taelgar-image--size-small"', text)
+            self.assertIn('align="right"; width="400"', text)
             self.assertNotIn("[!quote]", text)
             self.assertNotIn("[!image]", text)
 
@@ -455,6 +473,82 @@ class WebsiteBuildTests(unittest.TestCase):
             export_site(config)
 
             self.assertFalse(transcript_path.exists())
+
+    def test_zoomable_session_renders_semantic_roles_sizes_and_gallery(self) -> None:
+        with fixture_site() as site:
+            write_note(
+                site.source / "Zoom.md",
+                "---\n"
+                "name: Zoom\n"
+                "sessionKey: test-campaign-session-7\n"
+                "websiteSessionView: zoomable\n"
+                "---\n"
+                "# Zoom\n\n"
+                "## Narrative\n\n"
+                "Replace this narrative.\n",
+            )
+            write_zoom_session_artifacts(site.root / "sessions")
+            (site.source / "opening-door.png").write_bytes(b"opening image")
+            (site.source / "closing-door.png").write_bytes(b"closing image")
+            (site.source / "second-opening.png").write_bytes(b"second opening image")
+            recap_path = (
+                site.root
+                / "sessions"
+                / "test-campaign-007"
+                / "cleaned"
+                / "test-campaign-007-session-recap.md"
+            )
+            recap_text = recap_path.read_text(encoding="utf-8")
+            recap_text = recap_text.replace(
+                "- Image: opening-door.png\n"
+                "- Image Placement: start\n"
+                "- Image Render: right|400\n"
+                "- Image Caption: Alden turns the [[Glass Key|key]]\n",
+                "- Image: opening-door.png\n"
+                "- Image Role: figure\n"
+                "- Image Size: small\n"
+                "- Image Placement:\n"
+                "- Image Render:\n"
+                "- Image Caption: Alden turns the [[Glass Key|key]]\n"
+                "- Image Alt: Alden opens the glass door\n"
+                "- Image 2: second-opening.png\n"
+                "- Image 2 Role: figure\n"
+                "- Image 2 Size: large\n"
+                "- Image 2 Placement: end\n"
+                "- Image 2 Render:\n"
+                "- Image 2 Caption: Mira watches the second door\n"
+                "- Image 2 Alt:\n",
+            )
+            recap_text = recap_text.replace(
+                "- Image: closing-door.png\n"
+                "- Image Placement: end\n"
+                "- Image Render: left|240\n"
+                "- Image Caption: Mira waits with [[Alden]]\n",
+                "- Image: closing-door.png\n"
+                "- Image Role: hero\n"
+                "- Image Size:\n"
+                "- Image Placement:\n"
+                "- Image Render:\n"
+                "- Image Caption: Mira waits with [[Alden]]\n"
+                "- Image Alt:\n",
+            )
+            recap_path.write_text(recap_text, encoding="utf-8")
+            update_config(site.config_path, {"session_artifact_roots": ["sessions"]})
+            config = load_config(site.config_path)
+
+            export_site(config)
+            text = (site.docs / "zoom.md").read_text(encoding="utf-8")
+
+            self.assertIn('class="taelgar-image-gallery taelgar-session-zoom__gallery"', text)
+            self.assertIn('data-image-count="2"', text)
+            self.assertEqual(text.count("taelgar-image-gallery__item"), 2)
+            self.assertIn("taelgar-image--figure taelgar-image--size-small", text)
+            self.assertIn("taelgar-image--figure taelgar-image--size-large", text)
+            self.assertIn("taelgar-image--hero taelgar-image--size-standard", text)
+            self.assertIn('alt="Alden opens the glass door"', text)
+            self.assertGreater(text.index("taelgar-image-gallery"), text.index("opens the door while Mira waits"))
+            self.assertGreater(text.index("taelgar-image--hero"), text.index("Mira steps through the doorway"))
+            self.assertTrue((site.docs / "second-opening.png").exists())
 
     def test_zoomable_session_omits_intermediate_when_any_recap_block_lacks_it(self) -> None:
         with fixture_site() as site:

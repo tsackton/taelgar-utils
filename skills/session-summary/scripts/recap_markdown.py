@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+IMAGE_FIELDS = ("Role", "Size", "Placement", "Render", "Caption", "Alt")
+
 
 class SessionRecapParseError(Exception):
     def __init__(self, errors: Sequence[str]) -> None:
@@ -166,6 +168,7 @@ def parse_recap_section(lines: Sequence[str], errors: List[str]) -> List[Dict[st
                 "organizations": parse_name_list(data.get("Organizations")),
                 "items": parse_name_list(data.get("Items")),
                 "enemies": parse_name_list(data.get("Enemies")),
+                "images": parse_recap_images(data),
                 "short": parse_required_subsection(block_lines, "#### Short", f"recap {match.group('block_id')}", errors),
                 "intermediate": parse_required_subsection(
                     block_lines,
@@ -177,6 +180,29 @@ def parse_recap_section(lines: Sequence[str], errors: List[str]) -> List[Dict[st
             }
         )
     return parsed
+
+
+def parse_recap_images(data: Dict[str, str]) -> List[Dict[str, str]]:
+    image_numbers: set[int] = set()
+    if "Image" in data or "Image 1" in data:
+        image_numbers.add(1)
+    for key in data:
+        match = re.fullmatch(r"Image (\d+)", key)
+        if match:
+            image_numbers.add(int(match.group(1)))
+
+    images: List[Dict[str, str]] = []
+    for number in sorted(image_numbers):
+        image_key = "Image" if number == 1 and "Image" in data else f"Image {number}"
+        target = data.get(image_key, "").strip()
+        if not target or target.casefold() == "none":
+            continue
+        prefix = image_key
+        image = {"target": target}
+        for field in IMAGE_FIELDS:
+            image[field[0].lower() + field[1:]] = data.get(f"{prefix} {field}", "").strip()
+        images.append(image)
+    return images
 
 
 def parse_cast_section(lines: Sequence[str], errors: List[str]) -> List[Dict[str, Any]]:

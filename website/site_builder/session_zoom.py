@@ -19,6 +19,8 @@ TRANSCRIPT_ASSET_DIR = Path("assets/session-zoom")
 TRANSCRIPT_COLLAPSE_LIMIT = 900
 SOURCE_LINE_RE = re.compile(r"^(?P<header>\[(?P<uid>u\d{4,})(?:\s*\|[^\]]+)?\])\s*(?P<text>.*)$")
 LEVELS = ("short", "intermediate", "long", "transcript")
+IMAGE_ROLES = {"aside", "figure", "hero"}
+IMAGE_SIZES = {"small", "standard", "large"}
 
 
 @dataclass(frozen=True)
@@ -39,7 +41,7 @@ class RecapBlock:
     intermediate: str | None
     long: str
     polished_transcript_path: Path | None = None
-    image: "RecapImage | None" = None
+    images: tuple["RecapImage", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -48,6 +50,9 @@ class RecapImage:
     placement: str
     render: str | None
     caption: str | None
+    role: str | None = None
+    size: str | None = None
+    alt: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +60,7 @@ class ImageRender:
     align: str | None = None
     width: str | None = None
     height: str | None = None
+    size: str | None = None
 
 
 @dataclass(frozen=True)
@@ -223,7 +229,7 @@ def parse_recap_blocks(path: Path) -> list[RecapBlock]:
                     metadata.get("Polished Transcript"),
                     path.parent,
                 ),
-                image=parse_recap_image(metadata),
+                images=tuple(parse_recap_images(metadata)),
             )
         )
     if not blocks:
@@ -396,15 +402,26 @@ def render_zoom_html(
         ]
     )
     for block in recap_blocks:
-        image_html = render_recap_image(
-            block,
+        start_media = render_recap_media(
+            block.images,
+            block_id=block.block_id,
+            placement="start",
             base_path=base_path,
             index=index,
             link_map=link_map,
             linked_asset_ids=linked_asset_ids,
             warnings=warnings,
         )
-        placement = image_placement(block)
+        end_media = render_recap_media(
+            block.images,
+            block_id=block.block_id,
+            placement="end",
+            base_path=base_path,
+            index=index,
+            link_map=link_map,
+            linked_asset_ids=linked_asset_ids,
+            warnings=warnings,
+        )
         lines.extend(
             [
                 "",
@@ -422,7 +439,7 @@ def render_zoom_html(
             lines.append(render_level("intermediate", block.intermediate, link_map))
         lines.extend(
             [
-                render_level("long", block.long, link_map, image_html=image_html, image_placement=placement),
+                render_level("long", block.long, link_map, start_media=start_media, end_media=end_media),
                 (
                     f'  <div class="taelgar-session-zoom__level taelgar-session-zoom__transcript" '
                     f'data-zoom-level="transcript" data-transcript-block="{html.escape(block.block_id, quote=True)}">'
@@ -439,8 +456,8 @@ def render_level(
     text: str,
     link_map: dict[str, str],
     *,
-    image_html: str | None = None,
-    image_placement: str | None = None,
+    start_media: str | None = None,
+    end_media: str | None = None,
 ) -> str:
     paragraphs = [
         f"<p>{render_linked_text(block.strip(), link_map)}</p>"
@@ -448,30 +465,53 @@ def render_level(
         if block.strip()
     ]
     parts: list[str] = []
-    if image_html and image_placement == "start":
-        parts.append(image_html)
+    if start_media:
+        parts.append(start_media)
     parts.extend(paragraphs or ["<p></p>"])
-    if image_html and image_placement == "end":
-        parts.append(image_html)
+    if end_media:
+        parts.append(end_media)
     content = "\n".join(parts)
     return f'  <div class="taelgar-session-zoom__level" data-zoom-level="{level}">{content}</div>'
 
 
-def parse_recap_image(metadata: dict[str, str]) -> RecapImage | None:
-    raw_image = normalize_optional_string(metadata.get("Image"))
-    if raw_image is None:
-        return None
-    target, inline_render = split_image_reference(raw_image)
-    target = normalize_optional_string(target)
-    if target is None:
-        return None
-    render = normalize_optional_string(metadata.get("Image Render")) or normalize_optional_string(inline_render)
-    return RecapImage(
-        target=target,
-        placement=normalize_image_placement(metadata.get("Image Placement")),
-        render=render,
-        caption=normalize_optional_string(metadata.get("Image Caption")),
+def parse_recap_images(metadata: dict[str, str]) -> list[RecapImage]:
+    images: list[RecapImage] = []
+    image_numbers: list[int] = []
+    if "Image" in metadata or "Image 1" in metadata:
+        image_numbers.append(1)
+    image_numbers.extend(
+        sorted(
+            int(match.group(1))
+            for key in metadata
+            if (match := re.fullmatch(r"Image (\d+)", key)) and int(match.group(1)) > 1
+        )
     )
+    for number in image_numbers:
+        image_key = "Image" if number == 1 and "Image" in metadata else f"Image {number}"
+        raw_image = normalize_optional_string(metadata.get(image_key))
+        if raw_image is None or raw_image.casefold() == "none":
+            continue
+        target, inline_render = split_image_reference(raw_image)
+        target = normalize_optional_string(target)
+        if target is None:
+            continue
+        prefix = image_key
+        role = normalize_image_role(metadata.get(f"{prefix} Role"))
+        render = normalize_optional_string(metadata.get(f"{prefix} Render")) or normalize_optional_string(inline_render)
+        parsed_render = parse_image_render(render)
+        size = normalize_image_size(metadata.get(f"{prefix} Size")) or parsed_render.size
+        images.append(
+            RecapImage(
+                target=target,
+                placement=normalize_image_placement(metadata.get(f"{prefix} Placement"), role=role),
+                render=render,
+                caption=normalize_optional_string(metadata.get(f"{prefix} Caption")),
+                role=role,
+                size=size,
+                alt=normalize_optional_string(metadata.get(f"{prefix} Alt")),
+            )
+        )
+    return images
 
 
 def split_image_reference(value: str) -> tuple[str, str | None]:
@@ -486,56 +526,140 @@ def split_image_reference(value: str) -> tuple[str, str | None]:
     return text, None
 
 
-def normalize_image_placement(value: str | None) -> str:
+def normalize_image_role(value: str | None) -> str | None:
+    role = (value or "").strip().casefold()
+    return role if role in IMAGE_ROLES else None
+
+
+def normalize_image_size(value: str | None) -> str | None:
+    size = (value or "").strip().casefold()
+    return size if size in IMAGE_SIZES else None
+
+
+def normalize_image_placement(value: str | None, *, role: str | None = None) -> str:
     text = (value or "").strip().lower()
     if text in {"end", "after", "bottom"}:
+        return "end"
+    if text in {"start", "before", "top", "beginning"}:
+        return "start"
+    if role in {"figure", "hero"}:
         return "end"
     return "start"
 
 
-def image_placement(block: RecapBlock) -> str | None:
-    return block.image.placement if block.image else None
-
-
-def render_recap_image(
-    block: RecapBlock,
+def render_recap_media(
+    images: tuple[RecapImage, ...],
     *,
+    block_id: str,
+    placement: str,
     base_path: str,
     index: LinkIndex,
     link_map: dict[str, str],
     linked_asset_ids: set[str],
     warnings: list[str],
 ) -> str | None:
-    if block.image is None:
+    placed = [image for image in images if image.placement == placement]
+    if not placed:
         return None
-    target = block.image.target.strip()
+    parts: list[str] = []
+    figure_group: list[RecapImage] = []
+
+    def flush_figures() -> None:
+        if not figure_group:
+            return
+        rendered = [
+            render_recap_image(
+                image,
+                block_id=block_id,
+                base_path=base_path,
+                index=index,
+                link_map=link_map,
+                linked_asset_ids=linked_asset_ids,
+                warnings=warnings,
+                gallery_item=len(figure_group) > 1,
+            )
+            for image in figure_group
+        ]
+        rendered = [item for item in rendered if item]
+        if len(rendered) == 1:
+            parts.append(rendered[0])
+        elif rendered:
+            parts.append(
+                f'<div class="taelgar-image-gallery taelgar-session-zoom__gallery" '
+                f'data-image-count="{len(rendered)}">' + "\n".join(rendered) + "</div>"
+            )
+        figure_group.clear()
+
+    for image in placed:
+        if image.role == "figure":
+            figure_group.append(image)
+            continue
+        flush_figures()
+        rendered = render_recap_image(
+            image,
+            block_id=block_id,
+            base_path=base_path,
+            index=index,
+            link_map=link_map,
+            linked_asset_ids=linked_asset_ids,
+            warnings=warnings,
+        )
+        if rendered:
+            parts.append(rendered)
+    flush_figures()
+    return "\n".join(parts) or None
+
+
+def render_recap_image(
+    image: RecapImage,
+    *,
+    block_id: str,
+    base_path: str,
+    index: LinkIndex,
+    link_map: dict[str, str],
+    linked_asset_ids: set[str],
+    warnings: list[str],
+    gallery_item: bool = False,
+) -> str | None:
+    target = image.target.strip()
     if target.startswith(("http://", "https://")):
         src = target
     else:
         resolution = index.resolve(target)
         if resolution.status == "ambiguous":
             candidates = ", ".join(entry.relative_path.as_posix() for entry in resolution.candidates)
-            warnings.append(f"{block.block_id} image {target!r} is ambiguous: {candidates}")
+            warnings.append(f"{block_id} image {target!r} is ambiguous: {candidates}")
             return None
         if resolution.status != "found" or resolution.entry is None:
-            warnings.append(f"{block.block_id} image {target!r} could not be resolved.")
+            warnings.append(f"{block_id} image {target!r} could not be resolved.")
             return None
         entry = resolution.entry
         if entry.target_path.suffix.lower() not in IMAGE_SUFFIXES:
-            warnings.append(f"{block.block_id} image {target!r} is not an image asset.")
+            warnings.append(f"{block_id} image {target!r} is not an image asset.")
             return None
         if entry.is_asset:
             linked_asset_ids.add(entry.id)
         src = site_url(base_path, entry.target_path)
 
-    render = parse_image_render(block.image.render)
-    caption = block.image.caption
-    alt = plain_text_for_alt(caption) if caption else title_case(Path(target).stem.replace("-", " ").replace("_", " "))
+    render = parse_image_render(image.render)
+    caption = image.caption
+    alt = image.alt or (plain_text_for_alt(caption) if caption else title_case(Path(target).stem.replace("-", " ").replace("_", " ")))
+    role = image.role
     classes = ["taelgar-session-zoom__image"]
-    if render.align:
-        classes.append(f"taelgar-session-zoom__image--{render.align}")
+    if role:
+        classes.append("taelgar-image")
+        classes.append(f"taelgar-image--{role}")
+        size = image.size or render.size or "standard"
+        classes.append(f"taelgar-image--size-{size}")
+        if role == "aside":
+            classes.append(f"taelgar-image--align-{render.align or 'right'}")
+        if gallery_item:
+            classes.append("taelgar-image-gallery__item")
+    else:
+        if render.align:
+            classes.append(f"taelgar-session-zoom__image--{render.align}")
     figure_attrs = [("class", " ".join(classes))]
-    figure_style = figure_style_for(render)
+    figure_style = None if role == "hero" else figure_style_for(render)
     if figure_style:
         figure_attrs.append(("style", figure_style))
     img_attrs = [("src", src), ("alt", alt)]
@@ -562,6 +686,7 @@ def parse_image_render(value: str | None) -> ImageRender:
     align: str | None = None
     width: str | None = None
     height: str | None = None
+    size: str | None = None
     for raw in (value or "").split("|"):
         token = raw.strip()
         if not token:
@@ -569,11 +694,13 @@ def parse_image_render(value: str | None) -> ImageRender:
         lowered = token.lower()
         if lowered in {"left", "right", "center"}:
             align = lowered
+        elif lowered in IMAGE_SIZES:
+            size = lowered
         elif width is None:
             width = token
         elif height is None:
             height = token
-    return ImageRender(align=align, width=width, height=height)
+    return ImageRender(align=align, width=width, height=height, size=size)
 
 
 def figure_style_for(render: ImageRender) -> str | None:

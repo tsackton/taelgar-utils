@@ -110,6 +110,14 @@ Rules:
 - Adjacent combat beats already come in as one recap block.
   Summarize them once, not per beat.
 - Combat recap blocks must name the enemies involved.
+- Recap images are optional. Leave the image fields blank when no reviewed asset is available.
+  When adding an image, use `Image Role` to choose its layout: `aside` for an NPC portrait or other supporting image, `figure` for an ordinary scene illustration, or `hero` for the session's single strongest wide image.
+  Use `Image Size: standard` unless the composition clearly calls for `small` or `large`; `hero` always fills the narrative width.
+  Placement normally follows the role, so leave `Image Placement` blank unless an override is useful: asides default to `start`, while figures and heroes default to `end`.
+  Asides default to the right. Use `Image Render: left` to switch sides, or an exact numeric width such as `right|280` only as an escape hatch for unusual assets.
+  To attach more than one image to the same recap block, keep the first image's existing unnumbered fields and add complete numbered sets such as `Image 2`, `Image 2 Role`, `Image 2 Size`, and the other `Image 2 ...` fields. Number additions contiguously.
+  Consecutive `figure` images at the same placement become a gallery automatically. Multiple `aside` images remain separate supporting images.
+  Use `Image Caption` for visible caption text and `Image Alt` for a concise visual description when the caption is not adequate alternative text.
 - World sections are deterministic and compact.
   Each world entry should stay terse but include a short context line that can support later cast / places summaries.
   Encountered entries should render as a compact heading line plus dated history lines.
@@ -152,6 +160,7 @@ This checks:
 - required section headings
 - single-day timeline block coverage/order
 - recap block coverage/order
+- valid optional image roles, named sizes, placements, and contiguous numbering
 - presence of timeline `Short` and recap `Short` / `Intermediate` / `Long` subsections
 - required human-filled header fields like title, tagline, and one-sentence summary
 - optional human-owned `Arc` and `Table Notes` fields may remain `none`

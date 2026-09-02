@@ -70,6 +70,8 @@ CALLOUT_ALIASES = {
     "error": "danger",
     "cite": "quote",
 }
+IMAGE_ROLES = {"aside", "figure", "hero"}
+IMAGE_SIZES = {"small", "standard", "large"}
 AUDIO_SUFFIX_PATTERN = "|".join(re.escape(suffix.lstrip(".")) for suffix in sorted(AUDIO_SUFFIXES))
 
 
@@ -230,12 +232,33 @@ class NoteTransformer:
                     return self._render_inline_tile_map(target, bounds)
             image_alias = title_case(Path(filename).stem.replace("-", " ").replace("_", " "))
             params = []
-            if alias in {"right", "left"}:
-                params.append(f'align="{alias}"')
-            if width:
+            semantic_role: str | None = None
+            semantic_align: str | None = None
+            semantic_size: str | None = None
+            lowered_alias = alias.strip().casefold()
+            lowered_width = width.strip().casefold()
+            if lowered_alias in {"right", "left"}:
+                semantic_align = lowered_alias
+                params.append(f'align="{lowered_alias}"')
+            elif lowered_alias in IMAGE_ROLES:
+                semantic_role = lowered_alias
+            elif lowered_alias in IMAGE_SIZES:
+                semantic_role = "figure"
+                semantic_size = lowered_alias
+            if lowered_width in IMAGE_SIZES:
+                semantic_size = lowered_width
+                if semantic_align:
+                    semantic_role = "aside"
+            elif width:
                 params.append(f'width="{width}"')
             if height:
                 params.append(f'height="{height}"')
+            if semantic_role:
+                classes = ["taelgar-image", f"taelgar-image--{semantic_role}"]
+                if semantic_role == "aside":
+                    classes.append(f"taelgar-image--align-{semantic_align or 'right'}")
+                classes.append(f"taelgar-image--size-{semantic_size or 'standard'}")
+                params.append(f'class="{" ".join(classes)}"')
             attrs = "{" + "; ".join(params) + "}" if params else ""
             if target.is_asset:
                 result.linked_assets.add(target.id)
@@ -434,7 +457,32 @@ def render_material_callout_opening(match: re.Match[str]) -> str:
 
 
 def normalize_callout_type(value: str) -> str:
-    callout_type = value.lower()
+    callout_type = value.lower().strip()
+    base, separator, metadata = callout_type.partition("|")
+    if base.strip() == "image" and separator:
+        tokens = [token for token in re.split(r"[\s,]+", metadata.strip()) if token]
+        role: str | None = None
+        align: str | None = None
+        size: str | None = None
+        for token in tokens:
+            if token in {"left", "right"}:
+                align = token
+            elif token in IMAGE_ROLES:
+                role = token
+            elif token in IMAGE_SIZES:
+                size = token
+        if size and role is None:
+            role = "aside" if align else "figure"
+        if role:
+            classes = ["image", "taelgar-image", f"taelgar-image--{role}"]
+            if role == "aside":
+                align = align or "right"
+                classes.extend(["inline", *( ["end"] if align == "right" else [] )])
+                classes.append(f"taelgar-image--align-{align}")
+            classes.append(f"taelgar-image--size-{size or 'standard'}")
+            return " ".join(classes)
+    if base.strip() == "gallery":
+        return "gallery"
     callout_type = re.sub(r" *\| *(inline|left) *$", " inline", callout_type)
     callout_type = re.sub(r" *\| *(inline end|right) *$", " inline end", callout_type)
     callout_type = re.sub(r" *\|.*", "", callout_type)
