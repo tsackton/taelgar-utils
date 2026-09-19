@@ -29,6 +29,10 @@
                 - {glob: campaigns/mawar-adventures/items-and-treasure/}
             - Notes
                 - {glob: campaigns/mawar-adventures/notes/}
+        - [Dragonets](campaigns/dragonets/dragonets-campaign.md)
+            - Session Notes
+                - {glob: campaigns/dragonets/session-notes/}
+            - [The Shared Vision of Home](campaigns/dragonets/the-shared-vision-of-home.md)
         - [Lost in the Feywild](campaigns/one-shots/lost-in-the-feywild/lost-in-the-feywild.md)
             - [Player Characters](people/pcs/other-pcs/tollen-misfits/tollen-misfits.md)
                 - {glob: people/pcs/other-pcs/tollen-misfits/, exclude: tollen-misfits.md}
